@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
 import StockChart from './components/StockChart';
+import StockInfo from './components/StockInfo';
+import StrategyGuide from './components/StrategyGuide';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -22,6 +24,7 @@ function defaultDates() {
 }
 
 function App() {
+  const [activeTab, setActiveTab] = useState('analysis');
   const [inputValue, setInputValue] = useState('');
   const [submittedTicker, setSubmittedTicker] = useState('');
   const [strategy, setStrategy] = useState('none');
@@ -47,80 +50,104 @@ function App() {
         <p>Stock Analysis Dashboard</p>
       </header>
 
+      {/* ── Tab navigation ── */}
+      <nav className="tab-nav">
+        <button
+          className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('analysis')}
+        >
+          Stock Analysis
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
+          onClick={() => setActiveTab('guide')}
+        >
+          Strategy Guide
+        </button>
+      </nav>
+
       <main className="app-main">
-        <form className="search-form" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Enter ticker symbol (e.g. AAPL)"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value.toUpperCase())}
-            className="ticker-input"
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <button type="submit" className="search-btn">
-            Load
-          </button>
-        </form>
+        {activeTab === 'analysis' && (
+          <>
+            <form className="search-form" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                placeholder="Enter ticker symbol (e.g. AAPL)"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value.toUpperCase())}
+                className="ticker-input"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button type="submit" className="search-btn">
+                Load
+              </button>
+            </form>
 
-        <div className="date-range-row">
-          <div className="date-group">
-            <label htmlFor="start-date">From:</label>
-            <input
-              id="start-date"
-              type="date"
-              value={startDate}
-              max={endDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="date-input"
-            />
-          </div>
-          <div className="date-group">
-            <label htmlFor="end-date">To:</label>
-            <input
-              id="end-date"
-              type="date"
-              value={endDate}
-              min={startDate}
-              max={toISODate(new Date())}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="date-input"
-            />
-          </div>
-          {!dateRangeValid && startDate && endDate && (
-            <span className="date-error">Start date must be before end date</span>
-          )}
-        </div>
-
-        {submittedTicker && (
-          <div className="controls-row">
-            <span className="ticker-label">{submittedTicker}</span>
-            <div className="strategy-group">
-              <label htmlFor="strategy-select">Strategy:</label>
-              <select
-                id="strategy-select"
-                value={strategy}
-                onChange={(e) => setStrategy(e.target.value)}
-                className="strategy-select"
-              >
-                {STRATEGIES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+            <div className="date-range-row">
+              <div className="date-group">
+                <label htmlFor="start-date">From:</label>
+                <input
+                  id="start-date"
+                  type="date"
+                  value={startDate}
+                  max={endDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="date-input"
+                />
+              </div>
+              <div className="date-group">
+                <label htmlFor="end-date">To:</label>
+                <input
+                  id="end-date"
+                  type="date"
+                  value={endDate}
+                  min={startDate}
+                  max={toISODate(new Date())}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="date-input"
+                />
+              </div>
+              {!dateRangeValid && startDate && endDate && (
+                <span className="date-error">Start date must be before end date</span>
+              )}
             </div>
-          </div>
+
+            {submittedTicker && (
+              <div className="controls-row">
+                <span className="ticker-label">{submittedTicker}</span>
+                <div className="strategy-group">
+                  <label htmlFor="strategy-select">Strategy:</label>
+                  <select
+                    id="strategy-select"
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value)}
+                    className="strategy-select"
+                  >
+                    {STRATEGIES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {submittedTicker && dateRangeValid && (
+              <StockChart
+                ticker={submittedTicker}
+                strategy={strategy}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            )}
+
+            {submittedTicker && <StockInfo ticker={submittedTicker} />}
+          </>
         )}
 
-        {submittedTicker && dateRangeValid && (
-          <StockChart
-            ticker={submittedTicker}
-            strategy={strategy}
-            startDate={startDate}
-            endDate={endDate}
-          />
-        )}
+        {activeTab === 'guide' && <StrategyGuide />}
       </main>
     </div>
   );
