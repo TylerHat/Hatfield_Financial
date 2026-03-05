@@ -705,3 +705,322 @@
   color: #8b949e;
   flex-shrink: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   STOCK SCREENER TAB
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Controls bar */
+.screener-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.screener-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.screener-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screener-control-group label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+}
+
+/* Universe toggle */
+.screener-toggle {
+  display: flex;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  padding: 8px 18px;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toggle-btn:hover {
+  color: #e6edf3;
+  background: #21262d;
+}
+
+.toggle-btn.active {
+  background: #388bfd22;
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+/* Strategy select */
+.screener-select {
+  padding: 8px 12px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 280px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.screener-select:focus {
+  border-color: #58a6ff;
+}
+
+/* Run button */
+.screener-run-btn {
+  padding: 9px 24px;
+  background: #238636;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+.screener-run-btn:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.screener-run-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Loading state */
+.screener-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 48px 24px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  text-align: center;
+}
+
+.screener-loading p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.screener-loading-sub {
+  color: #8b949e !important;
+  font-size: 0.82rem !important;
+}
+
+.screener-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #30363d;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.screener-error {
+  padding: 16px 20px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  border-radius: 8px;
+  color: #f85149;
+  font-size: 0.9rem;
+}
+
+/* Meta bar */
+.screener-meta {
+  font-size: 0.85rem;
+  color: #8b949e;
+  padding: 4px 0;
+}
+
+.screener-meta strong {
+  color: #e6edf3;
+}
+
+.screener-meta-warn {
+  color: #d2993a;
+}
+
+/* Kanban board */
+.screener-board {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .screener-board {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .screener-board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Column */
+.screener-col {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+}
+
+.screener-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #30363d;
+  border-radius: 8px 8px 0 0;
+}
+
+.screener-col-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.screener-col-count {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #21262d;
+  color: #8b949e;
+}
+
+/* Column accent colors */
+.cat-strong-buy  .screener-col-header { border-top: 3px solid #3fb950; }
+.cat-strong-buy  .screener-col-title  { color: #3fb950; }
+.cat-buy         .screener-col-header { border-top: 3px solid #58b35a; }
+.cat-buy         .screener-col-title  { color: #58b35a; }
+.cat-neutral     .screener-col-header { border-top: 3px solid #8b949e; }
+.cat-neutral     .screener-col-title  { color: #8b949e; }
+.cat-sell        .screener-col-header { border-top: 3px solid #d2993a; }
+.cat-sell        .screener-col-title  { color: #d2993a; }
+.cat-strong-sell .screener-col-header { border-top: 3px solid #f85149; }
+.cat-strong-sell .screener-col-title  { color: #f85149; }
+
+.screener-col-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+
+/* Ticker card */
+.screener-card {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: border-color 0.12s;
+}
+
+.screener-card:hover {
+  border-color: #444c56;
+}
+
+.screener-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.screener-card-ticker {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #e6edf3;
+}
+
+.screener-card-price {
+  font-size: 0.78rem;
+  color: #8b949e;
+}
+
+.screener-card-reason {
+  font-size: 0.72rem;
+  color: #6e7681;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Empty column */
+.screener-empty {
+  font-size: 0.8rem;
+  color: #484f58;
+  text-align: center;
+  padding: 16px 8px;
+  margin: 0;
+}
+
+/* Placeholder */
+.screener-placeholder {
+  text-align: center;
+  padding: 48px 24px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #8b949e;
+}
+
+.screener-placeholder p {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.screener-placeholder p strong {
+  color: #e6edf3;
+}
+
+.screener-placeholder-sub {
+  font-size: 0.82rem !important;
+  color: #484f58 !important;
+  max-width: 520px;
+  margin: 0 auto !important;
+}
