@@ -86,6 +86,51 @@
   background: #1a7f37;
 }
 
+/* ── Date range row ──────────────────────────────────────────────────────────── */
+.date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.date-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.date-input {
+  padding: 8px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  /* Style the calendar picker icon */
+  color-scheme: dark;
+}
+
+.date-input:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+.date-error {
+  font-size: 0.82rem;
+  color: #f85149;
+}
+
 /* ── Controls row (ticker label + strategy dropdown) ─────────────────────────── */
 .controls-row {
   display: flex;
