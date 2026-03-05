@@ -35,7 +35,7 @@ function buildSignalArray(dates, signals, type) {
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
 
-export default function StockChart({ ticker, strategy }) {
+export default function StockChart({ ticker, strategy, startDate, endDate }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -45,7 +45,7 @@ export default function StockChart({ ticker, strategy }) {
   // Keep signal reasons accessible inside Chart.js tooltip callbacks
   const signalReasonRef = useRef({});
 
-  // Fetch price data whenever ticker changes
+  // Fetch price data whenever ticker or date range changes
   useEffect(() => {
     if (!ticker) return;
     setLoading(true);
@@ -53,7 +53,8 @@ export default function StockChart({ ticker, strategy }) {
     setStockData(null);
     setSignals([]);
 
-    fetch(`${API_BASE}/api/stock/${ticker}`)
+    const params = new URLSearchParams({ start: startDate, end: endDate });
+    fetch(`${API_BASE}/api/stock/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
@@ -67,9 +68,9 @@ export default function StockChart({ ticker, strategy }) {
         setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
         setLoading(false);
       });
-  }, [ticker]);
+  }, [ticker, startDate, endDate]);
 
-  // Fetch strategy signals whenever ticker or strategy changes (after stock data loads)
+  // Fetch strategy signals whenever ticker, strategy, or date range changes
   useEffect(() => {
     if (!ticker || !stockData || strategy === 'none') {
       setSignals([]);
@@ -79,7 +80,8 @@ export default function StockChart({ ticker, strategy }) {
 
     setStrategyLoading(true);
 
-    fetch(`${API_BASE}/api/strategy/${strategy}/${ticker}`)
+    const params = new URLSearchParams({ start: startDate, end: endDate });
+    fetch(`${API_BASE}/api/strategy/${strategy}/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
         const sigs = data.signals || [];
@@ -97,7 +99,7 @@ export default function StockChart({ ticker, strategy }) {
         setSignals([]);
         setStrategyLoading(false);
       });
-  }, [ticker, strategy, stockData]);
+  }, [ticker, strategy, startDate, endDate, stockData]);
 
   if (loading) {
     return <div className="chart-status">Loading {ticker}…</div>;
@@ -201,7 +203,7 @@ export default function StockChart({ ticker, strategy }) {
       },
       title: {
         display: true,
-        text: `${ticker} — 6-Month Price Chart`,
+        text: `${ticker} — ${startDate} to ${endDate}`,
         color: '#e6edf3',
         font: { size: 15, weight: '600' },
         padding: { bottom: 12 },
@@ -367,7 +369,7 @@ export default function StockChart({ ticker, strategy }) {
 
       {strategy !== 'none' && !strategyLoading && signals.length === 0 && (
         <div className="no-signals">
-          No signals generated for {ticker} with this strategy over the past 6 months.
+          No signals generated for {ticker} with this strategy from {startDate} to {endDate}.
         </div>
       )}
     </div>

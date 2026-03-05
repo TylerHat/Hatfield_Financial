@@ -1,6 +1,6 @@
 import pandas as pd
 import yfinance as yf
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 rs_bp = Blueprint('relative_strength', __name__)
@@ -9,14 +9,19 @@ rs_bp = Blueprint('relative_strength', __name__)
 @rs_bp.route('/api/strategy/relative-strength/<ticker>')
 def relative_strength(ticker):
     try:
-        end = datetime.today()
-        start = end - timedelta(days=182 + 20)  # extra for RS rolling window
+        end_str = request.args.get('end')
+        start_str = request.args.get('start')
+
+        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
+        user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
+        # Extra lookback so the 10-day RS moving average is populated
+        fetch_start = user_start - timedelta(days=20)
 
         stock = yf.Ticker(ticker.upper())
         spy = yf.Ticker('SPY')
 
-        hist = stock.history(start=start, end=end)
-        spy_hist = spy.history(start=start, end=end)
+        hist = stock.history(start=fetch_start, end=end)
+        spy_hist = spy.history(start=fetch_start, end=end)
 
         if hist.empty:
             return jsonify({'signals': []})
@@ -31,8 +36,8 @@ def relative_strength(ticker):
         combined['rs'] = combined['stock'] / combined['spy']
         combined['rs_ma'] = combined['rs'].rolling(10).mean()
 
-        # Trim to 6-month window after indicators are computed
-        cutoff = pd.Timestamp(end - timedelta(days=182)).tz_localize('UTC')
+        # Trim to the user-requested window after indicators are computed
+        cutoff = pd.Timestamp(user_start).tz_localize('UTC')
         if combined.index.tz is None:
             cutoff = cutoff.tz_localize(None)
         combined = combined[combined.index >= cutoff]

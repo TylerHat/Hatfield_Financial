@@ -1,6 +1,6 @@
 import pandas as pd
 import yfinance as yf
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 stock_data_bp = Blueprint('stock_data', __name__)
@@ -9,8 +9,11 @@ stock_data_bp = Blueprint('stock_data', __name__)
 @stock_data_bp.route('/api/stock/<ticker>')
 def get_stock_data(ticker):
     try:
-        end = datetime.today()
-        start = end - timedelta(days=182)
+        end_str = request.args.get('end')
+        start_str = request.args.get('start')
+
+        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
+        start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
         stock = yf.Ticker(ticker.upper())
         hist = stock.history(start=start, end=end)

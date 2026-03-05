@@ -1,6 +1,6 @@
 import pandas as pd
 import yfinance as yf
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 bb_bp = Blueprint('bollinger_bands', __name__)
@@ -9,12 +9,16 @@ bb_bp = Blueprint('bollinger_bands', __name__)
 @bb_bp.route('/api/strategy/bollinger-bands/<ticker>')
 def bollinger_bands(ticker):
     try:
-        end = datetime.today()
-        # Extra lookback so rolling window is populated by the time 6-month window starts
-        start = end - timedelta(days=182 + 40)
+        end_str = request.args.get('end')
+        start_str = request.args.get('start')
+
+        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
+        user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
+        # Fetch extra days before user's start so the 20-day rolling window is populated
+        fetch_start = user_start - timedelta(days=40)
 
         stock = yf.Ticker(ticker.upper())
-        hist = stock.history(start=start, end=end)
+        hist = stock.history(start=fetch_start, end=end)
 
         if hist.empty:
             return jsonify({'signals': []})
@@ -24,8 +28,8 @@ def bollinger_bands(ticker):
         hist['Upper'] = hist['MA20'] + 2 * hist['STD20']
         hist['Lower'] = hist['MA20'] - 2 * hist['STD20']
 
-        # Trim to exact 6-month window after bands are computed
-        cutoff = pd.Timestamp(end - timedelta(days=182)).tz_localize('UTC')
+        # Trim to the user-requested window after bands are computed
+        cutoff = pd.Timestamp(user_start).tz_localize('UTC')
         if hist.index.tz is None:
             cutoff = cutoff.tz_localize(None)
         hist = hist[hist.index >= cutoff]

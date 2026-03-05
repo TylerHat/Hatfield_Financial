@@ -10,10 +10,24 @@ const STRATEGIES = [
   { value: 'mean-reversion', label: 'Mean Reversion After Large Drawdown' },
 ];
 
+function toISODate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function defaultDates() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 6);
+  return { start: toISODate(start), end: toISODate(end) };
+}
+
 function App() {
   const [inputValue, setInputValue] = useState('');
   const [submittedTicker, setSubmittedTicker] = useState('');
   const [strategy, setStrategy] = useState('none');
+  const { start: defaultStart, end: defaultEnd } = defaultDates();
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -24,11 +38,13 @@ function App() {
     }
   };
 
+  const dateRangeValid = startDate && endDate && startDate < endDate;
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>Hatfield Financial</h1>
-        <p>6-Month Stock Analysis Dashboard</p>
+        <p>Stock Analysis Dashboard</p>
       </header>
 
       <main className="app-main">
@@ -46,6 +62,35 @@ function App() {
             Load
           </button>
         </form>
+
+        <div className="date-range-row">
+          <div className="date-group">
+            <label htmlFor="start-date">From:</label>
+            <input
+              id="start-date"
+              type="date"
+              value={startDate}
+              max={endDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="date-input"
+            />
+          </div>
+          <div className="date-group">
+            <label htmlFor="end-date">To:</label>
+            <input
+              id="end-date"
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={toISODate(new Date())}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="date-input"
+            />
+          </div>
+          {!dateRangeValid && startDate && endDate && (
+            <span className="date-error">Start date must be before end date</span>
+          )}
+        </div>
 
         {submittedTicker && (
           <div className="controls-row">
@@ -68,8 +113,13 @@ function App() {
           </div>
         )}
 
-        {submittedTicker && (
-          <StockChart ticker={submittedTicker} strategy={strategy} />
+        {submittedTicker && dateRangeValid && (
+          <StockChart
+            ticker={submittedTicker}
+            strategy={strategy}
+            startDate={startDate}
+            endDate={endDate}
+          />
         )}
       </main>
     </div>

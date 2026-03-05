@@ -1,6 +1,6 @@
 import pandas as pd
 import yfinance as yf
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 mr_bp = Blueprint('mean_reversion', __name__)
@@ -9,11 +9,16 @@ mr_bp = Blueprint('mean_reversion', __name__)
 @mr_bp.route('/api/strategy/mean-reversion/<ticker>')
 def mean_reversion(ticker):
     try:
-        end = datetime.today()
-        start = end - timedelta(days=182 + 30)  # extra for 20-day trailing high
+        end_str = request.args.get('end')
+        start_str = request.args.get('start')
+
+        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
+        user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
+        # Extra lookback so the 20-day trailing high is populated
+        fetch_start = user_start - timedelta(days=30)
 
         stock = yf.Ticker(ticker.upper())
-        hist = stock.history(start=start, end=end)
+        hist = stock.history(start=fetch_start, end=end)
 
         if hist.empty:
             return jsonify({'signals': []})
@@ -22,8 +27,8 @@ def mean_reversion(ticker):
         hist['High20'] = hist['Close'].rolling(20).max()
         hist['Drawdown'] = (hist['Close'] - hist['High20']) / hist['High20']
 
-        # Trim to exact 6-month window
-        cutoff = pd.Timestamp(end - timedelta(days=182)).tz_localize('UTC')
+        # Trim to the user-requested window
+        cutoff = pd.Timestamp(user_start).tz_localize('UTC')
         if hist.index.tz is None:
             cutoff = cutoff.tz_localize(None)
         hist = hist[hist.index >= cutoff]
