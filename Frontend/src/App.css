@@ -838,17 +838,21 @@
   font-size: 0.82rem !important;
 }
 
-.screener-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #30363d;
-  border-top-color: #58a6ff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* Progress bar */
+.screener-progress-wrap {
+  width: 100%;
+  max-width: 480px;
+  height: 8px;
+  background: #21262d;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.screener-progress-bar {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #238636, #58a6ff);
+  transition: width 0.2s ease-out;
 }
 
 /* Error */

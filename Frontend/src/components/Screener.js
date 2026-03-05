@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const API_BASE = 'http://localhost:5000';
 
@@ -17,14 +17,42 @@ const CATEGORIES = [
   { score: -2, label: 'Strong Sell', cls: 'cat-strong-sell' },
 ];
 
+// Expected durations in ms per universe (used to pace the progress bar)
+const EXPECTED_MS = { sp500: 30000, crypto: 8000 };
+
 export default function Screener() {
   const [strategy, setStrategy] = useState('bollinger-bands');
   const [universe, setUniverse] = useState('sp500');
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [results, setResults] = useState(null);
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState(null);
   const abortRef = useRef(null);
+  const progressRef = useRef(0);
+  const timerRef = useRef(null);
+
+  // Advance progress bar while loading using an asymptotic curve that
+  // approaches ~92% but never reaches it naturally, so the snap to 100%
+  // on completion feels satisfying.
+  useEffect(() => {
+    if (loading) {
+      const expected = EXPECTED_MS[universe] ?? 30000;
+      const tick = 200; // ms between updates
+      progressRef.current = 0;
+      setProgress(0);
+
+      timerRef.current = setInterval(() => {
+        progressRef.current += tick;
+        // asymptotic: p = 92 * (1 - e^(-elapsed / expected))
+        const p = 92 * (1 - Math.exp(-progressRef.current / expected));
+        setProgress(Math.min(p, 92));
+      }, tick);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [loading, universe]);
 
   const runScreener = async () => {
     if (abortRef.current) abortRef.current.abort();
@@ -47,6 +75,9 @@ export default function Screener() {
       if (data.error) {
         setError(data.error);
       } else {
+        setProgress(100);
+        // Brief pause so the user sees 100% before results replace the bar
+        await new Promise((r) => setTimeout(r, 300));
         setResults(data.results);
         setMeta(data.meta);
       }
@@ -119,14 +150,17 @@ export default function Screener() {
       {/* ── Loading state ── */}
       {loading && (
         <div className="screener-loading">
-          <div className="screener-spinner" />
           <p>
             Scanning {universe === 'sp500' ? 'S&P 500 stocks' : 'crypto assets'} using{' '}
             <strong>{strategyLabel}</strong>…
           </p>
-          <p className="screener-loading-sub">
-            This may take 15–45 seconds for a full universe scan.
-          </p>
+          <div className="screener-progress-wrap">
+            <div
+              className="screener-progress-bar"
+              style={{ width: `${progress.toFixed(1)}%` }}
+            />
+          </div>
+          <p className="screener-loading-sub">{Math.round(progress)}% complete</p>
         </div>
       )}
 

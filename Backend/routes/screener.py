@@ -146,13 +146,14 @@ def run_screener():
 
     t0 = time.time()
 
-    # Download price data in one batch call
+    # Download price data in one batch call.
+    # group_by='column' → MultiIndex (field, ticker), so raw['Close'][ticker] works.
     try:
         raw = yf.download(
             tickers=' '.join(tickers),
             period='3mo',
             interval='1d',
-            group_by='ticker',
+            group_by='column',
             auto_adjust=True,
             threads=True,
             progress=False,
@@ -160,14 +161,25 @@ def run_screener():
     except Exception as e:
         return jsonify({'error': f'Download failed: {str(e)}'}), 500
 
+    # Pull the Close sub-frame once (DataFrame with one column per ticker)
+    try:
+        if isinstance(raw.columns, pd.MultiIndex):
+            close_frame = raw['Close']      # (date, ticker)
+        else:
+            # Fallback: single-ticker or already flat
+            close_frame = raw[['Close']].rename(columns={'Close': tickers[0]})
+    except Exception as e:
+        return jsonify({'error': f'Could not extract Close prices: {str(e)}'}), 500
+
     # Also need SPY for relative-strength strategy
     spy_close = None
     if strategy == 'relative-strength':
         try:
             spy_raw = yf.download('SPY', period='3mo', interval='1d',
                                   auto_adjust=True, progress=False)
+            # Single-ticker download returns flat columns
             if isinstance(spy_raw.columns, pd.MultiIndex):
-                spy_close = spy_raw['Close']['SPY']
+                spy_close = spy_raw['Close'].iloc[:, 0]
             else:
                 spy_close = spy_raw['Close']
         except Exception:
@@ -178,16 +190,12 @@ def run_screener():
 
     for ticker in tickers:
         try:
-            # Extract close series — handle single vs multi-ticker download
-            if len(tickers) == 1:
-                # Single ticker: flat columns
-                close = raw['Close']
-            elif isinstance(raw.columns, pd.MultiIndex):
-                close = raw['Close'][ticker]
+            # Extract this ticker's close series
+            if ticker in close_frame.columns:
+                close = close_frame[ticker].dropna()
             else:
-                close = raw['Close'][ticker]
-
-            close = close.dropna()
+                errors.append(ticker)
+                continue
 
             if len(close) < 10:
                 errors.append(ticker)
