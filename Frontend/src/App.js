@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './App.css';
 import StockChart from './components/StockChart';
 import StockInfo from './components/StockInfo';
+import Screener from './components/Screener';
 import StrategyGuide from './components/StrategyGuide';
 
 const STRATEGIES = [
@@ -57,6 +58,12 @@ function App() {
           onClick={() => setActiveTab('analysis')}
         >
           Stock Analysis
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'screener' ? 'active' : ''}`}
+          onClick={() => setActiveTab('screener')}
+        >
+          Stock Screener
         </button>
         <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
@@ -146,6 +153,8 @@ function App() {
             {submittedTicker && <StockInfo ticker={submittedTicker} />}
           </>
         )}
+
+        {activeTab === 'screener' && <Screener />}
 
         {activeTab === 'guide' && <StrategyGuide />}
       </main>
