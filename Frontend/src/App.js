@@ -3,6 +3,7 @@ import './App.css';
 import StockChart from './components/StockChart';
 import StockInfo from './components/StockInfo';
 import Screener from './components/Screener';
+import Backtest from './components/Backtest';
 import StrategyGuide from './components/StrategyGuide';
 
 const STRATEGIES = [
@@ -64,6 +65,12 @@ function App() {
           onClick={() => setActiveTab('screener')}
         >
           Stock Screener
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'backtest' ? 'active' : ''}`}
+          onClick={() => setActiveTab('backtest')}
+        >
+          Backtesting
         </button>
         <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
@@ -155,6 +162,8 @@ function App() {
         )}
 
         {activeTab === 'screener' && <Screener />}
+
+        {activeTab === 'backtest' && <Backtest />}
 
         {activeTab === 'guide' && <StrategyGuide />}
       </main>
