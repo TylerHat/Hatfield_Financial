@@ -1,18 +1,17 @@
 
 This repository contains **Hatfield Investments**, a React-based financial app with a **Flask API** backend used to fetch, normalize, and serve market/portfolio data.
 
+Reference @Claude.arch.md - Read this first for project architechture, endpoints, and tool definitions
+
 > Goal: fast iteration, clean architecture, safe handling of secrets, and predictable environments for local dev + CI.
 
----
 
-## What to Build (Product Summary) **
 
-Hatfield Investments is a web app that:
-- Displays market data (prices, OHLCV, fundamentals where applicable)
-- Provides portfolio views (holdings, performance, allocations)
-- Supports screening/ranking (momentum, trend, volatility, etc.)
-- Offers alerts/notifications (optional)
-- Emphasizes reliability, clear error states, and auditability of calculations
+### Architecture Maintenance (Claude.arch.md)
+- Claude is encouraged to update this file when new features, tools, endpoints are added or altered. 
+- **Strict Rule**: This file must remain a high-level map. Do NOT add session logs, bug fixes histories, or implimentation details. 
+- Focus on: Endpoint signatures, tool descriptions, and core logic flow. 
+- Keep the total file size under 200 lines to maintain token effeciency.
 
 **High-level requirements**
 - React frontend consumes a versioned Flask REST API
