@@ -1399,3 +1399,80 @@
   max-width: 520px;
   margin: 0 auto;
 }
+
+/* Mode toggle */
+.bt-mode-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.bt-mode-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+}
+
+.bt-mode-toggle {
+  display: flex;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bt-mode-hint {
+  font-size: 0.78rem;
+  color: #8b949e;
+  font-style: italic;
+}
+
+/* Ticker column in portfolio trade log */
+.bt-td-ticker {
+  font-weight: 700;
+  color: #58a6ff;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+/* Loading sub-text */
+.bt-loading-sub {
+  font-size: 0.82rem;
+  color: #8b949e;
+  margin: 4px 0 0;
+}
+
+.bt-loading p {
+  margin: 0;
+}
+
+/* Portfolio open positions section */
+.bt-port-open-wrap {
+  border-top: 1px solid #30363d;
+}
+
+.bt-port-open-toggle {
+  width: 100%;
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s, background 0.15s;
+}
+
+.bt-port-open-toggle:hover {
+  color: #e6edf3;
+  background: #21262d;
+}
+
+.bt-port-open-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}

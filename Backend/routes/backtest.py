@@ -5,10 +5,12 @@ import pandas as pd
 import yfinance as yf
 from flask import Blueprint, jsonify, request
 
+from data.sp500_tickers import SP500_TICKERS
+
 backtest_bp = Blueprint('backtest', __name__)
 
 
-# ── Signal generators ─────────────────────────────────────────────────────────
+# ── Single-stock signal generators ────────────────────────────────────────────
 
 def signals_bollinger(close):
     """BUY when price crosses below lower band; SELL when crosses above upper."""
@@ -157,7 +159,7 @@ def signals_pead(ticker, close, start_dt, end_dt):
     return signals
 
 
-# ── Simulation engine ─────────────────────────────────────────────────────────
+# ── Simulation engine (single stock) ──────────────────────────────────────────
 
 def run_simulation(signals, close, start_dt, end_dt, capital, position_size):
     """
@@ -294,11 +296,327 @@ def run_simulation(signals, close, start_dt, end_dt, capital, position_size):
     return actions, summary
 
 
+# ── Portfolio helpers (vectorized signal computation) ─────────────────────────
+
+def _precompute_bb_signals(close_frame):
+    """Vectorized Bollinger Bands: strong buy = below lower band, strong sell = above upper."""
+    sma = close_frame.rolling(20).mean()
+    std = close_frame.rolling(20).std()
+    lower = sma - 2 * std
+    upper = sma + 2 * std
+    band_width = upper - lower
+    pct_b = (close_frame - lower) / band_width
+    return (pct_b < 0).fillna(False), (pct_b > 1).fillna(False)
+
+
+def _precompute_rs_signals(close_frame, spy_close):
+    """Vectorized Relative Strength: strong buy = RS above MA & rising, strong sell = below & falling."""
+    rs = close_frame.div(spy_close, axis=0)
+    rs_ma = rs.rolling(10).mean()
+    slope = rs_ma.diff(5)
+    ma_safe = rs_ma.abs().where(rs_ma.abs() > 1e-10, np.nan)
+    pct_diff = (rs - rs_ma) / ma_safe
+    strong_buy = ((pct_diff > 0.005) & (slope > 0)).fillna(False)
+    strong_sell = ((pct_diff < -0.005) & (slope < 0)).fillna(False)
+    return strong_buy, strong_sell
+
+
+def _precompute_mr_signals(close_frame):
+    """Vectorized Mean Reversion: strong buy = ≥15% drawdown, strong sell = within 2% of high."""
+    rolling_high = close_frame.rolling(20).max()
+    high_safe = rolling_high.where(rolling_high > 1e-10, np.nan)
+    drawdown = (close_frame - rolling_high) / high_safe
+    return (drawdown <= -0.15).fillna(False), (drawdown > -0.02).fillna(False)
+
+
+def _precompute_pead_signals(close_frame):
+    """Vectorized PEAD proxy: 3%+ gap + 2-day follow-through in same direction."""
+    returns = close_frame.pct_change()
+    gap_up = returns >= 0.03
+    gap_down = returns <= -0.03
+    strong_buy = (gap_up.shift(2) & (returns.shift(1) > 0) & (returns > 0)).fillna(False)
+    strong_sell = (gap_down.shift(2) & (returns.shift(1) < 0) & (returns < 0)).fillna(False)
+    return strong_buy, strong_sell
+
+
+def _run_portfolio_sim(strong_buy_df, strong_sell_df, close_frame,
+                       start_dt, end_dt, capital, position_size):
+    """
+    Simulate portfolio across S&P 500.
+    On each Monday and Wednesday: sell strong-sell holdings, then buy strong-buy signals.
+    One position per ticker at a time; buys limited by available cash.
+    """
+    start_ts = pd.Timestamp(start_dt)
+    end_ts = pd.Timestamp(end_dt)
+
+    mask = (close_frame.index >= start_ts) & (close_frame.index <= end_ts)
+    close_range = close_frame[mask]
+    sb = strong_buy_df.reindex(close_range.index).fillna(False)
+    ss = strong_sell_df.reindex(close_range.index).fillna(False)
+
+    # Only Mondays (0) and Wednesdays (2)
+    trading_days = close_range.index[close_range.index.dayofweek.isin([0, 2])]
+
+    actions = []
+    trade_count = 0
+    positions = {}       # ticker → {trade_num, date, price, shares}
+    cash = float(capital)
+    cumulative_pnl = 0.0
+    max_simultaneous = 0
+    unique_tickers = set()
+
+    for date in trading_days:
+        # SELLS first (free up cash before buying)
+        for ticker in sorted(list(positions.keys())):
+            if ticker not in ss.columns:
+                continue
+            try:
+                if not ss.loc[date, ticker]:
+                    continue
+                price = float(close_range.loc[date, ticker])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if pd.isna(price):
+                continue
+
+            pos = positions[ticker]
+            shares = pos['shares']
+            pnl = shares * (price - pos['price'])
+            ret_pct = (price - pos['price']) / pos['price'] * 100
+            hold_days = (date - pos['date']).days
+            cumulative_pnl += pnl
+            cash += shares * price
+
+            actions.append({
+                'trade_num': pos['trade_num'],
+                'ticker': ticker,
+                'action': 'SELL',
+                'date': date.strftime('%Y-%m-%d'),
+                'price': round(price, 4),
+                'shares': round(shares, 6),
+                'value': round(shares * price, 2),
+                'pnl': round(pnl, 2),
+                'return_pct': round(ret_pct, 2),
+                'hold_days': hold_days,
+                'cumulative_pnl': round(cumulative_pnl, 2),
+            })
+            del positions[ticker]
+
+        # BUYS (sorted alphabetically for determinism)
+        if date in sb.index:
+            buy_row = sb.loc[date]
+            buy_tickers = sorted(buy_row[buy_row.astype(bool)].index.tolist())
+            for ticker in buy_tickers:
+                if ticker in positions:
+                    continue
+                if cash < position_size:
+                    break  # insufficient cash
+                try:
+                    price = float(close_range.loc[date, ticker])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if pd.isna(price):
+                    continue
+
+                trade_count += 1
+                shares = position_size / price
+                cash -= position_size
+                positions[ticker] = {
+                    'trade_num': trade_count,
+                    'date': date,
+                    'price': price,
+                    'shares': shares,
+                }
+                unique_tickers.add(ticker)
+                max_simultaneous = max(max_simultaneous, len(positions))
+
+                actions.append({
+                    'trade_num': trade_count,
+                    'ticker': ticker,
+                    'action': 'BUY',
+                    'date': date.strftime('%Y-%m-%d'),
+                    'price': round(price, 4),
+                    'shares': round(shares, 6),
+                    'value': round(position_size, 2),
+                    'pnl': None,
+                    'return_pct': None,
+                    'hold_days': None,
+                    'cumulative_pnl': round(cumulative_pnl, 2),
+                })
+
+    # Mark open positions to last available price
+    open_positions_out = []
+    unrealized_total = 0.0
+    open_market_value = 0.0
+
+    for ticker, pos in positions.items():
+        if ticker not in close_range.columns:
+            continue
+        series = close_range[ticker].dropna()
+        if series.empty:
+            continue
+        last_price = float(series.iloc[-1])
+        last_date = series.index[-1]
+        shares = pos['shares']
+        pnl = shares * (last_price - pos['price'])
+        ret_pct = (last_price - pos['price']) / pos['price'] * 100
+        hold_days = (last_date - pos['date']).days
+        unrealized_total += pnl
+        open_market_value += shares * last_price
+        unique_tickers.add(ticker)
+
+        open_positions_out.append({
+            'trade_num': pos['trade_num'],
+            'ticker': ticker,
+            'entry_date': pos['date'].strftime('%Y-%m-%d'),
+            'entry_price': round(pos['price'], 4),
+            'current_price': round(last_price, 4),
+            'shares': round(shares, 6),
+            'unrealized_pnl': round(pnl, 2),
+            'unrealized_return_pct': round(ret_pct, 2),
+            'hold_days': hold_days,
+        })
+
+    sells = [a for a in actions if a['action'] == 'SELL']
+    wins = [a for a in sells if a['pnl'] > 0]
+    losses = [a for a in sells if a['pnl'] <= 0]
+    realized_pnl = cumulative_pnl
+    total_pnl = realized_pnl + unrealized_total
+
+    summary = {
+        'starting_capital': round(capital, 2),
+        'position_size': round(position_size, 2),
+        'ending_cash': round(cash, 2),
+        'open_positions_value': round(open_market_value, 2),
+        'ending_portfolio_value': round(cash + open_market_value, 2),
+        'realized_pnl': round(realized_pnl, 2),
+        'unrealized_pnl': round(unrealized_total, 2),
+        'total_pnl': round(total_pnl, 2),
+        'total_return_pct': round(total_pnl / capital * 100, 2),
+        'num_completed_trades': len(sells),
+        'num_wins': len(wins),
+        'num_losses': len(losses),
+        'win_rate': round(len(wins) / len(sells) * 100, 1) if sells else 0,
+        'avg_pnl': round(sum(a['pnl'] for a in sells) / len(sells), 2) if sells else 0,
+        'best_trade': round(max((a['pnl'] for a in sells), default=0), 2),
+        'worst_trade': round(min((a['pnl'] for a in sells), default=0), 2),
+        'num_unique_tickers': len(unique_tickers),
+        'num_open_positions': len(open_positions_out),
+        'max_simultaneous_positions': max_simultaneous,
+        'open_positions': open_positions_out,
+    }
+
+    return actions, summary
+
+
+def _handle_portfolio_backtest(body):
+    strategy = body.get('strategy', 'bollinger-bands')
+    start_str = body.get('start', '')
+    end_str = body.get('end', '')
+    capital = float(body.get('capital', 100000))
+    position_pct = float(body.get('position_pct', 0.05))
+
+    if not (0 < position_pct <= 1):
+        return jsonify({'error': 'position_pct must be between 0 and 1'}), 400
+
+    try:
+        end_dt = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else datetime.today().date()
+        start_dt = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else (end_dt - timedelta(days=365))
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    if start_dt >= end_dt:
+        return jsonify({'error': 'Start date must be before end date'}), 400
+
+    position_size = capital * position_pct
+    fetch_start = start_dt - timedelta(days=90)
+
+    # Download all S&P 500 + SPY in one batch
+    all_tickers = SP500_TICKERS + ['SPY']
+    try:
+        raw = yf.download(
+            all_tickers,
+            start=fetch_start,
+            end=end_dt + timedelta(days=1),
+            auto_adjust=True,
+            progress=False,
+            group_by='column',
+            threads=True,
+        )
+        if isinstance(raw.columns, pd.MultiIndex):
+            close_frame = raw['Close']
+        else:
+            close_frame = raw[['Close']].rename(columns={'Close': all_tickers[0]})
+        close_frame = close_frame.dropna(how='all')
+    except Exception as e:
+        return jsonify({'error': f'Failed to download market data: {str(e)}'}), 500
+
+    if len(close_frame) < 20:
+        return jsonify({'error': 'Insufficient price data for the selected date range'}), 400
+
+    # Separate SPY from stock universe
+    spy_close = close_frame['SPY'] if 'SPY' in close_frame.columns else None
+    stock_frame = close_frame.drop(columns=['SPY'], errors='ignore')
+
+    # Compute vectorized signals
+    if strategy == 'bollinger-bands':
+        sb_df, ss_df = _precompute_bb_signals(stock_frame)
+    elif strategy == 'relative-strength':
+        if spy_close is None:
+            return jsonify({'error': 'SPY data unavailable for relative strength strategy'}), 500
+        sb_df, ss_df = _precompute_rs_signals(stock_frame, spy_close)
+    elif strategy == 'mean-reversion':
+        sb_df, ss_df = _precompute_mr_signals(stock_frame)
+    elif strategy == 'post-earnings-drift':
+        sb_df, ss_df = _precompute_pead_signals(stock_frame)
+    else:
+        return jsonify({'error': f'Unknown strategy: {strategy}'}), 400
+
+    # SPY buy-and-hold comparison (full capital invested at period start)
+    spy_bh_pnl = spy_bh_ret = 0.0
+    try:
+        if spy_close is not None:
+            spy_range = spy_close[
+                (spy_close.index >= pd.Timestamp(start_dt)) &
+                (spy_close.index <= pd.Timestamp(end_dt))
+            ].dropna()
+            if len(spy_range) >= 2:
+                spy_start_price = float(spy_range.iloc[0])
+                spy_end_price = float(spy_range.iloc[-1])
+                bh_shares = capital / spy_start_price
+                spy_bh_pnl = bh_shares * (spy_end_price - spy_start_price)
+                spy_bh_ret = (spy_end_price - spy_start_price) / spy_start_price * 100
+    except Exception:
+        pass
+
+    actions, summary = _run_portfolio_sim(
+        sb_df, ss_df, stock_frame, start_dt, end_dt, capital, position_size
+    )
+
+    summary['buy_hold_pnl'] = round(spy_bh_pnl, 2)
+    summary['buy_hold_return_pct'] = round(spy_bh_ret, 2)
+
+    return jsonify({
+        'mode': 'portfolio',
+        'actions': actions,
+        'summary': summary,
+        'strategy': strategy,
+        'start': start_dt.isoformat(),
+        'end': end_dt.isoformat(),
+    })
+
+
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 @backtest_bp.route('/api/backtest', methods=['POST'])
 def run_backtest():
     body = request.get_json(force=True, silent=True) or {}
+
+    # Portfolio mode: simulate across entire S&P 500
+    if body.get('mode') == 'portfolio':
+        return _handle_portfolio_backtest(body)
+
+    # Single-stock mode (existing logic)
     ticker = body.get('ticker', '').strip().upper()
     strategy = body.get('strategy', 'bollinger-bands')
     start_str = body.get('start', '')
@@ -375,6 +693,7 @@ def run_backtest():
                                       capital, position_size)
 
     return jsonify({
+        'mode': 'single',
         'actions': actions,
         'summary': summary,
         'ticker': ticker,
