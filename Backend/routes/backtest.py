@@ -19,31 +19,31 @@ def signals_bollinger(close):
     lower = sma - 2 * std
     upper = sma + 2 * std
 
+    # Vectorized crossover detection using shift()
+    is_below = close < lower
+    is_above = close > upper
+    valid = lower.notna() & upper.notna()
+
+    # Crossed below today but was not below yesterday -> BUY
+    buy_mask = (is_below & ~is_below.shift(1, fill_value=False)) & valid
+    # Crossed above today but was not above yesterday -> SELL
+    sell_mask = (is_above & ~is_above.shift(1, fill_value=False)) & valid
+
     signals = []
-    prev_below = prev_above = None
+    for date in close.index[buy_mask]:
+        price = float(close.loc[date])
+        lb = float(lower.loc[date])
+        signals.append({'date': date, 'type': 'BUY', 'price': price,
+                        'reason': f'Price crossed below lower band (${lb:.2f})'})
 
-    for i in range(len(close)):
-        lb = lower.iloc[i]
-        ub = upper.iloc[i]
-        if pd.isna(lb) or pd.isna(ub):
-            continue
-        price = float(close.iloc[i])
-        date = close.index[i]
-        curr_below = price < lb
-        curr_above = price > ub
+    for date in close.index[sell_mask]:
+        price = float(close.loc[date])
+        ub = float(upper.loc[date])
+        signals.append({'date': date, 'type': 'SELL', 'price': price,
+                        'reason': f'Price crossed above upper band (${ub:.2f})'})
 
-        if prev_below is not None:
-            if curr_below and not prev_below:
-                signals.append({'date': date, 'type': 'BUY', 'price': price,
-                                'reason': f'Price crossed below lower band (${lb:.2f})'})
-            elif curr_above and not prev_above:
-                signals.append({'date': date, 'type': 'SELL', 'price': price,
-                                'reason': f'Price crossed above upper band (${ub:.2f})'})
-        prev_below = curr_below
-        prev_above = curr_above
-
+    signals.sort(key=lambda s: s['date'])
     return signals
-
 
 def signals_relative_strength(close, spy_close):
     """BUY when RS ratio crosses above its 10-day MA; SELL when crosses below."""
@@ -54,53 +54,60 @@ def signals_relative_strength(close, spy_close):
     rs = aligned['stock'] / aligned['spy']
     rs_ma = rs.rolling(10).mean()
 
+    # Vectorized crossover detection
+    is_above = rs > rs_ma
+    valid = rs_ma.notna()
+    # Require previous row also valid (skip first valid row, matching original behavior)
+    both_valid = valid & valid.shift(1, fill_value=False)
+
+    # Crossed above today but was not above yesterday -> BUY
+    buy_mask = (is_above & ~is_above.shift(1, fill_value=False)) & both_valid
+    # Was above yesterday but is not today -> SELL
+    sell_mask = (~is_above & is_above.shift(1, fill_value=False)) & both_valid
+
     signals = []
-    prev_above = None
+    for date in aligned.index[buy_mask]:
+        price = float(aligned['stock'].loc[date])
+        signals.append({'date': date, 'type': 'BUY', 'price': price,
+                        'reason': 'RS ratio crossed above 10-day MA — outperforming market'})
 
-    for i in range(len(rs)):
-        if pd.isna(rs_ma.iloc[i]):
-            continue
-        curr_above = rs.iloc[i] > rs_ma.iloc[i]
-        date = aligned.index[i]
-        price = float(aligned['stock'].iloc[i])
+    for date in aligned.index[sell_mask]:
+        price = float(aligned['stock'].loc[date])
+        signals.append({'date': date, 'type': 'SELL', 'price': price,
+                        'reason': 'RS ratio crossed below 10-day MA — underperforming market'})
 
-        if prev_above is not None:
-            if curr_above and not prev_above:
-                signals.append({'date': date, 'type': 'BUY', 'price': price,
-                                'reason': 'RS ratio crossed above 10-day MA — outperforming market'})
-            elif not curr_above and prev_above:
-                signals.append({'date': date, 'type': 'SELL', 'price': price,
-                                'reason': 'RS ratio crossed below 10-day MA — underperforming market'})
-        prev_above = curr_above
-
+    signals.sort(key=lambda s: s['date'])
     return signals
-
 
 def signals_mean_reversion(close):
     """BUY at ≥10% drawdown from 20-day high; SELL when within 3% of high."""
     rolling_high = close.rolling(20).max()
+    valid = rolling_high.notna()
+    dd = (close - rolling_high) / rolling_high
+
+    # Pre-filter: only iterate dates that could trigger a signal
+    in_buy_zone = dd <= -0.10
+    in_sell_zone = dd >= -0.03
+    candidate_mask = (in_buy_zone | in_sell_zone) & valid
+    candidates = close.index[candidate_mask]
+
     signals = []
     in_drawdown = False
+    for date in candidates:
+        d = float(dd.loc[date])
+        price = float(close.loc[date])
+        high = float(rolling_high.loc[date])
 
-    for i in range(len(close)):
-        if pd.isna(rolling_high.iloc[i]):
-            continue
-        price = float(close.iloc[i])
-        high = float(rolling_high.iloc[i])
-        dd = (price - high) / high
-        date = close.index[i]
-
-        if not in_drawdown and dd <= -0.10:
+        if not in_drawdown and d <= -0.10:
             signals.append({'date': date, 'type': 'BUY', 'price': price,
-                            'reason': f'Drawdown {dd*100:.1f}% from 20-day high (${high:.2f})'})
+                            'reason': f'Drawdown {d*100:.1f}% from 20-day high (${high:.2f})'})
             in_drawdown = True
-        elif in_drawdown and dd >= -0.03:
+        elif in_drawdown and d >= -0.03:
             signals.append({'date': date, 'type': 'SELL', 'price': price,
-                            'reason': f'Recovered to within {abs(dd)*100:.1f}% of 20-day high (${high:.2f})'})
+                            'reason': f'Recovered to within {abs(d)*100:.1f}% of 20-day high (${high:.2f})'})
             in_drawdown = False
 
     return signals
-
 
 def signals_pead(ticker, close, start_dt, end_dt):
     """
