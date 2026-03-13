@@ -52,6 +52,20 @@ function recColor(rec) {
   return 'gray';
 }
 
+function macdColor(status) {
+  if (!status) return 'gray';
+  if (status === 'BULLISH CROSSOVER' || status === 'BULLISH') return 'green';
+  if (status === 'BEARISH CROSSOVER' || status === 'BEARISH') return 'red';
+  return 'gray';
+}
+
+function volatilityColor(status) {
+  if (!status) return 'gray';
+  if (status === 'HIGH Volatility') return 'red';
+  if (status === 'LOW Volatility') return 'green';
+  return 'yellow';
+}
+
 export default function StockInfo({ ticker }) {
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -194,6 +208,56 @@ export default function StockInfo({ ticker }) {
             </p>
           ) : null}
         </div>
+
+        {/* MACD */}
+        {info.macdStatus && (
+          <div className="info-card">
+            <div className="card-title">MACD (12, 26, 9)</div>
+            <StatusBadge text={info.macdStatus} color={macdColor(info.macdStatus)} />
+            <p className="card-detail">{info.macdMomentum}</p>
+            <p className="card-detail">
+              MACD: <strong>{info.macdValue}</strong> · Signal: <strong>{info.macdSignalValue}</strong>
+            </p>
+            <p className="card-detail">
+              {info.macdStatus === 'BULLISH CROSSOVER' && 'MACD just crossed above signal line — potential upward momentum beginning.'}
+              {info.macdStatus === 'BEARISH CROSSOVER' && 'MACD just crossed below signal line — potential downward momentum beginning.'}
+              {info.macdStatus === 'BULLISH' && 'MACD is above signal line — upward momentum is active.'}
+              {info.macdStatus === 'BEARISH' && 'MACD is below signal line — downward momentum is active.'}
+            </p>
+          </div>
+        )}
+
+        {/* Volatility */}
+        {info.volatilityStatus && (
+          <div className="info-card">
+            <div className="card-title">Volatility (ATR 14)</div>
+            <StatusBadge text={info.volatilityStatus} color={volatilityColor(info.volatilityStatus)} />
+            <p className="card-detail">
+              ATR ratio vs average: <strong>{info.atrRatio}x</strong>
+            </p>
+            <p className="card-detail">
+              {info.volatilityStatus === 'HIGH Volatility' && 'Price swings are larger than normal — higher risk, wider stops advised.'}
+              {info.volatilityStatus === 'LOW Volatility' && 'Price swings are compressed — may precede a breakout in either direction.'}
+              {info.volatilityStatus === 'Normal Volatility' && 'Volatility is within normal historical range.'}
+            </p>
+          </div>
+        )}
+
+        {/* Volume */}
+        {info.volumeStatus && (
+          <div className="info-card">
+            <div className="card-title">Volume</div>
+            <StatusBadge text={info.volumeStatus} color="blue" />
+            <p className="card-detail">
+              {info.volumeRelative}% of 20-day average · {info.volumeTrend}
+            </p>
+            <p className="card-detail">
+              {info.volumeRelative > 150 && 'Above-average volume — strong conviction behind current price move.'}
+              {info.volumeRelative < 50 && 'Below-average volume — move may lack conviction; watch for confirmation.'}
+              {info.volumeRelative >= 50 && info.volumeRelative <= 150 && 'Volume is in a normal range relative to recent history.'}
+            </p>
+          </div>
+        )}
 
       </div>
 

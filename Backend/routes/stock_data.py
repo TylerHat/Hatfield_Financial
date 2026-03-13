@@ -24,15 +24,24 @@ def get_stock_data(ticker):
         hist['MA20'] = hist['Close'].rolling(20).mean()
         hist['MA50'] = hist['Close'].rolling(50).mean()
 
+        ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
+        ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - macd_signal
+
         def safe_list(series):
-            return [None if pd.isna(v) else round(float(v), 2) for v in series]
+            return [None if pd.isna(v) else round(float(v), 4) for v in series]
 
         data = {
             'dates': hist.index.strftime('%Y-%m-%d').tolist(),
-            'close': safe_list(hist['Close']),
+            'close': [None if pd.isna(v) else round(float(v), 2) for v in hist['Close']],
             'volume': [int(v) for v in hist['Volume']],
             'ma20': safe_list(hist['MA20']),
             'ma50': safe_list(hist['MA50']),
+            'macd': safe_list(macd_line),
+            'macd_signal': safe_list(macd_signal),
+            'macd_hist': safe_list(macd_hist),
         }
 
         return jsonify(data)

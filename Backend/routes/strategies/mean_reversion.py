@@ -46,10 +46,14 @@ def mean_reversion(ticker):
 
             # Drawdown ≥ 10% from 20-day high → BUY (mean reversion expected)
             if not in_drawdown and drawdown_pct <= -0.10:
+                score = min(100, int(abs(drawdown_pct) * 500))
+                conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
                     'type': 'BUY',
+                    'score': score,
+                    'conviction': conviction,
                     'reason': (
                         f'Large drawdown of {drawdown_pct:.1%} from 20-day high '
                         f'(${float(row["High20"]):.2f}) — mean reversion entry'
@@ -63,6 +67,8 @@ def mean_reversion(ticker):
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
                     'type': 'SELL',
+                    'score': 55,
+                    'conviction': 'MEDIUM',
                     'reason': (
                         f'Price recovered to within 3% of 20-day high '
                         f'(${float(row["High20"]):.2f}) — exit mean reversion trade'

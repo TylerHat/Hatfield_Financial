@@ -43,12 +43,19 @@ def bollinger_bands(ticker):
             if pd.isna(row['Upper']) or pd.isna(row['Lower']):
                 continue
 
+            band_width = float(row['Upper'] - row['Lower'])
+
             # Price crosses below lower band → oversold → BUY
             if prev['Close'] >= prev['Lower'] and row['Close'] < row['Lower']:
+                raw_score = int(abs(float(row['Lower']) - float(row['Close'])) / band_width * 200) if band_width > 0 else 0
+                score = min(100, raw_score)
+                conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
                     'type': 'BUY',
+                    'score': score,
+                    'conviction': conviction,
                     'reason': (
                         f'Price crossed below lower Bollinger Band '
                         f'(${row["Lower"]:.2f}) — oversold condition'
@@ -57,10 +64,15 @@ def bollinger_bands(ticker):
 
             # Price crosses above upper band → overbought → SELL
             elif prev['Close'] <= prev['Upper'] and row['Close'] > row['Upper']:
+                raw_score = int(abs(float(row['Close']) - float(row['Upper'])) / band_width * 200) if band_width > 0 else 0
+                score = min(100, raw_score)
+                conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
                     'type': 'SELL',
+                    'score': score,
+                    'conviction': conviction,
                     'reason': (
                         f'Price crossed above upper Bollinger Band '
                         f'(${row["Upper"]:.2f}) — overbought condition'

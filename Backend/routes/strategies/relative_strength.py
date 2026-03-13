@@ -53,10 +53,15 @@ def relative_strength(ticker):
 
             # RS crosses above its MA → stock gaining relative strength → BUY
             if prev['rs'] <= prev['rs_ma'] and row['rs'] > row['rs_ma']:
+                deviation = abs(float(row['rs']) - float(row['rs_ma'])) / float(row['rs_ma']) if float(row['rs_ma']) > 0 else 0
+                score = min(100, int(deviation * 2000))
+                conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
                     'date': combined.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['stock']), 2),
                     'type': 'BUY',
+                    'score': score,
+                    'conviction': conviction,
                     'reason': (
                         f'RS vs SPY crossed above its 10-day average '
                         f'(RS ratio: {row["rs"]:.4f}) — stock gaining momentum vs market'
@@ -65,10 +70,15 @@ def relative_strength(ticker):
 
             # RS crosses below its MA → stock losing relative strength → SELL
             elif prev['rs'] >= prev['rs_ma'] and row['rs'] < row['rs_ma']:
+                deviation = abs(float(row['rs']) - float(row['rs_ma'])) / float(row['rs_ma']) if float(row['rs_ma']) > 0 else 0
+                score = min(100, int(deviation * 2000))
+                conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
                     'date': combined.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['stock']), 2),
                     'type': 'SELL',
+                    'score': score,
+                    'conviction': conviction,
                     'reason': (
                         f'RS vs SPY crossed below its 10-day average '
                         f'(RS ratio: {row["rs"]:.4f}) — stock losing momentum vs market'
