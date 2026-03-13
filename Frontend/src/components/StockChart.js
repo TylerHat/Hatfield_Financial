@@ -87,10 +87,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
         const sigs = data.signals || [];
         setSignals(sigs);
 
-        // Build date → {reason, type} lookup for tooltips
+        // Build date → {reason, type, conviction, score} lookup for tooltips
         const lookup = {};
         sigs.forEach((s) => {
-          lookup[s.date] = { reason: s.reason, type: s.type };
+          lookup[s.date] = { reason: s.reason, type: s.type, conviction: s.conviction, score: s.score };
         });
         signalReasonRef.current = lookup;
         setStrategyLoading(false);
@@ -109,7 +109,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50 } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist } = stockData;
 
   const buyData = buildSignalArray(dates, signals, 'BUY');
   const sellData = buildSignalArray(dates, signals, 'SELL');
@@ -228,7 +228,9 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
             const date = items[0]?.label;
             const info = signalReasonRef.current[date];
             if (!info) return [];
-            return ['', `Signal: ${info.type}`, `Reason: ${info.reason}`];
+            const lines = ['', `Signal: ${info.type}`, `Reason: ${info.reason}`];
+            if (info.conviction) lines.push(`Conviction: ${info.conviction} (Score: ${info.score})`);
+            return lines;
           },
         },
       },
@@ -314,6 +316,87 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
     },
   };
 
+  // ── MACD chart ───────────────────────────────────────────────────────────────
+  const macdData = {
+    labels: dates,
+    datasets: [
+      {
+        type: 'bar',
+        label: 'Histogram',
+        data: macd_hist,
+        backgroundColor: (macd_hist || []).map((v) => (v >= 0 ? 'rgba(63,185,80,0.5)' : 'rgba(248,81,73,0.5)')),
+        borderColor: (macd_hist || []).map((v) => (v >= 0 ? '#3fb950' : '#f85149')),
+        borderWidth: 1,
+        order: 2,
+      },
+      {
+        type: 'line',
+        label: 'MACD',
+        data: macd,
+        borderColor: '#58a6ff',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 1,
+      },
+      {
+        type: 'line',
+        label: 'Signal',
+        data: macd_signal,
+        borderColor: '#f0883e',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
+      },
+    ],
+  };
+
+  const macdOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
+      title: {
+        display: true,
+        text: 'MACD (12, 26, 9)',
+        color: '#8b949e',
+        font: { size: 12 },
+        padding: { bottom: 6 },
+      },
+      tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#e6edf3',
+        bodyColor: '#8b949e',
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
+            return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: { color: '#8b949e', callback: (v) => v.toFixed(2) },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
@@ -331,6 +414,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
         <Bar data={volumeData} options={volumeOptions} />
       </div>
 
+      <div className="macd-chart">
+        <Bar data={macdData} options={macdOptions} />
+      </div>
+
       {signals.length > 0 && (
         <div className="signals-summary">
           <h3>
@@ -345,6 +432,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
                   <th>Date</th>
                   <th>Price</th>
                   <th>Signal</th>
+                  <th>Conviction</th>
                   <th>Reason</th>
                 </tr>
               </thead>
@@ -356,6 +444,11 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
                     <td>
                       <span className={`signal-badge ${s.type.toLowerCase()}`}>
                         {s.type}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`conviction-badge conviction-${(s.conviction || 'low').toLowerCase()}`}>
+                        {s.conviction || 'N/A'} {s.score !== undefined ? `(${s.score})` : ''}
                       </span>
                     </td>
                     <td>{s.reason}</td>

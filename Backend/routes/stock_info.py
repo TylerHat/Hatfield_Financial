@@ -71,6 +71,54 @@ def get_stock_info(ticker):
         # ── Consolidation ─────────────────────────────────────────────────────
         consol_range, consol_status, consol_detail = compute_consolidation(hist)
 
+        # ── MACD ──────────────────────────────────────────────────────────────
+        ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
+        ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
+        macd = ema12 - ema26
+        macd_sig = macd.ewm(span=9, adjust=False).mean()
+        macd_val = round(float(macd.iloc[-1]), 4)
+        signal_val = round(float(macd_sig.iloc[-1]), 4)
+        prev_macd = float(macd.iloc[-2])
+        prev_sig = float(macd_sig.iloc[-2])
+        if prev_macd <= prev_sig and macd_val > signal_val:
+            macd_status = 'BULLISH CROSSOVER'
+        elif prev_macd >= prev_sig and macd_val < signal_val:
+            macd_status = 'BEARISH CROSSOVER'
+        elif macd_val > signal_val:
+            macd_status = 'BULLISH'
+        else:
+            macd_status = 'BEARISH'
+        macd_momentum = 'STRONG MOMENTUM' if abs(macd_val - signal_val) > 0.5 else 'WEAK MOMENTUM'
+
+        # ── Volatility (ATR 14-day) ────────────────────────────────────────────
+        high_low = hist['High'] - hist['Low']
+        high_pc = (hist['High'] - hist['Close'].shift(1)).abs()
+        low_pc = (hist['Low'] - hist['Close'].shift(1)).abs()
+        tr = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean()
+        atr_val = float(atr.iloc[-1])
+        atr_avg = float(atr.mean())
+        vol_ratio = round(atr_val / atr_avg, 2) if atr_avg > 0 else 1.0
+        if vol_ratio > 1.5:
+            volatility_status = 'HIGH Volatility'
+        elif vol_ratio < 0.7:
+            volatility_status = 'LOW Volatility'
+        else:
+            volatility_status = 'Normal Volatility'
+
+        # ── Volume ────────────────────────────────────────────────────────────
+        avg_volume = float(hist['Volume'].rolling(20).mean().iloc[-1])
+        curr_volume = float(hist['Volume'].iloc[-1])
+        vol_relative = round(curr_volume / avg_volume * 100) if avg_volume > 0 else 100
+        recent_avg = float(hist['Volume'].iloc[-5:].mean())
+        volume_trend = '↗ Increasing' if curr_volume > recent_avg else '↘ Decreasing'
+        if vol_relative > 150:
+            volume_status = 'HIGH Volume'
+        elif vol_relative < 50:
+            volume_status = 'LOW Volume'
+        else:
+            volume_status = 'Normal Volume'
+
         # ── Helpers ───────────────────────────────────────────────────────────
         def safe_float(key, decimals=2):
             val = info.get(key)
@@ -155,6 +203,15 @@ def get_stock_info(ticker):
             'valuationDetail': val_detail,
             'analystRecommendation': analyst_rec,
             'targetMeanPrice': safe_float('targetMeanPrice'),
+            'macdValue': macd_val,
+            'macdSignalValue': signal_val,
+            'macdStatus': macd_status,
+            'macdMomentum': macd_momentum,
+            'volatilityStatus': volatility_status,
+            'atrRatio': vol_ratio,
+            'volumeStatus': volume_status,
+            'volumeRelative': vol_relative,
+            'volumeTrend': volume_trend,
         })
 
     except Exception as e:

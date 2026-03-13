@@ -62,12 +62,18 @@ def post_earnings_drift(ticker):
                 day2_close = float(post.iloc[1]['Close'])
                 earn_str = earn_date.strftime('%Y-%m-%d')
 
+                day1_pct = abs((day1_close - pre_close) / pre_close) if pre_close > 0 else 0
+
                 # Upward drift: day1 and day2 both above pre-earnings close
                 if day1_close > pre_close and day2_close > day1_close:
+                    score = min(100, int(day1_pct * 500))
+                    conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                     signals.append({
                         'date': post.index[0].strftime('%Y-%m-%d'),
                         'price': round(day1_close, 2),
                         'type': 'BUY',
+                        'score': score,
+                        'conviction': conviction,
                         'reason': (
                             f'Post-earnings upward drift detected '
                             f'(earnings: {earn_str}, +{((day1_close/pre_close)-1)*100:.1f}% day 1)'
@@ -76,10 +82,14 @@ def post_earnings_drift(ticker):
 
                 # Downward drift: day1 below pre-earnings close and continuing down
                 elif day1_close < pre_close and day2_close < day1_close:
+                    score = min(100, int(day1_pct * 500))
+                    conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                     signals.append({
                         'date': post.index[0].strftime('%Y-%m-%d'),
                         'price': round(day1_close, 2),
                         'type': 'SELL',
+                        'score': score,
+                        'conviction': conviction,
                         'reason': (
                             f'Post-earnings downward drift detected '
                             f'(earnings: {earn_str}, {((day1_close/pre_close)-1)*100:.1f}% day 1)'
