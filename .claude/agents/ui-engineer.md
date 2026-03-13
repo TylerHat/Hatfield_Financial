@@ -153,7 +153,7 @@ Preferred layout patterns:
 - side-by-side data panels
 - persistent navigation or sidebars
 
-Avoid designing mobile layouts or responsive breakpoints.
+Never design for mobile. Do not add responsive breakpoints, touch targets, or mobile-first logic of any kind.
 
 ---
 
@@ -219,6 +219,8 @@ Do NOT introduce:
 - Bootstrap
 - Material UI
 - other UI frameworks
+- mobile layouts, responsive breakpoints, or media queries
+- touch-friendly UI patterns (large tap targets, swipe gestures, bottom navs)
 
 The project uses **plain CSS only**.
 
