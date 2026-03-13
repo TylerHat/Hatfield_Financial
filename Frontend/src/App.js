@@ -10,6 +10,7 @@ const STRATEGIES = [
   { value: 'relative-strength', label: 'Relative Strength vs Market' },
   { value: 'bollinger-bands', label: 'Bollinger Bands' },
   { value: 'mean-reversion', label: 'Mean Reversion After Large Drawdown' },
+  { value: 'macd-crossover', label: 'MACD Crossover' },
 ];
 
 function toISODate(d) {
