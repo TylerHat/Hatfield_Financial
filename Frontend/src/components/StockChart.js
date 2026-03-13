@@ -109,7 +109,11 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi } = stockData;
+
+  // Strategies where RSI context panel adds value
+  const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi']);
+  const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
 
   const buyData = buildSignalArray(dates, signals, 'BUY');
   const sellData = buildSignalArray(dates, signals, 'SELL');
@@ -397,6 +401,95 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
     },
   };
 
+  // ── RSI context panel ────────────────────────────────────────────────────────
+  const flat70 = dates.map(() => 70);
+  const flat30 = dates.map(() => 30);
+
+  const rsiData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'RSI (14)',
+        data: rsi,
+        borderColor: '#e6edf3',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
+      },
+      {
+        label: 'Overbought (70)',
+        data: flat70,
+        borderColor: 'rgba(248,81,73,0.6)',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        fill: false,
+        order: 1,
+      },
+      {
+        label: 'Oversold (30)',
+        data: flat30,
+        borderColor: 'rgba(63,185,80,0.6)',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        fill: false,
+        order: 1,
+      },
+    ],
+  };
+
+  const rsiOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
+      title: {
+        display: true,
+        text: 'RSI (14)  ·  Overbought > 70  ·  Oversold < 30',
+        color: '#8b949e',
+        font: { size: 12 },
+        padding: { bottom: 6 },
+      },
+      tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#e6edf3',
+        bodyColor: '#8b949e',
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
+            return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid: { display: false },
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: {
+          color: '#8b949e',
+          callback: (v) => v.toFixed(0),
+          stepSize: 25,
+        },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
@@ -417,6 +510,12 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
       <div className="macd-chart">
         <Bar data={macdData} options={macdOptions} />
       </div>
+
+      {showRsiPanel && (
+        <div className="rsi-chart">
+          <Line data={rsiData} options={rsiOptions} />
+        </div>
+      )}
 
       {signals.length > 0 && (
         <div className="signals-summary">

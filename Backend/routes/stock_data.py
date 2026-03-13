@@ -24,6 +24,15 @@ def get_stock_data(ticker):
         hist['MA20'] = hist['Close'].rolling(20).mean()
         hist['MA50'] = hist['Close'].rolling(50).mean()
 
+        # RSI (14) — Wilder's exponential smoothing
+        delta = hist['Close'].diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0, float('nan'))
+        hist['RSI'] = 100 - (100 / (1 + rs))
+
         ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
         ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
@@ -42,6 +51,7 @@ def get_stock_data(ticker):
             'macd': safe_list(macd_line),
             'macd_signal': safe_list(macd_signal),
             'macd_hist': safe_list(macd_hist),
+            'rsi': safe_list(hist['RSI']),
         }
 
         return jsonify(data)
