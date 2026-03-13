@@ -7,6 +7,7 @@ import StatCard, { StatCardGrid } from './components/StatCard';
 import DataTable from './components/DataTable';
 import Badge from './components/Badge';
 import Backtester from './components/Backtester';
+import PerformanceDashboard from './components/PerformanceDashboard';
 
 const API_BASE = 'http://localhost:5000';
 
@@ -285,6 +286,12 @@ function App() {
           Backtester
         </button>
         <button
+          className={`tab-btn ${activeTab === 'performance' ? 'active' : ''}`}
+          onClick={() => setActiveTab('performance')}
+        >
+          Performance
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -385,6 +392,15 @@ function App() {
 
         {activeTab === 'backtester' && (
           <Backtester
+            ticker={submittedTicker}
+            strategy={strategy}
+            startDate={startDate}
+            endDate={endDate}
+          />
+        )}
+
+        {activeTab === 'performance' && (
+          <PerformanceDashboard
             ticker={submittedTicker}
             strategy={strategy}
             startDate={startDate}
