@@ -201,6 +201,57 @@ as the market corrects its overreaction.`,
       },
     ],
   },
+  {
+    id: 'rsi',
+    title: 'RSI Oversold / Overbought',
+    subtitle: 'Using momentum exhaustion to time reversals',
+    color: '#f85149',
+    sections: [
+      {
+        heading: 'What Is It?',
+        body: `The Relative Strength Index (RSI), developed by J. Welles Wilder in 1978, is a
+momentum oscillator that measures the speed and magnitude of recent price changes.
+It oscillates between 0 and 100 and is used to identify whether a stock is
+overbought (likely to fall) or oversold (likely to rise).
+
+Readings below 30 are traditionally considered oversold; readings above 70 are
+considered overbought.`,
+      },
+      {
+        heading: 'Why Does It Work?',
+        body: `RSI captures momentum exhaustion. When a stock moves sharply in one direction for
+several consecutive sessions, buyers or sellers become fatigued and the move tends
+to slow or reverse. The RSI quantifies this exhaustion by comparing the average
+size of up-closes to down-closes over a 14-day window.
+
+The 30/70 thresholds correspond to extreme average gain-to-loss ratios, signaling
+that the recent trend has outpaced fundamentals and a mean reversion is probable.`,
+      },
+      {
+        heading: 'How This Implementation Works',
+        body: `1. The 14-period RSI is computed using Wilder's exponential smoothing
+   (alpha = 1/14) applied separately to gains and losses.
+2. A BUY signal is generated when RSI crosses from above 30 to below 30
+   (price enters oversold territory — reversal upward expected).
+3. A SELL signal is generated when RSI crosses from below 70 to above 70
+   (price enters overbought territory — reversal downward expected).
+4. Crossover detection prevents repeated signals during sustained extremes.
+5. Signal score reflects how deep into oversold/overbought territory the RSI moved.`,
+      },
+      {
+        heading: 'Strengths',
+        body: `• One of the most widely used and battle-tested indicators in technical analysis\n• Clear, objective thresholds (30/70) with decades of supporting literature\n• Works across all asset classes and timeframes\n• Crossover-based signals filter out noise from prolonged extremes`,
+      },
+      {
+        heading: 'Risks & Limitations',
+        body: `• In strong trends, RSI can stay overbought/oversold for extended periods\n• Does not indicate how far or how fast the reversal will be\n• Less reliable on low-volume or thinly traded stocks\n• 14-period window is standard but may need adjustment for very volatile names\n• Signals are more reliable when confirmed by price action (e.g., a reversal candle)`,
+      },
+      {
+        heading: 'Best Conditions',
+        body: `• Range-bound or mean-reverting markets — not strong trends\n• RSI extreme combined with a Bollinger Band touch = high-conviction setup\n• Divergence: price makes a new low but RSI does not → hidden strength\n• Higher win rate when RSI reaches extreme levels (< 20 or > 80) rather than just 30/70\n• Confirm with volume: a reversal on rising volume strengthens the signal`,
+      },
+    ],
+  },
 ];
 
 export default function StrategyGuide() {
