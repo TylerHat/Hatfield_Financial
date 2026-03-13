@@ -747,3 +747,121 @@
   color: #8b949e;
   flex-shrink: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMPONENTS TAB
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.components-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.components-tab__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.components-tab__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e6edf3;
+  border-left: 3px solid #58a6ff;
+  padding-left: 12px;
+}
+
+.components-tab__desc {
+  font-size: 0.85rem;
+  color: #8b949e;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.components-tab__desc code {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.8rem;
+  color: #c9d1d9;
+}
+
+.components-tab__hint {
+  padding: 20px;
+  background: #161b22;
+  border: 1px dashed #30363d;
+  border-radius: 8px;
+  color: #484f58;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+/* ── Badge showcase ─────────────────────────────────────────────────────────── */
+
+.badge-showcase {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.badge-showcase__header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8b949e;
+}
+
+.badge-showcase__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.badge-showcase__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge-showcase__group-label {
+  font-size: 0.75rem;
+  color: #484f58;
+  min-width: 72px;
+}
+
+/* ── Stock snapshot panel ───────────────────────────────────────────────────── */
+
+.snapshot-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.snapshot-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.snapshot-ticker {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #58a6ff;
+  letter-spacing: 0.5px;
+}
+
+.snapshot-label {
+  font-size: 0.8rem;
+  color: #8b949e;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
