@@ -3,7 +3,12 @@ This repository contains **Hatfield Investments**, a React-based financial app w
 
 > Goal: fast iteration, clean architecture, safe handling of secrets, and predictable environments for local dev + CI.
 
+## Quick Reference
+**→ See `Claude.arch.md` for high-level architecture, endpoints, and tech stack.** This document maintains token efficiency by storing only essential information. Claude Code is encouraged to update it as features are added or changed.
+
 ---
+
+
 
 ## What to Build (Product Summary) **
 
