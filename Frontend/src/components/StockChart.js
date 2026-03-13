@@ -35,7 +35,7 @@ function buildSignalArray(dates, signals, type) {
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
 
-export default function StockChart({ ticker, strategy, startDate, endDate }) {
+export default function StockChart({ ticker, strategy, startDate, endDate, onSignals }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -75,6 +75,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
     if (!ticker || !stockData || strategy === 'none') {
       setSignals([]);
       signalReasonRef.current = {};
+      if (onSignals) onSignals([]);
       return;
     }
 
@@ -86,6 +87,9 @@ export default function StockChart({ ticker, strategy, startDate, endDate }) {
       .then((data) => {
         const sigs = data.signals || [];
         setSignals(sigs);
+
+        // Lift signals to parent (App.js) so other tabs can consume them.
+        if (onSignals) onSignals(sigs);
 
         // Build date → {reason, type, conviction, score} lookup for tooltips
         const lookup = {};

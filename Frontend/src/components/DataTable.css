@@ -1,0 +1,227 @@
+/* ── DataTable ────────────────────────────────────────────────────────────────
+   Sortable data table for screener results, signals, and any tabular financial
+   data. Matches the existing signals-table visual language from App.css.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Outer wrapper ─────────────────────────────────────────────────────────── */
+
+.dt-wrapper {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;               /* clip the scrollable inner area */
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Scroll container (enables horizontal scroll on overflow) ──────────────── */
+
+.dt-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────────────── */
+
+.dt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  table-layout: auto;
+}
+
+/* ── Caption (screen-reader accessible) ───────────────────────────────────── */
+
+.dt-caption {
+  caption-side: top;
+  text-align: left;
+  padding: 12px 16px 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+
+.dt-thead {
+  background: #161b22;
+}
+
+/* Sticky header: positions thead relative to the scroll container. */
+.dt-table--sticky-header .dt-thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dt-th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  white-space: nowrap;
+  user-select: none;
+  background: #161b22;             /* keep background when sticky */
+}
+
+.dt-th--numeric {
+  text-align: right;
+}
+
+.dt-th--sortable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.dt-th--sortable:hover {
+  color: #e6edf3;
+}
+
+.dt-th--sorted {
+  color: #58a6ff;
+}
+
+/* ── Sort arrow ────────────────────────────────────────────────────────────── */
+
+.dt-sort-arrow {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 0.7rem;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.dt-sort-arrow--inactive {
+  color: #484f58;
+}
+
+.dt-sort-arrow--active {
+  color: #58a6ff;
+}
+
+/* ── Body ──────────────────────────────────────────────────────────────────── */
+
+.dt-tbody .dt-tr {
+  transition: background 0.1s;
+}
+
+.dt-tbody .dt-tr:hover {
+  background: #1c2129;
+}
+
+.dt-td {
+  padding: 9px 14px;
+  color: #c9d1d9;
+  border-bottom: 1px solid #21262d;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.dt-td--numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;  /* align decimal points in numeric columns */
+  font-family: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
+  font-size: 0.83rem;
+}
+
+/* Last row: no bottom border to avoid doubling with footer border */
+.dt-tbody .dt-tr:last-child .dt-td {
+  border-bottom: none;
+}
+
+/* ── Optional row accent classes (caller sets row._rowClass) ──────────────── */
+
+.dt-tr.buy-row  .dt-td { background: rgba(46, 160, 67, 0.05); }
+.dt-tr.sell-row .dt-td { background: rgba(248, 81, 73, 0.05); }
+
+/* Preserve hover intent even on colored rows */
+.dt-tr.buy-row:hover  .dt-td { background: rgba(46, 160, 67, 0.10); }
+.dt-tr.sell-row:hover .dt-td { background: rgba(248, 81, 73, 0.10); }
+
+/* ── Null / missing value placeholder ─────────────────────────────────────── */
+
+.dt-null {
+  color: #484f58;
+}
+
+/* ── Footer (row count + sort info) ───────────────────────────────────────── */
+
+.dt-footer {
+  padding: 8px 14px;
+  font-size: 0.76rem;
+  color: #484f58;
+  border-top: 1px solid #21262d;
+  background: #161b22;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-footer__sort-info {
+  color: #8b949e;
+}
+
+.dt-footer__sort-info strong {
+  color: #c9d1d9;
+}
+
+/* ── State: loading skeleton ───────────────────────────────────────────────── */
+
+.dt-state {
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.dt-state--loading {
+  padding: 16px;
+}
+
+.dt-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dt-skeleton-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dt-skeleton-cell {
+  flex: 1;
+  height: 28px;
+  background: #21262d;
+  border-radius: 4px;
+  animation: dt-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* Stagger the pulse so each row animates slightly offset */
+.dt-skeleton-row:nth-child(2) .dt-skeleton-cell { animation-delay: 0.1s; }
+.dt-skeleton-row:nth-child(3) .dt-skeleton-cell { animation-delay: 0.2s; }
+.dt-skeleton-row:nth-child(4) .dt-skeleton-cell { animation-delay: 0.3s; }
+.dt-skeleton-row:nth-child(5) .dt-skeleton-cell { animation-delay: 0.4s; }
+
+@keyframes dt-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── State: error ──────────────────────────────────────────────────────────── */
+
+.dt-state--error {
+  color: #f85149;
+  font-size: 0.9rem;
+}
+
+/* ── State: empty ──────────────────────────────────────────────────────────── */
+
+.dt-state--empty {
+  color: #8b949e;
+  font-size: 0.9rem;
+}

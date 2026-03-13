@@ -1,0 +1,126 @@
+/* ── StatCard ─────────────────────────────────────────────────────────────────
+   Single-metric display card for portfolio and stock summary data.
+   Matches the existing info-card / info-metrics visual language from App.css.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.stat-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-left-width: 3px;           /* accent stripe width */
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;                     /* allow grid shrink without overflow */
+}
+
+/* ── Accent stripe colors ──────────────────────────────────────────────────── */
+
+.stat-card--accent-default { border-left-color: #30363d; }
+.stat-card--accent-green   { border-left-color: #3fb950; }
+.stat-card--accent-red     { border-left-color: #f85149; }
+.stat-card--accent-blue    { border-left-color: #58a6ff; }
+.stat-card--accent-yellow  { border-left-color: #d2993a; }
+
+/* ── Label (metric name) ───────────────────────────────────────────────────── */
+
+.stat-card__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8b949e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Primary value ─────────────────────────────────────────────────────────── */
+
+.stat-card__value {
+  font-weight: 700;
+  color: #e6edf3;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-card__value--sm { font-size: 1.1rem; }
+.stat-card__value--md { font-size: 1.4rem; }
+.stat-card__value--lg { font-size: 1.9rem; }
+
+/* ── Delta (change value) ──────────────────────────────────────────────────── */
+
+.stat-card__delta {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-card__delta--positive { color: #3fb950; }
+.stat-card__delta--negative { color: #f85149; }
+.stat-card__delta--neutral  { color: #8b949e; }
+
+.stat-card__delta-label {
+  font-weight: 400;
+  color: #8b949e;
+}
+
+/* ── Subtext ───────────────────────────────────────────────────────────────── */
+
+.stat-card__subtext {
+  font-size: 0.78rem;
+  color: #8b949e;
+  line-height: 1.4;
+}
+
+/* ── Error state ───────────────────────────────────────────────────────────── */
+
+.stat-card__error {
+  font-size: 0.82rem;
+  color: #f85149;
+  margin-top: 4px;
+}
+
+/* ── Loading skeleton ──────────────────────────────────────────────────────── */
+
+.stat-card__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.stat-card__skeleton-bar {
+  height: 14px;
+  background: #21262d;
+  border-radius: 4px;
+  animation: stat-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.stat-card__skeleton-bar--wide   { width: 70%; }
+.stat-card__skeleton-bar--narrow { width: 40%; }
+
+@keyframes stat-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── StatCardGrid ──────────────────────────────────────────────────────────── */
+
+.stat-card-grid {
+  display: grid;
+  /*
+    Fill the row with as many columns as fit, each at least 180px wide.
+    The --stat-grid-columns CSS variable is a hint used by callers that prefer
+    a fixed column count over fully fluid behavior; we compute a floor via
+    minmax so the grid never creates fewer columns than cards on large screens.
+  */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(max(180px, calc(100% / var(--stat-grid-columns, 4) - 12px)), 1fr)
+  );
+  gap: 10px;
+}
