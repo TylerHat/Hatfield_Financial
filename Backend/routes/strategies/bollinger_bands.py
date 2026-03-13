@@ -27,6 +27,8 @@ def bollinger_bands(ticker):
         hist['STD20'] = hist['Close'].rolling(20).std()
         hist['Upper'] = hist['MA20'] + 2 * hist['STD20']
         hist['Lower'] = hist['MA20'] - 2 * hist['STD20']
+        # Volume confirmation: require volume > 1.3× 20-day average to filter weak signals
+        hist['VolMA20'] = hist['Volume'].rolling(20).mean()
 
         # Trim to the user-requested window after bands are computed
         cutoff = pd.Timestamp(user_start).tz_localize('UTC')
@@ -45,11 +47,19 @@ def bollinger_bands(ticker):
 
             band_width = float(row['Upper'] - row['Lower'])
 
-            # Price crosses below lower band → oversold → BUY
-            if prev['Close'] >= prev['Lower'] and row['Close'] < row['Lower']:
+            # Volume confirmation: signal requires volume > 1.3× 20-day average
+            vol_confirmed = (
+                not pd.isna(row['VolMA20'])
+                and float(row['VolMA20']) > 0
+                and float(row['Volume']) > 1.3 * float(row['VolMA20'])
+            )
+
+            # Price crosses below lower band + volume spike → oversold → BUY
+            if prev['Close'] >= prev['Lower'] and row['Close'] < row['Lower'] and vol_confirmed:
                 raw_score = int(abs(float(row['Lower']) - float(row['Close'])) / band_width * 200) if band_width > 0 else 0
                 score = min(100, raw_score)
                 conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
+                vol_ratio = round(float(row['Volume']) / float(row['VolMA20']), 1)
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
@@ -57,16 +67,17 @@ def bollinger_bands(ticker):
                     'score': score,
                     'conviction': conviction,
                     'reason': (
-                        f'Price crossed below lower Bollinger Band '
-                        f'(${row["Lower"]:.2f}) — oversold condition'
+                        f'Price crossed below lower Bollinger Band (${row["Lower"]:.2f}) '
+                        f'on {vol_ratio}× avg volume — volume-confirmed oversold condition'
                     ),
                 })
 
-            # Price crosses above upper band → overbought → SELL
-            elif prev['Close'] <= prev['Upper'] and row['Close'] > row['Upper']:
+            # Price crosses above upper band + volume spike → overbought → SELL
+            elif prev['Close'] <= prev['Upper'] and row['Close'] > row['Upper'] and vol_confirmed:
                 raw_score = int(abs(float(row['Close']) - float(row['Upper'])) / band_width * 200) if band_width > 0 else 0
                 score = min(100, raw_score)
                 conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
+                vol_ratio = round(float(row['Volume']) / float(row['VolMA20']), 1)
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
@@ -74,8 +85,8 @@ def bollinger_bands(ticker):
                     'score': score,
                     'conviction': conviction,
                     'reason': (
-                        f'Price crossed above upper Bollinger Band '
-                        f'(${row["Upper"]:.2f}) — overbought condition'
+                        f'Price crossed above upper Bollinger Band (${row["Upper"]:.2f}) '
+                        f'on {vol_ratio}× avg volume — volume-confirmed overbought condition'
                     ),
                 })
 
