@@ -14,8 +14,8 @@ def mean_reversion(ticker):
 
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
-        # Extra lookback so the 20-day trailing high is populated
-        fetch_start = user_start - timedelta(days=30)
+        # Extra lookback for MA200 trend filter (200 trading days ≈ 280 calendar days)
+        fetch_start = user_start - timedelta(days=280)
 
         stock = yf.Ticker(ticker.upper())
         hist = stock.history(start=fetch_start, end=end)
@@ -23,6 +23,8 @@ def mean_reversion(ticker):
         if hist.empty:
             return jsonify({'signals': []})
 
+        # 200-day MA trend filter — only buy dips in uptrends
+        hist['MA200'] = hist['Close'].rolling(200).mean()
         # 20-day trailing high and drawdown from it
         hist['High20'] = hist['Close'].rolling(20).max()
         hist['Drawdown'] = (hist['Close'] - hist['High20']) / hist['High20']
@@ -44,8 +46,12 @@ def mean_reversion(ticker):
 
             drawdown_pct = float(row['Drawdown'])
 
-            # Drawdown ≥ 10% from 20-day high → BUY (mean reversion expected)
-            if not in_drawdown and drawdown_pct <= -0.10:
+            # MA200 trend filter — skip BUY signals in downtrends
+            ma200 = row.get('MA200') if hasattr(row, 'get') else row['MA200']
+            in_uptrend = not pd.isna(ma200) and float(row['Close']) > float(ma200)
+
+            # Drawdown ≥ 10% from 20-day high + price above MA200 → BUY
+            if not in_drawdown and drawdown_pct <= -0.10 and in_uptrend:
                 score = min(100, int(abs(drawdown_pct) * 500))
                 conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
                 signals.append({
@@ -55,8 +61,9 @@ def mean_reversion(ticker):
                     'score': score,
                     'conviction': conviction,
                     'reason': (
-                        f'Large drawdown of {drawdown_pct:.1%} from 20-day high '
-                        f'(${float(row["High20"]):.2f}) — mean reversion entry'
+                        f'Drawdown of {drawdown_pct:.1%} from 20-day high '
+                        f'(${float(row["High20"]):.2f}), price above MA200 '
+                        f'(${float(ma200):.2f}) — trend-confirmed mean reversion entry'
                     ),
                 })
                 in_drawdown = True
