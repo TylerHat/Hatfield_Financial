@@ -254,6 +254,59 @@ early momentum shifts rather than lagging behind them.`,
     ],
   },
   {
+    id: 'vs',
+    title: 'Volatility Squeeze',
+    subtitle: 'Catching explosive breakouts after periods of compressed volatility',
+    color: '#f0883e',
+    sections: [
+      {
+        heading: 'What Is It?',
+        body: `The Volatility Squeeze strategy identifies periods when price volatility contracts
+to an unusually narrow range — a "squeeze" — and then waits for volatility to
+expand explosively. The squeeze is measured using Bollinger Band width (distance
+between upper and lower bands), which narrows when volatility is low.
+
+When the squeeze releases and Band width expands sharply, a directional move
+is likely underway. Price position relative to the 20-day moving average
+determines whether that move is bullish or bearish.`,
+      },
+      {
+        heading: 'Why Does It Work?',
+        body: `Markets alternate between trending (high volatility) and consolidating (low volatility)
+phases. Bollinger Band squeezes mark the transition from consolidation to trend.
+Institutional traders often accumulate or distribute positions during quiet periods,
+and the squeeze release reveals the direction of that activity.
+
+This approach is related to John Bollinger's "Squeeze" concept and is used by
+traders who want to enter at the beginning of a new trend rather than chasing
+a move that has already extended.`,
+      },
+      {
+        heading: 'How This Implementation Works',
+        body: `1. Bollinger Bands (20-day MA, ±2 standard deviations) are calculated.
+2. BB Width = Upper Band − Lower Band (measures current volatility).
+3. The 60-day 20th percentile of BB Width defines the "squeeze threshold."
+4. When BB Width drops below the 20th percentile, the stock is in a squeeze.
+5. When BB Width expands back above the 60-day median after a squeeze, a signal fires.
+6. If price > MA20 at the time of expansion → BUY (bullish breakout expected).
+7. If price < MA20 at the time of expansion → SELL (bearish breakdown expected).
+8. Score is based on how aggressively the width expanded vs the squeeze level.`,
+      },
+      {
+        heading: 'Strengths',
+        body: `• Filters out random volatility — only signals when a genuine squeeze releases\n• Direction-aware: uses MA20 to distinguish bullish from bearish breakouts\n• Score reflects breakout force — higher expansion = higher conviction\n• Works well on individual stocks and ETFs across multiple timeframes`,
+      },
+      {
+        heading: 'Risks & Limitations',
+        body: `• False breakouts can occur — price may expand briefly then reverse\n• Squeeze duration varies; a long squeeze may not lead to a sustained move\n• MA20 direction filter can be wrong at major turning points\n• Best used with additional confirmation (volume, sector alignment)\n• 60-day rolling window requires adequate history — newer stocks may not have enough data`,
+      },
+      {
+        heading: 'Best Conditions',
+        body: `• Stock in a multi-week consolidation with declining volume (classic squeeze setup)\n• Volume surge at the moment of squeeze release strengthens conviction\n• Sector or market index also breaking out in the same direction\n• Wider pre-squeeze price range followed by tighter consolidation (coiling pattern)\n• Avoid during earnings announcements — volatility expansion is not directional then`,
+      },
+    ],
+  },
+  {
     id: 'rsi',
     title: 'RSI Oversold / Overbought',
     subtitle: 'Using momentum exhaustion to time reversals',

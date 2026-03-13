@@ -10,6 +10,7 @@ from routes.strategies.mean_reversion import mr_bp
 from routes.strategies.rsi import rsi_bp
 from routes.strategies.macd_crossover import macd_bp
 from routes.backtest import backtest_bp
+from routes.strategies.volatility_squeeze import vs_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +24,7 @@ app.register_blueprint(mr_bp)
 app.register_blueprint(rsi_bp)
 app.register_blueprint(macd_bp)
 app.register_blueprint(backtest_bp)
+app.register_blueprint(vs_bp)
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

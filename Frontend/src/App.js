@@ -19,6 +19,7 @@ const STRATEGIES = [
   { value: 'mean-reversion', label: 'Mean Reversion After Large Drawdown' },
   { value: 'macd-crossover', label: 'MACD Crossover' },
   { value: 'rsi', label: 'RSI Overbought / Oversold' },
+  { value: 'volatility-squeeze', label: 'Volatility Squeeze' },
 ];
 
 function toISODate(d) {
