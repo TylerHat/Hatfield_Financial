@@ -279,6 +279,7 @@ export default function StockInfo({ ticker }) {
             }
           />
           <MetricRow label="EPS (Trailing)" value={fmt(info.eps, '$')} />
+          <MetricRow label="Revenue / Share" value={info.revenuePerShare != null ? `$${info.revenuePerShare}` : 'N/A'} />
           <MetricRow label="Current Price" value={fmt(info.currentPrice, '$')} />
           <MetricRow
             label="Analyst Recommendation"
@@ -295,6 +296,89 @@ export default function StockInfo({ ticker }) {
           />
         </div>
       </div>
+
+      {/* ── Fundamentals card ────────────────────────────────────── */}
+      {(info.revenueGrowth != null || info.earningsGrowth != null ||
+        info.grossMargins != null || info.operatingMargins != null ||
+        info.profitMargins != null || info.returnOnEquity != null ||
+        info.returnOnAssets != null || info.debtToEquity != null ||
+        info.currentRatio != null || info.freeCashflow != null ||
+        info.shortPercentOfFloat != null) && (
+        <div className="info-metrics">
+          <div className="metrics-title">Fundamentals</div>
+          <div className="metrics-grid">
+            {/* Growth */}
+            {info.revenueGrowth != null && (
+              <MetricRow
+                label="Revenue Growth (YoY)"
+                value={`${(info.revenueGrowth * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.earningsGrowth != null && (
+              <MetricRow
+                label="Earnings Growth (YoY)"
+                value={`${(info.earningsGrowth * 100).toFixed(1)}%`}
+              />
+            )}
+            {/* Profitability */}
+            {info.grossMargins != null && (
+              <MetricRow
+                label="Gross Margin"
+                value={`${(info.grossMargins * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.operatingMargins != null && (
+              <MetricRow
+                label="Operating Margin"
+                value={`${(info.operatingMargins * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.profitMargins != null && (
+              <MetricRow
+                label="Net Margin"
+                value={`${(info.profitMargins * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.returnOnEquity != null && (
+              <MetricRow
+                label="Return on Equity (ROE)"
+                value={`${(info.returnOnEquity * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.returnOnAssets != null && (
+              <MetricRow
+                label="Return on Assets (ROA)"
+                value={`${(info.returnOnAssets * 100).toFixed(1)}%`}
+              />
+            )}
+            {/* Financial Health */}
+            {info.debtToEquity != null && (
+              <MetricRow
+                label="Debt / Equity"
+                value={`${info.debtToEquity}x`}
+              />
+            )}
+            {info.currentRatio != null && (
+              <MetricRow
+                label="Current Ratio"
+                value={`${info.currentRatio}x`}
+              />
+            )}
+            {info.freeCashflow != null && (
+              <MetricRow
+                label="Free Cash Flow"
+                value={info.freeCashflow}
+              />
+            )}
+            {info.shortPercentOfFloat != null && (
+              <MetricRow
+                label="Short % of Float"
+                value={`${(info.shortPercentOfFloat * 100).toFixed(1)}%`}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

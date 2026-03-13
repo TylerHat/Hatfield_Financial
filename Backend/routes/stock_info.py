@@ -182,7 +182,7 @@ def get_stock_info(ticker):
         rec_key = info.get('recommendationKey') or ''
         analyst_rec = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
 
-        return jsonify({
+        response = {
             'ticker': ticker.upper(),
             'name': info.get('longName') or info.get('shortName', ticker.upper()),
             'sector': info.get('sector') or 'N/A',
@@ -219,7 +219,55 @@ def get_stock_info(ticker):
             'volumeStatus': volume_status,
             'volumeRelative': vol_relative,
             'volumeTrend': volume_trend,
-        })
+        }
+
+        # ── Fundamentals expansion ────────────────────────────────────────────
+        # Growth
+        v = safe_float('revenueGrowth', 4)
+        if v is not None:
+            response['revenueGrowth'] = v
+        v = safe_float('earningsGrowth', 4)
+        if v is not None:
+            response['earningsGrowth'] = v
+
+        # Profitability
+        v = safe_float('grossMargins', 4)
+        if v is not None:
+            response['grossMargins'] = v
+        v = safe_float('operatingMargins', 4)
+        if v is not None:
+            response['operatingMargins'] = v
+        v = safe_float('profitMargins', 4)
+        if v is not None:
+            response['profitMargins'] = v
+        v = safe_float('returnOnEquity', 4)
+        if v is not None:
+            response['returnOnEquity'] = v
+        v = safe_float('returnOnAssets', 4)
+        if v is not None:
+            response['returnOnAssets'] = v
+
+        # Financial health
+        v = safe_float('debtToEquity')
+        if v is not None:
+            response['debtToEquity'] = v
+        v = safe_float('currentRatio')
+        if v is not None:
+            response['currentRatio'] = v
+        fcf_raw = info.get('freeCashflow')
+        if fcf_raw is not None:
+            try:
+                response['freeCashflow'] = fmt_large(float(fcf_raw))
+            except Exception:
+                pass
+        v = safe_float('revenuePerShare')
+        if v is not None:
+            response['revenuePerShare'] = v
+        v = safe_float('shortPercentOfFloat', 4)
+        if v is not None:
+            response['shortPercentOfFloat'] = v
+
+        return jsonify(response)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
