@@ -20,6 +20,7 @@ const STRATEGIES = [
   { value: 'macd-crossover', label: 'MACD Crossover' },
   { value: 'rsi', label: 'RSI Overbought / Oversold' },
   { value: 'volatility-squeeze', label: 'Volatility Squeeze' },
+  { value: '52-week-breakout', label: '52-Week Breakout' },
 ];
 
 function toISODate(d) {

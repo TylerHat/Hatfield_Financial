@@ -254,6 +254,59 @@ early momentum shifts rather than lagging behind them.`,
     ],
   },
   {
+    id: 'bk52',
+    title: '52-Week Breakout',
+    subtitle: 'Trading new highs and lows with volume-confirmed momentum',
+    color: '#3fb950',
+    sections: [
+      {
+        heading: 'What Is It?',
+        body: `The 52-Week Breakout strategy is one of the most time-tested momentum approaches in
+technical analysis. It buys when a stock closes at a new 52-week high and sells
+(signals bearish risk) when it closes at a new 52-week low.
+
+The 52-week high and low act as significant psychological and technical levels.
+A breakout above the 52-week high signals that all buyers over the past year are
+now in profit — removing overhead supply. A breakdown below the 52-week low is
+the opposite: all recent buyers are at a loss, creating persistent selling pressure.`,
+      },
+      {
+        heading: 'Why Does It Work?',
+        body: `New 52-week highs attract institutional attention. Fund managers use price milestones
+as screens for new positions, and algorithmic strategies are often programmed to
+buy breakouts from annual highs. This self-reinforcing demand pushes prices further.
+
+Academically, the "52-week high effect" (George & Hwang, 2004) is a documented
+anomaly: stocks near their 52-week high tend to underreact to positive news,
+then continue higher. The volume filter (> 1.2× average) confirms that the breakout
+has institutional participation — not just a low-volume anomaly.`,
+      },
+      {
+        heading: 'How This Implementation Works',
+        body: `1. The rolling 252-day (52-week) high and low are calculated using prior day's close
+   (shifted by 1 so today's price doesn't count toward today's threshold).
+2. A BUY signal is generated when the closing price first exceeds the 252-day high
+   AND volume is above 1.2× the 20-day average.
+3. A SELL signal is generated when the closing price first falls below the 252-day low
+   AND volume is above 1.2× the 20-day average.
+4. Score is based on the distance of the breakout above/below the threshold plus the
+   volume ratio — a bigger, higher-volume breakout earns a higher conviction score.`,
+      },
+      {
+        heading: 'Strengths',
+        body: `• Grounded in well-researched market anomaly (52-week high effect)\n• Volume confirmation filters false breakouts from low-liquidity moves\n• Clear, objective levels — the 52-week high/low are widely watched by all participants\n• Works best in trending markets and for growth/momentum stocks\n• Simple to understand and execute; widely used by institutional traders`,
+      },
+      {
+        heading: 'Risks & Limitations',
+        body: `• Late entry — by the time a 52-week high is broken, the move is already mature\n• "Buy high, sell higher" is psychologically difficult; most investors resist\n• False breakouts occur frequently in choppy, news-driven markets\n• Does not account for valuation — a breakout can happen at any P/E\n• Requires longer date ranges (1+ year) to build the 252-day rolling window`,
+      },
+      {
+        heading: 'Best Conditions',
+        body: `• Bull market or sector in a clear uptrend\n• Breakout on unusually high volume (2× average is even better)\n• No major fundamental headwinds (earnings risk, regulatory issues)\n• Stock consolidating just below 52-week high for weeks before the break\n• Combine with RS vs market: outperforming stocks at new highs are the strongest setups`,
+      },
+    ],
+  },
+  {
     id: 'vs',
     title: 'Volatility Squeeze',
     subtitle: 'Catching explosive breakouts after periods of compressed volatility',
