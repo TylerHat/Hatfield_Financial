@@ -21,6 +21,7 @@ const STRATEGIES = [
   { value: 'rsi', label: 'RSI Overbought / Oversold' },
   { value: 'volatility-squeeze', label: 'Volatility Squeeze' },
   { value: '52-week-breakout', label: '52-Week Breakout' },
+  { value: 'ma-confluence', label: 'MA Confluence' },
 ];
 
 function toISODate(d) {

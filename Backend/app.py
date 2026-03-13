@@ -12,6 +12,7 @@ from routes.strategies.macd_crossover import macd_bp
 from routes.backtest import backtest_bp
 from routes.strategies.volatility_squeeze import vs_bp
 from routes.strategies.breakout_52week import bk_bp
+from routes.strategies.ma_confluence import mac_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +28,7 @@ app.register_blueprint(macd_bp)
 app.register_blueprint(backtest_bp)
 app.register_blueprint(vs_bp)
 app.register_blueprint(bk_bp)
+app.register_blueprint(mac_bp)
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
