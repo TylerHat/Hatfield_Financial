@@ -1,0 +1,124 @@
+/* ── Backtester ─────────────────────────────────────────────────────────── */
+.backtester {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.backtester__empty,
+.backtester__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  border: 1px dashed #30363d;
+  border-radius: 8px;
+  color: #8b949e;
+  font-size: 0.95rem;
+  text-align: center;
+  padding: 32px;
+  background: #161b22;
+}
+
+.backtester__error {
+  color: #f85149;
+  border-color: #f85149;
+}
+
+.backtester__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 14px 18px;
+}
+
+.backtester__controls-label {
+  font-size: 0.85rem;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.backtester__capital-input {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  width: 120px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.backtester__capital-input:focus {
+  border-color: #58a6ff;
+}
+
+.backtester__run-btn {
+  background: #238636;
+  border: 1px solid #2ea043;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 7px 18px;
+  transition: background 0.15s;
+}
+
+.backtester__run-btn:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.backtester__run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.backtester__loading {
+  color: #8b949e;
+  font-size: 0.9rem;
+}
+
+.backtester__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .backtester__summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .backtester__summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.backtester__section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8b949e;
+  margin-bottom: 10px;
+}
+
+.backtester__chart-wrap {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.backtester__chart {
+  height: 300px;
+  position: relative;
+}

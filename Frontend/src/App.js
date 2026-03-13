@@ -6,6 +6,7 @@ import StrategyGuide from './components/StrategyGuide';
 import StatCard, { StatCardGrid } from './components/StatCard';
 import DataTable from './components/DataTable';
 import Badge from './components/Badge';
+import Backtester from './components/Backtester';
 
 const API_BASE = 'http://localhost:5000';
 
@@ -278,6 +279,12 @@ function App() {
           Components
         </button>
         <button
+          className={`tab-btn ${activeTab === 'backtester' ? 'active' : ''}`}
+          onClick={() => setActiveTab('backtester')}
+        >
+          Backtester
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -374,6 +381,15 @@ function App() {
 
         {activeTab === 'components' && (
           <ComponentsTab ticker={submittedTicker} signals={liveSignals} />
+        )}
+
+        {activeTab === 'backtester' && (
+          <Backtester
+            ticker={submittedTicker}
+            strategy={strategy}
+            startDate={startDate}
+            endDate={endDate}
+          />
         )}
 
         {activeTab === 'guide' && <StrategyGuide />}
