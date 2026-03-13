@@ -10,7 +10,6 @@ const STRATEGIES = [
   { value: 'relative-strength', label: 'Relative Strength vs Market' },
   { value: 'bollinger-bands', label: 'Bollinger Bands' },
   { value: 'mean-reversion', label: 'Mean Reversion After Large Drawdown' },
-  { value: 'rsi', label: 'RSI Oversold / Overbought' },
 ];
 
 function toISODate(d) {
