@@ -41,6 +41,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const [loading, setLoading] = useState(false);
   const [strategyLoading, setStrategyLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [strategyError, setStrategyError] = useState(null);
 
   // Keep signal reasons accessible inside Chart.js tooltip callbacks
   const signalReasonRef = useRef({});
@@ -74,32 +75,41 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   useEffect(() => {
     if (!ticker || !stockData || strategy === 'none') {
       setSignals([]);
+      setStrategyError(null);
       signalReasonRef.current = {};
       if (onSignals) onSignals([]);
       return;
     }
 
     setStrategyLoading(true);
+    setStrategyError(null);
 
     const params = new URLSearchParams({ start: startDate, end: endDate });
     fetch(`${API_BASE}/api/strategy/${strategy}/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
-        const sigs = data.signals || [];
-        setSignals(sigs);
+        if (data.error) {
+          setStrategyError(data.error);
+          setSignals([]);
+          if (onSignals) onSignals([]);
+        } else {
+          const sigs = data.signals || [];
+          setSignals(sigs);
 
-        // Lift signals to parent (App.js) so other tabs can consume them.
-        if (onSignals) onSignals(sigs);
+          // Lift signals to parent (App.js) so other tabs can consume them.
+          if (onSignals) onSignals(sigs);
 
-        // Build date → {reason, type, conviction, score} lookup for tooltips
-        const lookup = {};
-        sigs.forEach((s) => {
-          lookup[s.date] = { reason: s.reason, type: s.type, conviction: s.conviction, score: s.score };
-        });
-        signalReasonRef.current = lookup;
+          // Build date → {reason, type, conviction, score} lookup for tooltips
+          const lookup = {};
+          sigs.forEach((s) => {
+            lookup[s.date] = { reason: s.reason, type: s.type, conviction: s.conviction, score: s.score };
+          });
+          signalReasonRef.current = lookup;
+        }
         setStrategyLoading(false);
       })
       .catch(() => {
+        setStrategyError('Could not load strategy signals. Make sure the Flask server is running on port 5000.');
         setSignals([]);
         setStrategyLoading(false);
       });
@@ -503,6 +513,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         <div className="strategy-loading">Loading strategy signals…</div>
       )}
 
+      {strategyError && !strategyLoading && (
+        <div className="chart-status error">{strategyError}</div>
+      )}
+
       <div className="price-chart">
         <Line data={priceData} options={priceOptions} />
       </div>
@@ -563,7 +577,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         </div>
       )}
 
-      {strategy !== 'none' && !strategyLoading && signals.length === 0 && (
+      {strategy !== 'none' && !strategyLoading && !strategyError && signals.length === 0 && (
         <div className="no-signals">
           No signals generated for {ticker} with this strategy from {startDate} to {endDate}.
         </div>
