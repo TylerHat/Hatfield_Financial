@@ -360,6 +360,61 @@ a move that has already extended.`,
     ],
   },
   {
+    id: 'mac',
+    title: 'MA Confluence',
+    subtitle: 'Trading only when all three trend filters agree on direction',
+    color: '#bc8cff',
+    sections: [
+      {
+        heading: 'What Is It?',
+        body: `Moving Average Confluence is a trend-following strategy that requires all three key
+moving averages — the 20-day, 50-day, and 200-day — to be stacked in the same order
+before generating a signal.
+
+A BUY signal requires: price > MA20 > MA50 > MA200 (all rising, shorter above longer).
+A SELL signal requires: price < MA20 < MA50 < MA200 (all falling, shorter below longer).
+
+The signal fires only at the crossover moment — the first day all three conditions
+are met — not during sustained alignment, preventing late entries.`,
+      },
+      {
+        heading: 'Why Does It Work?',
+        body: `The three moving averages represent different time horizons: MA20 captures short-term
+momentum, MA50 medium-term trend, and MA200 the long-term structural trend. When all
+three align in the same direction, the market is confirming a move across all
+timeframes simultaneously — reducing the chance of a false signal.
+
+This "confluence" approach filters out many of the whipsaws that plague single-MA
+strategies. A stock that is above all three rising MAs is typically in a strong
+institutional accumulation phase, where the risk/reward for trend-following
+positions is historically favorable.`,
+      },
+      {
+        heading: 'How This Implementation Works',
+        body: `1. The 20-day, 50-day, and 200-day simple moving averages are computed.
+2. Bullish confluence is defined as: price > MA20 > MA50 > MA200.
+3. Bearish confluence is defined as: price < MA20 < MA50 < MA200.
+4. A BUY signal fires on the FIRST day bullish confluence is established
+   (previous day did NOT have all three conditions — crossover detection).
+5. A SELL signal fires on the FIRST day bearish confluence is established.
+6. Score reflects MA separation: wider gaps between MAs indicate stronger,
+   more established trends and receive higher conviction ratings.`,
+      },
+      {
+        heading: 'Strengths',
+        body: `• Triple-confirmation reduces false signals significantly vs single-MA strategies\n• Captures high-quality trend entries backed by multiple timeframes\n• MA200 acts as a strong structural filter — keeps you on the right side of the trend\n• Score/conviction reflects trend strength objectively (MA separation width)\n• Useful for both swing trading (MA20 sensitive) and position trading (MA200 filter)`,
+      },
+      {
+        heading: 'Risks & Limitations',
+        body: `• Rare signals — triple alignment requires patience; may miss early-stage trends\n• Lagging by nature — all MAs are backward-looking\n• MA200 needs significant data history (280+ calendar days of warmup)\n• In choppy markets, MAs converge and alignment breaks quickly → whipsaws\n• Not suitable for volatile small-caps where MAs frequently cross over`,
+      },
+      {
+        heading: 'Best Conditions',
+        body: `• Established trending markets (trending for 3+ months)\n• Large-cap or mid-cap stocks with stable price action\n• After a sector rotation — early in a new sector leadership cycle\n• Combine with volume confirmation: a volume surge when confluence first appears is ideal\n• Best on longer time horizons — hold until opposite confluence or MA200 cross`,
+      },
+    ],
+  },
+  {
     id: 'rsi',
     title: 'RSI Oversold / Overbought',
     subtitle: 'Using momentum exhaustion to time reversals',
