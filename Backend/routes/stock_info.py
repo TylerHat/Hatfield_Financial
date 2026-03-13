@@ -161,13 +161,19 @@ def get_stock_info(ticker):
             valuation = 'Potentially Overvalued'
             val_detail = f'P/E of {pe:.1f}x is significantly above the market average of ~20x'
 
+        # ── Day change (open → current price) ────────────────────────────────
+        price = safe_float('currentPrice') or safe_float('regularMarketPrice')
+        open_price = float(hist['Open'].iloc[-1]) if not hist.empty else None
+        day_change_pct = None
+        if price and open_price and open_price > 0:
+            day_change_pct = round(((price - open_price) / open_price) * 100, 2)
+
         # ── 52-week range position ────────────────────────────────────────────
         hi52 = safe_float('fiftyTwoWeekHigh')
         lo52 = safe_float('fiftyTwoWeekLow')
-        price = safe_float('currentPrice') or safe_float('regularMarketPrice')
 
         pct_from_high, pct_from_low, pos_in_range = None, None, None
-        if price and hi52 and lo52 and hi52 != lo52:
+        if hi52 and lo52 and price and hi52 != lo52:
             pct_from_high = round(((price - hi52) / hi52) * 100, 1)
             pct_from_low = round(((price - lo52) / lo52) * 100, 1)
             pos_in_range = round(((price - lo52) / (hi52 - lo52)) * 100, 0)
@@ -182,6 +188,7 @@ def get_stock_info(ticker):
             'sector': info.get('sector') or 'N/A',
             'industry': info.get('industry') or 'N/A',
             'currentPrice': price,
+            'dayChange': day_change_pct,
             'marketCap': fmt_large(info.get('marketCap')),
             'trailingPE': pe,
             'forwardPE': safe_float('forwardPE'),
