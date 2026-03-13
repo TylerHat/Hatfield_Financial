@@ -21,7 +21,7 @@ def macd_crossover(ticker):
         hist = stock.history(start=fetch_start, end=end)
 
         if hist.empty:
-            return jsonify({'signals': []})
+            return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
         # MACD (12, 26, 9)
         ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
@@ -84,4 +84,9 @@ def macd_crossover(ticker):
         return jsonify({'signals': signals})
 
     except Exception as e:
-        return jsonify({'error': str(e), 'signals': []}), 500
+        msg = str(e)
+        if 'rate' in msg.lower() or '429' in msg:
+            msg = 'Yahoo Finance rate limit reached. Wait a moment and try again.'
+        elif 'connection' in msg.lower() or 'timeout' in msg.lower():
+            msg = 'Could not reach Yahoo Finance. Check your network connection.'
+        return jsonify({'error': msg, 'signals': []}), 500
