@@ -540,7 +540,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
                 </tr>
               </thead>
               <tbody>
-                {signals.map((s, i) => (
+                {[...signals].reverse().map((s, i) => (
                   <tr key={i} className={s.type === 'BUY' ? 'buy-row' : 'sell-row'}>
                     <td>{s.date}</td>
                     <td>${s.price.toFixed(2)}</td>
