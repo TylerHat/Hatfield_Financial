@@ -116,7 +116,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi } = stockData;
 
   // Strategies where RSI context panel adds value
-  const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi']);
+  const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
   const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
 
   const buyData = buildSignalArray(dates, signals, 'BUY');
