@@ -11,6 +11,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
+import { apiFetch } from '../api';
 
 ChartJS.register(
   CategoryScale,
@@ -22,8 +23,6 @@ ChartJS.register(
   Tooltip,
   Legend
 );
-
-const API_BASE = 'http://localhost:5000';
 
 // Build an array the same length as `dates` with the signal price at matching
 // indices and null everywhere else.
@@ -55,7 +54,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     setSignals([]);
 
     const params = new URLSearchParams({ start: startDate, end: endDate });
-    fetch(`${API_BASE}/api/stock/${ticker}?${params}`)
+    apiFetch(`/api/stock/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
@@ -85,7 +84,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     setStrategyError(null);
 
     const params = new URLSearchParams({ start: startDate, end: endDate });
-    fetch(`${API_BASE}/api/strategy/${strategy}/${ticker}?${params}`)
+    apiFetch(`/api/strategy/${strategy}/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {

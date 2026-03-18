@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { useAuth } from './AuthContext';
+import { apiFetch } from './api';
+import AuthPage from './components/AuthPage';
 import StockChart from './components/StockChart';
 import StockInfo from './components/StockInfo';
 import StrategyGuide from './components/StrategyGuide';
@@ -8,8 +11,6 @@ import DataTable from './components/DataTable';
 import Badge from './components/Badge';
 import Backtester from './components/Backtester';
 import PerformanceDashboard from './components/PerformanceDashboard';
-
-const API_BASE = 'http://localhost:5000';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -101,7 +102,7 @@ function StockSnapshot({ ticker }) {
     setError(null);
     setInfo(null);
 
-    fetch(`${API_BASE}/api/stock-info/${ticker}`)
+    apiFetch(`/api/stock-info/${ticker}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) setError(data.error);
@@ -237,6 +238,7 @@ function ComponentsTab({ ticker, signals }) {
 
 // ── Root App ─────────────────────────────────────────────────────────────────
 function App() {
+  const { user, loading: authLoading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('analysis');
   const [inputValue, setInputValue] = useState('');
   const [submittedTicker, setSubmittedTicker] = useState('');
@@ -261,10 +263,28 @@ function App() {
 
   const dateRangeValid = startDate && endDate && startDate < endDate;
 
+  if (authLoading) {
+    return (
+      <div className="app">
+        <div className="auth-loading">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage />;
+  }
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Hatfield Financial</h1>
+        <div className="app-header__top">
+          <h1>Hatfield Financial</h1>
+          <div className="app-header__user">
+            <span className="app-header__username">{user.username}</span>
+            <button className="app-header__logout" onClick={logout}>Log out</button>
+          </div>
+        </div>
         <p>Stock Analysis Dashboard</p>
       </header>
 
