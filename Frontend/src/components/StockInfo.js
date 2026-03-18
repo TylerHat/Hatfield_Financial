@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const API_BASE = 'http://localhost:5000';
+import { apiFetch } from '../api';
 
 function fmt(val, prefix = '', suffix = '', fallback = 'N/A') {
   if (val === null || val === undefined) return fallback;
@@ -77,7 +77,7 @@ export default function StockInfo({ ticker }) {
     setError(null);
     setInfo(null);
 
-    fetch(`${API_BASE}/api/stock-info/${ticker}`)
+    apiFetch(`/api/stock-info/${ticker}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) setError(data.error);

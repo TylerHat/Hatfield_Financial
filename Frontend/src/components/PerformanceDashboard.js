@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import StatCard from './StatCard';
 import './PerformanceDashboard.css';
 
-const API_BASE = 'http://localhost:5000';
+import { apiFetch } from '../api';
 
 export default function PerformanceDashboard({ ticker, strategy, startDate, endDate }) {
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ export default function PerformanceDashboard({ ticker, strategy, startDate, endD
     if (endDate) params.set('end', endDate);
     params.set('capital', '10000');
 
-    fetch(`${API_BASE}/api/backtest/${ticker}?${params.toString()}`)
+    apiFetch(`/api/backtest/${ticker}?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {

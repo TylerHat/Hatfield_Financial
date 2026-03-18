@@ -14,10 +14,9 @@ import StatCard, { StatCardGrid } from './StatCard';
 import DataTable from './DataTable';
 import Badge from './Badge';
 import './Backtester.css';
+import { apiFetch } from '../api';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
-
-const API_BASE = 'http://localhost:5000';
 
 const TRADE_COLUMNS = [
   { key: 'entryDate', label: 'Entry Date', sortable: true, width: '110px' },
@@ -118,7 +117,7 @@ export default function Backtester({ ticker, strategy, startDate, endDate }) {
     if (endDate) params.set('end', endDate);
     params.set('capital', cap);
 
-    fetch(`${API_BASE}/api/backtest/${ticker}?${params.toString()}`)
+    apiFetch(`/api/backtest/${ticker}?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
