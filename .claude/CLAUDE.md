@@ -68,8 +68,8 @@ Hatfield Investments is a desktop-only web app that:
 ## Setup
 
 ```bash
-# Backend
-cd Backend && pip install -r requirements.txt && python app.py
+# Backend (activate venv first)
+cd Backend && ..\.venv\Scripts\activate && pip install -r requirements.txt && python app.py
 
 # Frontend
 cd Frontend && npm install && npm start
