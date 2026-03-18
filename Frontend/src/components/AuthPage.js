@@ -11,9 +11,30 @@ function AuthPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const validatePassword = (pw) => {
+    if (pw.length < 8) return 'Password must be at least 8 characters';
+    if (!/[A-Z]/.test(pw)) return 'Password must contain at least one uppercase letter';
+    if (!/[a-z]/.test(pw)) return 'Password must contain at least one lowercase letter';
+    if (!/[0-9]/.test(pw)) return 'Password must contain at least one digit';
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!isLogin) {
+      if (username.trim().length < 3 || username.trim().length > 30) {
+        setError('Username must be between 3 and 30 characters');
+        return;
+      }
+      const pwError = validatePassword(password);
+      if (pwError) {
+        setError(pwError);
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
