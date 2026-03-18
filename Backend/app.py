@@ -15,6 +15,7 @@ from routes.backtest import backtest_bp
 from routes.strategies.volatility_squeeze import vs_bp
 from routes.strategies.breakout_52week import bk_bp
 from routes.strategies.ma_confluence import mac_bp
+from routes.auth_routes import auth_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -37,6 +38,7 @@ app.register_blueprint(backtest_bp)
 app.register_blueprint(vs_bp)
 app.register_blueprint(bk_bp)
 app.register_blueprint(mac_bp)
+app.register_blueprint(auth_bp)
 
 with app.app_context():
     db.create_all()
