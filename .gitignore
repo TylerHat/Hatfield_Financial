@@ -30,6 +30,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Database
+Backend/instance/
+*.db
+
 # Python
 __pycache__/
 *.py[cod]

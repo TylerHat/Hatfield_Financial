@@ -1,6 +1,8 @@
+import os
 from flask import Flask
 from flask_cors import CORS
 
+from models import db
 from routes.stock_data import stock_data_bp
 from routes.stock_info import stock_info_bp
 from routes.strategies.bollinger_bands import bb_bp
@@ -17,6 +19,12 @@ from routes.strategies.ma_confluence import mac_bp
 app = Flask(__name__)
 CORS(app)
 
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hatfield.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db.init_app(app)
+
 app.register_blueprint(stock_data_bp)
 app.register_blueprint(stock_info_bp)
 app.register_blueprint(bb_bp)
@@ -29,6 +37,9 @@ app.register_blueprint(backtest_bp)
 app.register_blueprint(vs_bp)
 app.register_blueprint(bk_bp)
 app.register_blueprint(mac_bp)
+
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
