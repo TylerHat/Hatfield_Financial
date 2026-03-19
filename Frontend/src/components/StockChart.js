@@ -44,6 +44,8 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
 
   // Track which chart is expanded (null = none)
   const [expandedChart, setExpandedChart] = useState(null);
+  // Track which chart info popover is open
+  const [infoOpen, setInfoOpen] = useState(null);
 
   // Keep signal reasons accessible inside Chart.js tooltip callbacks
   const signalReasonRef = useRef({});
@@ -1083,6 +1085,128 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
+  // Helper to render a colored legend line in info popovers
+  function L({ color, dashed, children }) {
+    return (
+      <div className="chart-info-line">
+        <span
+          className="chart-info-swatch"
+          style={{
+            background: dashed ? 'none' : color,
+            borderBottom: dashed ? `2px dashed ${color}` : 'none',
+          }}
+        />
+        <span>{children}</span>
+      </div>
+    );
+  }
+  function S({ color, symbol, children }) {
+    return (
+      <div className="chart-info-line">
+        <span className="chart-info-symbol" style={{ color }}>{symbol}</span>
+        <span>{children}</span>
+      </div>
+    );
+  }
+
+  // Chart info descriptions with colored legends
+  const CHART_INFO = {
+    price: (
+      <>
+        <p className="chart-info-desc">Price chart with closing price, moving averages, and Bollinger Bands.</p>
+        <L color="#58a6ff">Close price</L>
+        <L color="#f0883e" dashed>20-day MA</L>
+        <L color="#bc8cff" dashed>50-day MA</L>
+        <L color="rgba(136,198,255,0.6)" dashed>Bollinger Bands (2 std dev)</L>
+        <L color="rgba(63,185,80,0.5)" dashed>52-week high</L>
+        <L color="rgba(248,81,73,0.5)" dashed>52-week low</L>
+        <S color="#d2a8ff" symbol="|">Earnings date</S>
+        <S color="#3fb950" symbol={'\u25B2'}>BUY signal</S>
+        <S color="#f85149" symbol={'\u25BC'}>SELL signal</S>
+      </>
+    ),
+    volume: (
+      <>
+        <p className="chart-info-desc">Trading volume with 20-day moving average.</p>
+        <L color="rgba(88,166,255,0.6)">Daily volume</L>
+        <L color="#f0883e">20-day avg volume</L>
+        <p className="chart-info-note">Above-average volume confirms price moves. Below-average suggests weak conviction.</p>
+      </>
+    ),
+    macd: (
+      <>
+        <p className="chart-info-desc">MACD measures momentum via two EMA crossovers.</p>
+        <L color="#58a6ff">MACD (12-EMA minus 26-EMA)</L>
+        <L color="#f0883e">Signal (9-EMA of MACD)</L>
+        <L color="rgba(63,185,80,0.5)">Histogram (positive)</L>
+        <L color="rgba(248,81,73,0.5)">Histogram (negative)</L>
+        <L color="rgba(139,148,158,0.5)" dashed>Zero line</L>
+        <S color="#3fb950" symbol={'\u25B2'}>Bullish crossover</S>
+        <S color="#f85149" symbol={'\u25BC'}>Bearish crossover</S>
+        <S color="#3fb950" symbol={'\u25C6'}>Bullish divergence</S>
+        <S color="#f85149" symbol={'\u25C6'}>Bearish divergence</S>
+        <p className="chart-info-note">Bar opacity indicates momentum strength.</p>
+      </>
+    ),
+    atr: (
+      <>
+        <p className="chart-info-desc">Average True Range measures volatility in dollar terms.</p>
+        <L color="#f0883e">14-period ATR</L>
+        <p className="chart-info-note">Higher ATR = larger price swings, wider stops needed. Lower ATR = tighter range, possible breakout ahead.</p>
+      </>
+    ),
+    stoch: (
+      <>
+        <p className="chart-info-desc">Stochastic Oscillator measures price position within recent range.</p>
+        <L color="#58a6ff">%K (9-period)</L>
+        <L color="#f0883e">%D (3-period avg of %K)</L>
+        <L color="rgba(248,81,73,0.5)" dashed>Overbought (80)</L>
+        <L color="rgba(63,185,80,0.5)" dashed>Oversold (20)</L>
+        <p className="chart-info-note">Buy when %K crosses above %D below 20. Sell when %K crosses below %D above 80.</p>
+      </>
+    ),
+    obv: (
+      <>
+        <p className="chart-info-desc">On-Balance Volume tracks cumulative buying/selling pressure.</p>
+        <L color="#58a6ff">OBV</L>
+        <L color="#f0883e" dashed>20-day signal</L>
+        <p className="chart-info-note">OBV above signal = accumulation (buying). Below signal = distribution (selling). OBV diverging from price warns of reversal.</p>
+      </>
+    ),
+    rsi: (
+      <>
+        <p className="chart-info-desc">Relative Strength Index measures momentum on a 0-100 scale.</p>
+        <L color="#e6edf3">RSI (14-period)</L>
+        <L color="rgba(248,81,73,0.6)" dashed>Overbought (70)</L>
+        <L color="rgba(63,185,80,0.6)" dashed>Oversold (30)</L>
+        <S color="#3fb950" symbol={'\u25C6'}>Bullish divergence</S>
+        <S color="#f85149" symbol={'\u25C6'}>Bearish divergence</S>
+        <p className="chart-info-note">Above 70 = stretched, watch for pullback. Below 30 = potential bounce.</p>
+      </>
+    ),
+  };
+
+  function InfoBtn({ chartKey }) {
+    const isOpen = infoOpen === chartKey;
+    return (
+      <>
+        <button
+          className="chart-info-btn"
+          onClick={() => setInfoOpen(isOpen ? null : chartKey)}
+          title="Chart info"
+        >
+          i
+        </button>
+        {isOpen && (
+          <div className="chart-info-popover">
+            <button className="chart-info-close" onClick={() => setInfoOpen(null)}>✕</button>
+            <div className="chart-info-content">{CHART_INFO[chartKey]}</div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   function ExpandBtn({ chartKey }) {
     return (
       <button
@@ -1111,6 +1235,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       return (
         <div className="chart-container">
           <div className={`${expanded.className} chart-expanded`}>
+            <InfoBtn chartKey={expandedChart} />
             <button
               className="chart-close-btn"
               onClick={() => setExpandedChart(null)}
@@ -1136,37 +1261,44 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       )}
 
       <div className="price-chart chart-expandable">
+        <InfoBtn chartKey="price" />
         <ExpandBtn chartKey="price" />
         <Line data={priceData} options={priceOptions} />
       </div>
 
       <div className="volume-chart chart-expandable">
+        <InfoBtn chartKey="volume" />
         <ExpandBtn chartKey="volume" />
         <Bar data={volumeData} options={volumeOptions} />
       </div>
 
       <div className="macd-chart chart-expandable">
+        <InfoBtn chartKey="macd" />
         <ExpandBtn chartKey="macd" />
         <Bar data={macdData} options={macdOptions} />
       </div>
 
       <div className="atr-chart chart-expandable">
+        <InfoBtn chartKey="atr" />
         <ExpandBtn chartKey="atr" />
         <Line data={atrData} options={atrOptions} />
       </div>
 
       <div className="stoch-chart chart-expandable">
+        <InfoBtn chartKey="stoch" />
         <ExpandBtn chartKey="stoch" />
         <Line data={stochData} options={stochOptions} />
       </div>
 
       <div className="obv-chart chart-expandable">
+        <InfoBtn chartKey="obv" />
         <ExpandBtn chartKey="obv" />
         <Line data={obvData} options={obvOptions} />
       </div>
 
       {showRsiPanel && (
         <div className="rsi-chart chart-expandable">
+          <InfoBtn chartKey="rsi" />
           <ExpandBtn chartKey="rsi" />
           <Line data={rsiData} options={rsiOptions} />
         </div>

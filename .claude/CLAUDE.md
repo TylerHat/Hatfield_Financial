@@ -63,6 +63,14 @@ Hatfield Investments is a desktop-only web app that:
 
 **Update the relevant guide file whenever a feature is added or changed.** Each guide has a "Maintenance Note" section listing exactly what triggers an update. Do not let guides go stale — outdated docs are worse than none.
 
+**Auto-update rule:** After completing any feature addition, endpoint change, new component, or chart enhancement, immediately update the affected guide files (`ARCHITECTURE.md`, `API.md`, `COMPONENTS.md`, `DESIGN_SYSTEM.md`, `FIN_STRATEGIES.md`, `DATA.md`) before reporting the work as done. This includes:
+- New backend response fields → update `API.md`
+- New chart panels or UI features → update `COMPONENTS.md` and `ARCHITECTURE.md`
+- New routes or blueprints → update `ARCHITECTURE.md` and `API.md`
+- New strategies or signal logic → update `FIN_STRATEGIES.md`
+- New CSS classes, colors, or design tokens → update `DESIGN_SYSTEM.md` and `COMPONENTS.md`
+- New data quirks or yfinance changes → update `DATA.md`
+
 ---
 
 ## Setup

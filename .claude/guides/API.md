@@ -29,11 +29,33 @@ Price, volume, moving averages, MACD, and RSI for a ticker.
   "macd":        [0.4821, ...],
   "macd_signal": [0.3912, ...],
   "macd_hist":   [0.0909, ...],
-  "rsi":         [58.3, ...]
+  "rsi":         [58.3, ...],
+  "bb_upper":    [190.50, ...],
+  "bb_lower":    [175.90, ...],
+  "vol_ma20":    [48000000, ...],
+  "atr":         [3.25, ...],
+  "stoch_k":     [65.2, ...],
+  "stoch_d":     [60.1, ...],
+  "obv":         [120000000, ...],
+  "obv_signal":  [115000000, ...],
+  "fifty_two_week_high": 641.81,
+  "fifty_two_week_low":  442.80,
+  "earnings_dates": ["2024-01-25", "2024-04-25", ...]
 }
 ```
 
-All arrays are the same length and index-aligned to `dates`. Null where indicators lack enough history.
+All time-series arrays are the same length and index-aligned to `dates`. Null where indicators lack enough history.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bb_upper` / `bb_lower` | array | Bollinger Bands (20-period, 2 std dev) |
+| `vol_ma20` | array | 20-day volume moving average |
+| `atr` | array | Average True Range (14-period, Wilder's smoothing) |
+| `stoch_k` / `stoch_d` | array | Stochastic Oscillator (9,3,3) — %K and %D |
+| `obv` | array | On-Balance Volume (cumulative) |
+| `obv_signal` | array | 20-day moving average of OBV |
+| `fifty_two_week_high` / `fifty_two_week_low` | number \| null | 52-week extremes from yfinance info |
+| `earnings_dates` | string[] | Up to 20 recent earnings dates (`YYYY-MM-DD`) |
 
 ---
 
