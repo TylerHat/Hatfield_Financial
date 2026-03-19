@@ -238,7 +238,7 @@
 }
 
 .volume-chart {
-  height: 130px;
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -367,7 +367,37 @@
 
 /* ── MACD chart ────────────────────────────────────────────────────────────── */
 .macd-chart {
-  height: 130px;
+  height: 220px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-top: 8px;
+}
+
+/* ── ATR chart ─────────────────────────────────────────────────────────────── */
+.atr-chart {
+  height: 220px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-top: 8px;
+}
+
+/* ── Stochastic Oscillator panel ───────────────────────────────────────────── */
+.stoch-chart {
+  height: 220px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-top: 8px;
+}
+
+/* ── OBV chart ─────────────────────────────────────────────────────────────── */
+.obv-chart {
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -383,6 +413,176 @@
   border-radius: 8px;
   padding: 10px 16px;
   margin-top: 8px;
+}
+
+/* ── Chart expand / close ──────────────────────────────────────────────────── */
+.chart-expandable {
+  position: relative;
+}
+
+.chart-info-btn {
+  position: absolute;
+  top: 8px;
+  right: 42px;
+  z-index: 5;
+  background: rgba(22, 27, 34, 0.8);
+  border: 1px solid #30363d;
+  border-radius: 50%;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, serif;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chart-expandable:hover .chart-info-btn,
+.chart-expanded .chart-info-btn {
+  opacity: 1;
+}
+
+.chart-info-btn:hover {
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+.chart-info-popover {
+  position: absolute;
+  top: 38px;
+  right: 8px;
+  z-index: 10;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-width: 320px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.chart-info-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.chart-info-close:hover {
+  color: #f85149;
+}
+
+.chart-info-content {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #c9d1d9;
+}
+
+.chart-info-desc {
+  margin: 0 0 8px 0;
+  color: #e6edf3;
+  font-weight: 500;
+}
+
+.chart-info-note {
+  margin: 8px 0 0 0;
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.chart-info-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.chart-info-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.chart-info-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.chart-expand-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  background: rgba(22, 27, 34, 0.8);
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chart-expandable:hover .chart-expand-btn {
+  opacity: 1;
+}
+
+.chart-expand-btn:hover {
+  color: #e6edf3;
+  border-color: #58a6ff;
+}
+
+.chart-expanded {
+  height: 75vh !important;
+  position: relative;
+}
+
+.chart-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  background: rgba(22, 27, 34, 0.9);
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 16px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.chart-close-btn:hover {
+  color: #f85149;
+  border-color: #f85149;
 }
 
 /* ── Conviction badge ──────────────────────────────────────────────────────── */

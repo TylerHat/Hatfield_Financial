@@ -264,7 +264,7 @@ const SIGNAL_COLUMNS = [
 **File**: `components/StockChart.js`
 **Import**: `import StockChart from './components/StockChart'`
 
-Price + volume + MACD + RSI chart stack with strategy signal overlays and a signals table below.
+Multi-panel chart stack with technical indicators, signal overlays, expand/info UI, and a signals table.
 
 ### Key Props
 
@@ -278,18 +278,44 @@ Price + volume + MACD + RSI chart stack with strategy signal overlays and a sign
 
 ### Chart Layout (top to bottom)
 
-1. Price line chart (420px) — close price, MA20, MA50, signal scatter points
-2. Volume bar chart (130px)
-3. MACD chart (130px) — always shown
-4. RSI chart (130px) — shown for strategies: `bollinger-bands`, `mean-reversion`, `rsi`
+| # | Chart | Height | CSS Class | Description |
+|---|-------|--------|-----------|-------------|
+| 1 | Price | 420px | `.price-chart` | Close, MA20, MA50, Bollinger Bands, 52W high/low lines, earnings markers, BUY/SELL signals |
+| 2 | Volume | 220px | `.volume-chart` | Volume bars + 20-day volume MA |
+| 3 | MACD | 220px | `.macd-chart` | MACD/Signal lines, histogram (opacity-scaled), zero line, crossover markers, divergence diamonds |
+| 4 | ATR | 220px | `.atr-chart` | 14-period Average True Range with fill |
+| 5 | Stochastic | 220px | `.stoch-chart` | %K/%D lines, overbought (80) / oversold (20) zones |
+| 6 | OBV | 220px | `.obv-chart` | On-Balance Volume + 20-day signal line |
+| 7 | RSI | 130px | `.rsi-chart` | RSI line, 70/30 zones, divergence diamonds. Conditional: shown for `bollinger-bands`, `mean-reversion`, `rsi`, `macd-crossover` strategies |
 
 All charts use `maintainAspectRatio: false` with explicit container heights.
 
-### Signal Scatter Points
+### Chart UI Controls
 
-- ▲ BUY — green `#3fb950`, `pointStyle: 'triangle'`, `rotation: 0`
-- ▼ SELL — red `#f85149`, `pointStyle: 'triangle'`, `rotation: 180`
-- Tooltip shows: date, price, signal type, reason string
+Each chart panel has two buttons (visible on hover):
+
+- **Expand (⛶)** — `.chart-expand-btn` — expands chart to 75vh, hides other panels. Close button (✕) returns to normal view.
+- **Info (i)** — `.chart-info-btn` — toggles a popover (`.chart-info-popover`) with colored legend matching chart colors. Uses `L` (line swatch) and `S` (symbol) helper components.
+
+### Signal & Indicator Markers
+
+| Marker | Shape | Color | Used In |
+|--------|-------|-------|---------|
+| ▲ BUY | triangle up | `#3fb950` | Price chart |
+| ▼ SELL | triangle down | `#f85149` | Price chart |
+| ▲ Bullish Cross | triangle up | `#3fb950` | MACD chart |
+| ▼ Bearish Cross | triangle down | `#f85149` | MACD chart |
+| ◆ Bull Divergence | diamond | `#3fb950` | MACD, RSI charts |
+| ◆ Bear Divergence | diamond | `#f85149` | MACD, RSI charts |
+| \| Earnings | vertical line | `#d2a8ff` | Price chart |
+
+### MACD Enhancements
+
+- **Zero line**: dashed gray at y=0, hidden from legend
+- **Crossover markers**: detected where MACD crosses Signal line
+- **Histogram gradient**: bar opacity scales with magnitude (stronger = more opaque)
+- **Divergence detection**: compares price local highs/lows with MACD highs/lows in 10-bar windows
+- **Momentum tooltip**: shows "Momentum building/fading (bullish/bearish)" based on histogram trend
 
 ### Helper: `buildSignalArray()`
 

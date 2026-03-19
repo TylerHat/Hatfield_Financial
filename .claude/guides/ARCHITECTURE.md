@@ -49,8 +49,8 @@ Hatfield_Financial/
         ├── App.css
         └── components/
             ├── AuthPage.js / AuthPage.css   Login / register form with toggle
-            ├── StockChart.js           Price + volume + MACD + RSI charts; signal overlays; signals table
-            ├── StockInfo.js            Fundamentals, RSI, MACD, 52-week analysis cards
+            ├── StockChart.js           Price + Volume + MACD + ATR + Stochastic + OBV + RSI charts; expand/info UI; signal overlays
+            ├── StockInfo.js            Two-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume)
             ├── StrategyGuide.js        Static strategy documentation tab
             ├── Badge.js / Badge.css
             ├── StatCard.js / StatCard.css
@@ -148,6 +148,9 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 ## Conventions
 
 - Signals rendered as scatter points: ▲ BUY (green), ▼ SELL (red)
+- MACD/RSI divergences rendered as ◆ diamond markers (green bullish, red bearish)
+- MACD crossovers rendered as ▲/▼ triangles on the MACD chart
+- Each chart has an expand button (⛶) to fill content area and an info button (i) with colored legend popover
 - Secrets via environment variables only — never committed
 - `maintainAspectRatio: false` on all Chart.js charts
 - Desktop-only — no responsive breakpoints, no mobile layouts
