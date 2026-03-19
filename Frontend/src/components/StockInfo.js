@@ -66,6 +66,30 @@ function volatilityColor(status) {
   return 'yellow';
 }
 
+function trendColor(status) {
+  if (!status) return 'gray';
+  if (status === 'Strong Uptrend') return 'green';
+  if (status === 'Strong Downtrend') return 'red';
+  if (status.includes('Bullish')) return 'green';
+  if (status.includes('Bearish')) return 'red';
+  return 'gray';
+}
+
+function relStrengthColor(val) {
+  if (val == null) return 'gray';
+  if (val > 5) return 'green';
+  if (val < -5) return 'red';
+  return 'yellow';
+}
+
+function divHealthColor(health) {
+  if (!health) return 'gray';
+  if (health === 'Very Healthy' || health === 'Healthy') return 'green';
+  if (health === 'Moderate') return 'yellow';
+  if (health === 'Stretched' || health === 'Unsustainable') return 'red';
+  return 'gray';
+}
+
 export default function StockInfo({ ticker }) {
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -267,6 +291,96 @@ export default function StockInfo({ ticker }) {
 
       </div>
 
+      {/* Row 3: Trend Alignment, Earnings Proximity, Relative Strength vs SPY, Dividend Health */}
+      <div className="info-cards-row info-cards-row--third">
+
+        {/* Trend Alignment */}
+        {info.trendAlignment && (
+          <div className="info-card">
+            <div className="card-title">Trend Alignment</div>
+            <StatusBadge text={info.trendAlignment} color={trendColor(info.trendAlignment)} />
+            <p className="card-detail">{info.trendDetail}</p>
+            <p className="card-detail">
+              {info.trendAlignment === 'Strong Uptrend' && 'All moving averages aligned bullishly — strong trend confirmation.'}
+              {info.trendAlignment === 'Strong Downtrend' && 'All moving averages aligned bearishly — strong downward pressure.'}
+              {info.trendAlignment && info.trendAlignment.includes('Mixed') && 'Moving averages are not fully aligned — trend direction is uncertain.'}
+            </p>
+          </div>
+        )}
+
+        {/* Earnings Proximity */}
+        {info.earningsProximity && (
+          <div className="info-card">
+            <div className="card-title">Earnings Proximity</div>
+            <StatusBadge
+              text={info.earningsProximity}
+              color={info.earningsWarning ? 'red' : 'blue'}
+            />
+            {info.earningsDate && (
+              <p className="card-detail">Next report: <strong>{info.earningsDate}</strong></p>
+            )}
+            {info.earningsWarning && (
+              <p className="card-detail" style={{ color: '#f0883e' }}>
+                Earnings within 14 days — increased volatility likely. Consider position sizing.
+              </p>
+            )}
+            {!info.earningsWarning && info.earningsProximityDays > 0 && (
+              <p className="card-detail">No imminent earnings catalyst — normal volatility expected.</p>
+            )}
+          </div>
+        )}
+
+        {/* Relative Strength vs SPY */}
+        {info.relStrength1M != null && (
+          <div className="info-card">
+            <div className="card-title">Relative Strength vs SPY</div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+              <StatusBadge
+                text={`1M: ${info.relStrength1M > 0 ? '+' : ''}${info.relStrength1M}%`}
+                color={relStrengthColor(info.relStrength1M)}
+              />
+              <StatusBadge
+                text={`3M: ${info.relStrength3M > 0 ? '+' : ''}${info.relStrength3M}%`}
+                color={relStrengthColor(info.relStrength3M)}
+              />
+            </div>
+            <p className="card-detail">
+              1M — Stock: {info.stock1MReturn > 0 ? '+' : ''}{info.stock1MReturn}% vs SPY: {info.spy1MReturn > 0 ? '+' : ''}{info.spy1MReturn}%
+            </p>
+            <p className="card-detail">
+              3M — Stock: {info.stock3MReturn > 0 ? '+' : ''}{info.stock3MReturn}% vs SPY: {info.spy3MReturn > 0 ? '+' : ''}{info.spy3MReturn}%
+            </p>
+            <p className="card-detail">
+              {info.relStrength3M > 5 && 'Significantly outperforming the broad market — relative momentum is strong.'}
+              {info.relStrength3M < -5 && 'Underperforming the broad market — relative weakness may signal further downside.'}
+              {info.relStrength3M >= -5 && info.relStrength3M <= 5 && 'Tracking roughly in line with the S&P 500.'}
+            </p>
+          </div>
+        )}
+
+        {/* Dividend Health */}
+        {(info.dividendHealth || info.dividendRate) && (
+          <div className="info-card">
+            <div className="card-title">Dividend Health</div>
+            {info.dividendHealth ? (
+              <>
+                <StatusBadge text={info.dividendHealth} color={divHealthColor(info.dividendHealth)} />
+                <p className="card-detail">{info.dividendHealthDetail}</p>
+              </>
+            ) : (
+              <p className="card-detail">No payout ratio data available.</p>
+            )}
+            {info.dividendRate && (
+              <p className="card-detail">Annual rate: <strong>${info.dividendRate}</strong></p>
+            )}
+            {info.dividendYield && (
+              <p className="card-detail">Yield: <strong>{(info.dividendYield * 100).toFixed(2)}%</strong></p>
+            )}
+          </div>
+        )}
+
+      </div>
+
       {/* ── Key metrics table ────────────────────────────────────── */}
       <div className="info-metrics">
         <div className="metrics-title">Key Metrics</div>
@@ -300,6 +414,13 @@ export default function StockInfo({ ticker }) {
             label="Analyst Mean Target"
             value={info.targetMeanPrice ? `$${info.targetMeanPrice}` : 'N/A'}
           />
+          <MetricRow label="EV / EBITDA" value={fmt(info.evToEbitda, '', 'x')} />
+          <MetricRow label="PEG Ratio" value={fmt(info.pegRatio, '', 'x')} />
+          <MetricRow label="Dividend Rate" value={info.dividendRate ? `$${info.dividendRate}` : 'N/A'} />
+          <MetricRow label="Ex-Dividend Date" value={info.exDividendDate ?? 'N/A'} />
+          <MetricRow label="Earnings Date" value={info.earningsDate ?? 'N/A'} />
+          <MetricRow label="50-Day MA" value={info.fiftyDayAverage ? `$${info.fiftyDayAverage}` : 'N/A'} />
+          <MetricRow label="200-Day MA" value={info.twoHundredDayAverage ? `$${info.twoHundredDayAverage}` : 'N/A'} />
         </div>
       </div>
 
@@ -309,7 +430,11 @@ export default function StockInfo({ ticker }) {
         info.profitMargins != null || info.returnOnEquity != null ||
         info.returnOnAssets != null || info.debtToEquity != null ||
         info.currentRatio != null || info.freeCashflow != null ||
-        info.shortPercentOfFloat != null) && (
+        info.shortPercentOfFloat != null || info.quickRatio != null ||
+        info.totalCash != null || info.totalDebt != null ||
+        info.operatingCashflow != null || info.ebitda != null ||
+        info.revenueTTM != null || info.insiderPctHeld != null ||
+        info.institutionalPctHeld != null) && (
         <div className="info-metrics">
           <div className="metrics-title">Fundamentals</div>
           <div className="metrics-grid">
@@ -380,6 +505,36 @@ export default function StockInfo({ ticker }) {
               <MetricRow
                 label="Short % of Float"
                 value={`${(info.shortPercentOfFloat * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.quickRatio != null && (
+              <MetricRow label="Quick Ratio" value={`${info.quickRatio}x`} />
+            )}
+            {info.totalCash != null && (
+              <MetricRow label="Total Cash" value={info.totalCash} />
+            )}
+            {info.totalDebt != null && (
+              <MetricRow label="Total Debt" value={info.totalDebt} />
+            )}
+            {info.operatingCashflow != null && (
+              <MetricRow label="Operating Cash Flow" value={info.operatingCashflow} />
+            )}
+            {info.ebitda != null && (
+              <MetricRow label="EBITDA" value={info.ebitda} />
+            )}
+            {info.revenueTTM != null && (
+              <MetricRow label="Revenue (TTM)" value={info.revenueTTM} />
+            )}
+            {info.insiderPctHeld != null && (
+              <MetricRow
+                label="Insider % Held"
+                value={`${(info.insiderPctHeld * 100).toFixed(1)}%`}
+              />
+            )}
+            {info.institutionalPctHeld != null && (
+              <MetricRow
+                label="Institutional % Held"
+                value={`${(info.institutionalPctHeld * 100).toFixed(1)}%`}
               />
             )}
           </div>

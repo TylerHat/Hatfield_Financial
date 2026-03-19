@@ -718,6 +718,9 @@
 .info-cards-row--bottom {
   grid-template-columns: repeat(4, 1fr);
 }
+.info-cards-row--third {
+  grid-template-columns: repeat(4, 1fr);
+}
 
 .info-card {
   background: #161b22;
