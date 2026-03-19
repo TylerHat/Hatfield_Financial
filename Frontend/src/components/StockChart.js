@@ -125,7 +125,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20 } = stockData;
 
   // Strategies where RSI context panel adds value
   const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
@@ -170,6 +170,29 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         tension: 0.15,
         fill: false,
         order: 1,
+      },
+      {
+        label: 'BB Upper',
+        data: bb_upper,
+        borderColor: 'rgba(136,198,255,0.4)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 4,
+      },
+      {
+        label: 'BB Lower',
+        data: bb_lower,
+        borderColor: 'rgba(136,198,255,0.4)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        tension: 0.15,
+        fill: '-1',
+        backgroundColor: 'rgba(136,198,255,0.06)',
+        order: 4,
       },
       {
         label: 'BUY',
@@ -282,6 +305,18 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         borderColor: 'rgba(88,166,255,0.6)',
         borderWidth: 1,
         borderRadius: 1,
+        order: 1,
+      },
+      {
+        type: 'line',
+        label: 'Vol MA 20',
+        data: vol_ma20,
+        borderColor: '#f0883e',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
       },
     ],
   };
@@ -291,7 +326,11 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     maintainAspectRatio: false,
     animation: false,
     plugins: {
-      legend: { display: false },
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
       title: {
         display: true,
         text: 'Volume',
@@ -307,11 +346,13 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         bodyColor: '#8b949e',
         callbacks: {
           label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
             const v = ctx.parsed.y;
-            if (v >= 1e9) return `Volume: ${(v / 1e9).toFixed(2)}B`;
-            if (v >= 1e6) return `Volume: ${(v / 1e6).toFixed(2)}M`;
-            if (v >= 1e3) return `Volume: ${(v / 1e3).toFixed(0)}K`;
-            return `Volume: ${v}`;
+            const prefix = ctx.dataset.label === 'Vol MA 20' ? 'Vol MA 20: ' : 'Volume: ';
+            if (v >= 1e9) return `${prefix}${(v / 1e9).toFixed(2)}B`;
+            if (v >= 1e6) return `${prefix}${(v / 1e6).toFixed(2)}M`;
+            if (v >= 1e3) return `${prefix}${(v / 1e3).toFixed(0)}K`;
+            return `${prefix}${v}`;
           },
         },
       },

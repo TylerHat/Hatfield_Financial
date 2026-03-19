@@ -24,6 +24,13 @@ def get_stock_data(ticker):
         hist['MA20'] = hist['Close'].rolling(20).mean()
         hist['MA50'] = hist['Close'].rolling(50).mean()
 
+        # Bollinger Bands (20-period, 2 std dev)
+        hist['BB_Upper'] = hist['MA20'] + 2 * hist['Close'].rolling(20).std()
+        hist['BB_Lower'] = hist['MA20'] - 2 * hist['Close'].rolling(20).std()
+
+        # Volume moving average (20-day)
+        hist['Vol_MA20'] = hist['Volume'].rolling(20).mean()
+
         # RSI (14) — Wilder's exponential smoothing
         delta = hist['Close'].diff()
         gain = delta.clip(lower=0)
@@ -52,6 +59,9 @@ def get_stock_data(ticker):
             'macd_signal': safe_list(macd_signal),
             'macd_hist': safe_list(macd_hist),
             'rsi': safe_list(hist['RSI']),
+            'bb_upper': safe_list(hist['BB_Upper']),
+            'bb_lower': safe_list(hist['BB_Lower']),
+            'vol_ma20': safe_list(hist['Vol_MA20']),
         }
 
         return jsonify(data)
