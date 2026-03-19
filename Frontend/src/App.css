@@ -395,6 +395,16 @@
   margin-top: 8px;
 }
 
+/* ── OBV chart ─────────────────────────────────────────────────────────────── */
+.obv-chart {
+  height: 150px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-top: 8px;
+}
+
 /* ── RSI context panel ─────────────────────────────────────────────────────── */
 .rsi-chart {
   height: 130px;

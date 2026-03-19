@@ -54,6 +54,11 @@ def get_stock_data(ticker):
         hist['Stoch_K'] = 100 * (hist['Close'] - low_min) / (high_max - low_min).replace(0, float('nan'))
         hist['Stoch_D'] = hist['Stoch_K'].rolling(3).mean()
 
+        # On-Balance Volume (OBV) + 20-day signal line
+        obv_direction = hist['Close'].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+        hist['OBV'] = (obv_direction * hist['Volume']).cumsum()
+        hist['OBV_Signal'] = hist['OBV'].rolling(20).mean()
+
         ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
         ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
@@ -79,6 +84,8 @@ def get_stock_data(ticker):
             'atr': safe_list(hist['ATR']),
             'stoch_k': safe_list(hist['Stoch_K']),
             'stoch_d': safe_list(hist['Stoch_D']),
+            'obv': [None if pd.isna(v) else int(v) for v in hist['OBV']],
+            'obv_signal': safe_list(hist['OBV_Signal']),
         }
 
         return jsonify(data)

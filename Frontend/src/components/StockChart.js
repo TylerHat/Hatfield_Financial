@@ -125,7 +125,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d, obv, obv_signal } = stockData;
 
   // Strategies where RSI context panel adds value
   const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
@@ -626,6 +626,44 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const flat70 = dates.map(() => 70);
   const flat30 = dates.map(() => 30);
 
+  // (5) RSI divergence detection — same approach as MACD divergences
+  const rsiArr = rsi || [];
+  const rsiDivBullish = dates.map(() => null);
+  const rsiDivBearish = dates.map(() => null);
+  const rsiDivWindow = 10;
+  if (rsiArr.length > rsiDivWindow * 3) {
+    const rsiLocalHighs = [];
+    const rsiLocalLows = [];
+    for (let i = rsiDivWindow; i < rsiArr.length - rsiDivWindow; i++) {
+      if (closeArr[i] == null || rsiArr[i] == null) continue;
+      let isHigh = true;
+      let isLow = true;
+      for (let j = i - rsiDivWindow; j <= i + rsiDivWindow; j++) {
+        if (j === i || closeArr[j] == null) continue;
+        if (closeArr[j] >= closeArr[i]) isHigh = false;
+        if (closeArr[j] <= closeArr[i]) isLow = false;
+      }
+      if (isHigh) rsiLocalHighs.push(i);
+      if (isLow) rsiLocalLows.push(i);
+    }
+    // Bearish divergence: price higher high, RSI lower high
+    for (let k = 1; k < rsiLocalHighs.length; k++) {
+      const prev = rsiLocalHighs[k - 1];
+      const curr = rsiLocalHighs[k];
+      if (closeArr[curr] > closeArr[prev] && rsiArr[curr] < rsiArr[prev]) {
+        rsiDivBearish[curr] = rsiArr[curr];
+      }
+    }
+    // Bullish divergence: price lower low, RSI higher low
+    for (let k = 1; k < rsiLocalLows.length; k++) {
+      const prev = rsiLocalLows[k - 1];
+      const curr = rsiLocalLows[k];
+      if (closeArr[curr] < closeArr[prev] && rsiArr[curr] > rsiArr[prev]) {
+        rsiDivBullish[curr] = rsiArr[curr];
+      }
+    }
+  }
+
   const rsiData = {
     labels: dates,
     datasets: [
@@ -647,7 +685,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         borderDash: [4, 3],
         pointRadius: 0,
         fill: false,
-        order: 1,
+        order: 2,
       },
       {
         label: 'Oversold (30)',
@@ -657,7 +695,31 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         borderDash: [4, 3],
         pointRadius: 0,
         fill: false,
-        order: 1,
+        order: 2,
+      },
+      {
+        label: '◆ Bull Divergence',
+        data: rsiDivBullish,
+        showLine: false,
+        pointStyle: 'rectRot',
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 7 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 9 : 0),
+        pointBackgroundColor: '#3fb950',
+        pointBorderColor: '#e6edf3',
+        pointBorderWidth: 2,
+        order: 0,
+      },
+      {
+        label: '◆ Bear Divergence',
+        data: rsiDivBearish,
+        showLine: false,
+        pointStyle: 'rectRot',
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 7 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 9 : 0),
+        pointBackgroundColor: '#f85149',
+        pointBorderColor: '#e6edf3',
+        pointBorderWidth: 2,
+        order: 0,
       },
     ],
   };
@@ -666,6 +728,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
         display: true,
@@ -688,7 +751,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         callbacks: {
           label: (ctx) => {
             if (ctx.parsed.y === null) return null;
-            return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}`;
+            const label = ctx.dataset.label;
+            if (label === '◆ Bull Divergence') return '◆ Bullish Divergence — price lower low but RSI higher low';
+            if (label === '◆ Bear Divergence') return '◆ Bearish Divergence — price higher high but RSI lower high';
+            return `${label}: ${ctx.parsed.y.toFixed(1)}`;
           },
         },
       },
@@ -873,6 +939,99 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     },
   };
 
+  // ── OBV chart ───────────────────────────────────────────────────────────────
+  const obvData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'OBV',
+        data: obv,
+        borderColor: '#58a6ff',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
+      },
+      {
+        label: 'Signal (20)',
+        data: obv_signal,
+        borderColor: '#f0883e',
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 1,
+      },
+    ],
+  };
+
+  const fmtObv = (v) => {
+    if (v >= 1e9 || v <= -1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (v >= 1e6 || v <= -1e6) return `${(v / 1e6).toFixed(1)}M`;
+    if (v >= 1e3 || v <= -1e3) return `${(v / 1e3).toFixed(0)}K`;
+    return `${v}`;
+  };
+
+  const obvOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
+      title: {
+        display: true,
+        text: 'On-Balance Volume (OBV)  ·  Accumulation / Distribution',
+        color: '#8b949e',
+        font: { size: 12 },
+        padding: { bottom: 6 },
+      },
+      tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#e6edf3',
+        bodyColor: '#8b949e',
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
+            return `${ctx.dataset.label}: ${fmtObv(ctx.parsed.y)}`;
+          },
+          afterBody: (items) => {
+            const idx = items[0]?.dataIndex;
+            if (idx == null || !obv || !obv_signal) return [];
+            const obvVal = obv[idx];
+            const sigVal = obv_signal[idx];
+            if (obvVal == null || sigVal == null) return [];
+            const lines = [];
+            if (obvVal > sigVal) lines.push('OBV above signal — accumulation (buying pressure)');
+            else lines.push('OBV below signal — distribution (selling pressure)');
+            return lines;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: {
+          color: '#8b949e',
+          callback: (v) => fmtObv(v),
+        },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
@@ -896,6 +1055,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       macd: { className: 'macd-chart', node: <Bar data={macdData} options={macdOptions} /> },
       atr: { className: 'atr-chart', node: <Line data={atrData} options={atrOptions} /> },
       stoch: { className: 'stoch-chart', node: <Line data={stochData} options={stochOptions} /> },
+      obv: { className: 'obv-chart', node: <Line data={obvData} options={obvOptions} /> },
       rsi: { className: 'rsi-chart', node: <Line data={rsiData} options={rsiOptions} /> },
     };
     const expanded = chartMap[expandedChart];
@@ -950,6 +1110,11 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       <div className="stoch-chart chart-expandable">
         <ExpandBtn chartKey="stoch" />
         <Line data={stochData} options={stochOptions} />
+      </div>
+
+      <div className="obv-chart chart-expandable">
+        <ExpandBtn chartKey="obv" />
+        <Line data={obvData} options={obvOptions} />
       </div>
 
       {showRsiPanel && (
