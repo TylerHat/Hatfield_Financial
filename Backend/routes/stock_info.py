@@ -297,6 +297,21 @@ def get_stock_info(ticker):
         rec_key = info.get('recommendationKey') or ''
         analyst_rec = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
 
+        # ── Forward P/E (with fallback computation) ─────────────────────────
+        forward_pe = safe_float('forwardPE')
+        if forward_pe is None and price:
+            forward_eps = safe_float('forwardEps')
+            if forward_eps and forward_eps > 0:
+                forward_pe = round(price / forward_eps, 2)
+
+        # ── PEG Ratio (with fallback computation) ───────────────────────────
+        peg = safe_float('pegRatio')
+        if peg is None and pe is not None and pe > 0:
+            earnings_growth = safe_float('earningsGrowth', 4)
+            if earnings_growth is not None and earnings_growth > 0:
+                growth_pct = earnings_growth * 100
+                peg = round(pe / growth_pct, 2)
+
         response = {
             'ticker': ticker.upper(),
             'name': info.get('longName') or info.get('shortName', ticker.upper()),
@@ -306,7 +321,7 @@ def get_stock_info(ticker):
             'dayChange': day_change_pct,
             'marketCap': fmt_large(info.get('marketCap')),
             'trailingPE': pe,
-            'forwardPE': safe_float('forwardPE'),
+            'forwardPE': forward_pe,
             'priceToBook': safe_float('priceToBook'),
             'priceToSales': safe_float('priceToSalesTrailingTwelveMonths'),
             'beta': safe_float('beta'),
@@ -336,7 +351,7 @@ def get_stock_info(ticker):
             'volumeTrend': volume_trend,
             # New key metrics
             'evToEbitda': safe_float('enterpriseToEbitda'),
-            'pegRatio': safe_float('pegRatio'),
+            'pegRatio': peg,
             'dividendRate': safe_float('dividendRate'),
             'fiftyDayAverage': safe_float('fiftyDayAverage'),
             'twoHundredDayAverage': safe_float('twoHundredDayAverage'),
@@ -366,6 +381,11 @@ def get_stock_info(ticker):
 
         # ── Dividend Health ──────────────────────────────────────────────────
         payout_ratio = safe_float('payoutRatio', 4)
+        if payout_ratio is None:
+            div_rate = safe_float('dividendRate')
+            eps = safe_float('trailingEps')
+            if div_rate is not None and eps is not None and eps > 0:
+                payout_ratio = round(div_rate / eps, 4)
         div_health = None
         div_health_detail = ''
         if payout_ratio is not None:
