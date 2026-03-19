@@ -49,21 +49,34 @@ def safe_float(key, decimals=2):
     if val is None or val == 'N/A':
         return None
     try:
-        return round(float(val), decimals)
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return round(f, decimals)
     except Exception:
         return None
 ```
 
+- **NaN/Inf guard**: yfinance can return `float('nan')` or `float('inf')` for fields like P/E ratios (near-zero earnings). These serialize as invalid JSON (`NaN`/`Infinity`) and break browser JSON parsing. The `math.isnan()`/`math.isinf()` check converts them to `None` → JSON `null`.
 - `currentPrice` is sometimes `None` — fall back to `regularMarketPrice`
 - `marketCap` can be very large — format with `fmt_large()` helper
 - `recommendationKey` uses underscores (e.g. `'strong_buy'`) — replace with spaces and title-case for display
 
-### `stock.earnings_dates` — Earnings Calendar
+### `stock.calendar` — Earnings Calendar (primary)
+
+- Returns a dict (newer yfinance) or DataFrame (older versions) with an `'Earnings Date'` key
+- Dict format: `{'Earnings Date': [Timestamp, ...]}` — list of `pd.Timestamp` objects
+- DataFrame format: columns include `'Earnings Date'`
+- **Unreliable**: format varies across yfinance versions; can raise exceptions or return empty
+- Always wrap in `try/except` with fallback to `get_earnings_dates()`
+
+### `stock.get_earnings_dates()` — Earnings Calendar (fallback)
 
 - Returns a DataFrame of upcoming and recent earnings dates
 - **Unreliable**: can raise exceptions, return `None`, or return an empty DataFrame
 - Always wrap in `try/except` and check `if earnings is not None and not earnings.empty`
 - Timezone of `earnings.index` may differ from `hist.index` — align before comparison (see `post_earnings_drift.py`)
+- Used as fallback in `stock_info.py` when `stock.calendar` fails to yield an earnings date
 
 ---
 

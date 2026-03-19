@@ -393,7 +393,7 @@ export default function StockInfo({ ticker }) {
           <MetricRow
             label="Dividend Yield"
             value={
-              info.dividendYield
+              info.dividendYield != null
                 ? `${(info.dividendYield * 100).toFixed(2)}%`
                 : 'N/A'
             }
@@ -412,15 +412,15 @@ export default function StockInfo({ ticker }) {
           />
           <MetricRow
             label="Analyst Mean Target"
-            value={info.targetMeanPrice ? `$${info.targetMeanPrice}` : 'N/A'}
+            value={info.targetMeanPrice != null ? `$${info.targetMeanPrice}` : 'N/A'}
           />
           <MetricRow label="EV / EBITDA" value={fmt(info.evToEbitda, '', 'x')} />
           <MetricRow label="PEG Ratio" value={fmt(info.pegRatio, '', 'x')} />
-          <MetricRow label="Dividend Rate" value={info.dividendRate ? `$${info.dividendRate}` : 'N/A'} />
+          <MetricRow label="Dividend Rate" value={info.dividendRate != null ? `$${info.dividendRate}` : 'N/A'} />
           <MetricRow label="Ex-Dividend Date" value={info.exDividendDate ?? 'N/A'} />
           <MetricRow label="Earnings Date" value={info.earningsDate ?? 'N/A'} />
-          <MetricRow label="50-Day MA" value={info.fiftyDayAverage ? `$${info.fiftyDayAverage}` : 'N/A'} />
-          <MetricRow label="200-Day MA" value={info.twoHundredDayAverage ? `$${info.twoHundredDayAverage}` : 'N/A'} />
+          <MetricRow label="50-Day MA" value={info.fiftyDayAverage != null ? `$${info.fiftyDayAverage}` : 'N/A'} />
+          <MetricRow label="200-Day MA" value={info.twoHundredDayAverage != null ? `$${info.twoHundredDayAverage}` : 'N/A'} />
         </div>
       </div>
 
