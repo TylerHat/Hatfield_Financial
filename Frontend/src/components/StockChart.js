@@ -125,7 +125,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d, obv, obv_signal } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d, obv, obv_signal, fifty_two_week_high, fifty_two_week_low, earnings_dates } = stockData;
 
   // Strategies where RSI context panel adds value
   const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
@@ -194,6 +194,50 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         backgroundColor: 'rgba(136,198,255,0.06)',
         order: 4,
       },
+      // 52-Week High reference line
+      ...(fifty_two_week_high ? [{
+        label: `52W High ($${fifty_two_week_high})`,
+        data: dates.map(() => fifty_two_week_high),
+        borderColor: 'rgba(63,185,80,0.5)',
+        borderWidth: 1,
+        borderDash: [10, 5],
+        pointRadius: 0,
+        pointHitRadius: 0,
+        fill: false,
+        order: 5,
+      }] : []),
+      // 52-Week Low reference line
+      ...(fifty_two_week_low ? [{
+        label: `52W Low ($${fifty_two_week_low})`,
+        data: dates.map(() => fifty_two_week_low),
+        borderColor: 'rgba(248,81,73,0.5)',
+        borderWidth: 1,
+        borderDash: [10, 5],
+        pointRadius: 0,
+        pointHitRadius: 0,
+        fill: false,
+        order: 5,
+      }] : []),
+      // Earnings date markers — vertical spikes at earnings dates
+      ...(() => {
+        if (!earnings_dates || earnings_dates.length === 0) return [];
+        const earningsSet = new Set(earnings_dates);
+        const earningsData = dates.map((d) => earningsSet.has(d) ? close[dates.indexOf(d)] : null);
+        const hasAny = earningsData.some((v) => v !== null);
+        if (!hasAny) return [];
+        return [{
+          label: 'Earnings',
+          data: earningsData,
+          showLine: false,
+          pointStyle: 'line',
+          pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 14 : 0),
+          pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 16 : 0),
+          pointBorderColor: '#d2a8ff',
+          pointBackgroundColor: '#d2a8ff',
+          pointBorderWidth: 2,
+          order: 0,
+        }];
+      })(),
       {
         label: 'BUY',
         data: buyData,
@@ -263,6 +307,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
               const val = ctx.dataset.data[ctx.dataIndex];
               if (val === null) return null;
               return `${ctx.dataset.label}: $${val.toFixed(2)}`;
+            }
+            if (ctx.dataset.label === 'Earnings') {
+              if (ctx.dataset.data[ctx.dataIndex] === null) return null;
+              return '📅 Earnings Report';
             }
             if (ctx.parsed.y === null) return null;
             return `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`;

@@ -21,6 +21,20 @@ def get_stock_data(ticker):
         if hist.empty:
             return jsonify({'error': f'No data found for ticker "{ticker.upper()}". Check the symbol and try again.'}), 404
 
+        # 52-week high/low from ticker info
+        info = stock.info
+        fifty_two_week_high = info.get('fiftyTwoWeekHigh')
+        fifty_two_week_low = info.get('fiftyTwoWeekLow')
+
+        # Earnings dates — past and upcoming
+        earnings_dates = []
+        try:
+            cal = stock.get_earnings_dates(limit=20)
+            if cal is not None and not cal.empty:
+                earnings_dates = [d.strftime('%Y-%m-%d') for d in cal.index]
+        except Exception:
+            pass
+
         hist['MA20'] = hist['Close'].rolling(20).mean()
         hist['MA50'] = hist['Close'].rolling(50).mean()
 
@@ -86,6 +100,9 @@ def get_stock_data(ticker):
             'stoch_d': safe_list(hist['Stoch_D']),
             'obv': [None if pd.isna(v) else int(v) for v in hist['OBV']],
             'obv_signal': safe_list(hist['OBV_Signal']),
+            'fifty_two_week_high': round(float(fifty_two_week_high), 2) if fifty_two_week_high else None,
+            'fifty_two_week_low': round(float(fifty_two_week_low), 2) if fifty_two_week_low else None,
+            'earnings_dates': earnings_dates,
         }
 
         return jsonify(data)
