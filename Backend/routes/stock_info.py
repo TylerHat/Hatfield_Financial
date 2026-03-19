@@ -1,5 +1,6 @@
 import pandas as pd
 import yfinance as yf
+from datetime import datetime, date
 from flask import Blueprint, jsonify
 
 stock_info_bp = Blueprint('stock_info', __name__)
@@ -119,6 +120,98 @@ def get_stock_info(ticker):
         else:
             volume_status = 'Normal Volume'
 
+        # ── Trend Alignment (MA20 / MA50 / MA200) ────────────────────────────
+        ma20 = hist['Close'].rolling(20).mean()
+        ma50 = hist['Close'].rolling(50).mean()
+        ma200 = hist['Close'].rolling(200).mean()
+
+        trend_alignment = None
+        trend_detail = ''
+        current_close = float(hist['Close'].iloc[-1])
+        if len(hist) >= 200 and not pd.isna(ma200.iloc[-1]):
+            m20, m50, m200 = float(ma20.iloc[-1]), float(ma50.iloc[-1]), float(ma200.iloc[-1])
+            if current_close > m20 > m50 > m200:
+                trend_alignment = 'Strong Uptrend'
+                trend_detail = f'Price (${current_close:.2f}) > MA20 (${m20:.2f}) > MA50 (${m50:.2f}) > MA200 (${m200:.2f})'
+            elif current_close < m20 < m50 < m200:
+                trend_alignment = 'Strong Downtrend'
+                trend_detail = f'Price (${current_close:.2f}) < MA20 (${m20:.2f}) < MA50 (${m50:.2f}) < MA200 (${m200:.2f})'
+            elif current_close > m200:
+                trend_alignment = 'Bullish (Mixed)'
+                trend_detail = f'Price above MA200 but MAs not fully aligned — mixed signals'
+            else:
+                trend_alignment = 'Bearish (Mixed)'
+                trend_detail = f'Price below MA200 — overall trend is bearish despite mixed MA alignment'
+        elif len(hist) >= 50 and not pd.isna(ma50.iloc[-1]):
+            m20, m50 = float(ma20.iloc[-1]), float(ma50.iloc[-1])
+            if current_close > m20 > m50:
+                trend_alignment = 'Bullish (Short-term)'
+                trend_detail = f'Price > MA20 > MA50 (MA200 not available — less than 200 days of data)'
+            else:
+                trend_alignment = 'Bearish (Short-term)'
+                trend_detail = f'Short-term trend weak: MA20/MA50 not aligned bullishly'
+
+        # ── Earnings Proximity ───────────────────────────────────────────────
+        earnings_date_str = None
+        try:
+            cal = stock.calendar
+            if isinstance(cal, dict) and 'Earnings Date' in cal:
+                dates_list = cal['Earnings Date']
+                if dates_list:
+                    earnings_date_str = str(dates_list[0].date()) if hasattr(dates_list[0], 'date') else str(dates_list[0])
+            elif isinstance(cal, pd.DataFrame) and 'Earnings Date' in cal.columns:
+                val = cal['Earnings Date'].iloc[0]
+                earnings_date_str = str(val.date()) if hasattr(val, 'date') else str(val)
+        except Exception:
+            pass
+
+        earnings_proximity = None
+        earnings_proximity_days = None
+        earnings_warning = False
+        if earnings_date_str:
+            try:
+                earn_dt = datetime.strptime(earnings_date_str, '%Y-%m-%d').date()
+                today = date.today()
+                days_until = (earn_dt - today).days
+                earnings_proximity_days = days_until
+                if days_until < 0:
+                    earnings_proximity = f'Reported {abs(days_until)} days ago'
+                elif days_until == 0:
+                    earnings_proximity = 'Earnings TODAY'
+                    earnings_warning = True
+                elif days_until <= 14:
+                    earnings_proximity = f'{days_until} days away'
+                    earnings_warning = True
+                else:
+                    earnings_proximity = f'{days_until} days away'
+            except Exception:
+                pass
+
+        # ── Relative Strength vs SPY ─────────────────────────────────────────
+        # Note: adds ~0.5-1s latency due to second yfinance fetch; could be cached
+        rel_strength_data = {}
+        try:
+            spy = yf.Ticker('SPY')
+            spy_hist = spy.history(period='3mo')
+            if not spy_hist.empty and len(hist) >= 63 and len(spy_hist) >= 63:
+                stock_1m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-22]) - 1) * 100
+                spy_1m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-22]) - 1) * 100
+                stock_3m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-63]) - 1) * 100
+                spy_3m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-63]) - 1) * 100
+                rel_strength_data = {
+                    'relStrength1M': round(stock_1m - spy_1m, 2),
+                    'relStrength3M': round(stock_3m - spy_3m, 2),
+                    'stock1MReturn': round(stock_1m, 2),
+                    'spy1MReturn': round(spy_1m, 2),
+                    'stock3MReturn': round(stock_3m, 2),
+                    'spy3MReturn': round(spy_3m, 2),
+                }
+        except Exception:
+            pass
+
+        # ── Dividend Health ──────────────────────────────────────────────────
+        # Computed after safe_float is defined, added to response below
+
         # ── Helpers ───────────────────────────────────────────────────────────
         def safe_float(key, decimals=2):
             val = info.get(key)
@@ -219,7 +312,69 @@ def get_stock_info(ticker):
             'volumeStatus': volume_status,
             'volumeRelative': vol_relative,
             'volumeTrend': volume_trend,
+            # New key metrics
+            'evToEbitda': safe_float('enterpriseToEbitda'),
+            'pegRatio': safe_float('pegRatio'),
+            'dividendRate': safe_float('dividendRate'),
+            'fiftyDayAverage': safe_float('fiftyDayAverage'),
+            'twoHundredDayAverage': safe_float('twoHundredDayAverage'),
+            # Trend alignment
+            'trendAlignment': trend_alignment,
+            'trendDetail': trend_detail,
+            # Earnings proximity
+            'earningsDate': earnings_date_str,
+            'earningsProximity': earnings_proximity,
+            'earningsProximityDays': earnings_proximity_days,
+            'earningsWarning': earnings_warning,
         }
+
+        # ── Ex-dividend date ─────────────────────────────────────────────────
+        ex_div_raw = info.get('exDividendDate')
+        if ex_div_raw:
+            try:
+                if isinstance(ex_div_raw, (int, float)):
+                    response['exDividendDate'] = datetime.fromtimestamp(ex_div_raw).strftime('%Y-%m-%d')
+                else:
+                    response['exDividendDate'] = str(ex_div_raw)
+            except Exception:
+                pass
+
+        # ── Relative strength vs SPY ─────────────────────────────────────────
+        response.update(rel_strength_data)
+
+        # ── Dividend Health ──────────────────────────────────────────────────
+        payout_ratio = safe_float('payoutRatio', 4)
+        div_health = None
+        div_health_detail = ''
+        if payout_ratio is not None:
+            payout_pct = payout_ratio * 100
+            if payout_pct <= 0:
+                div_health = 'No Dividend'
+                div_health_detail = 'Company does not pay a dividend or payout ratio is zero'
+            elif payout_pct < 40:
+                div_health = 'Very Healthy'
+                div_health_detail = f'Payout ratio of {payout_pct:.0f}% — well-covered, room for growth'
+            elif payout_pct < 60:
+                div_health = 'Healthy'
+                div_health_detail = f'Payout ratio of {payout_pct:.0f}% — comfortably covered by earnings'
+            elif payout_pct < 80:
+                div_health = 'Moderate'
+                div_health_detail = f'Payout ratio of {payout_pct:.0f}% — less room for increases'
+            elif payout_pct < 100:
+                div_health = 'Stretched'
+                div_health_detail = f'Payout ratio of {payout_pct:.0f}% — dividend consuming most earnings'
+            else:
+                div_health = 'Unsustainable'
+                div_health_detail = f'Payout ratio of {payout_pct:.0f}% — exceeds earnings, may be cut'
+        elif info.get('dividendRate') and float(info.get('dividendRate', 0)) > 0:
+            div_health = 'Unknown'
+            div_health_detail = 'Dividend is paid but payout ratio data not available'
+
+        if payout_ratio is not None:
+            response['payoutRatio'] = payout_ratio
+        if div_health:
+            response['dividendHealth'] = div_health
+            response['dividendHealthDetail'] = div_health_detail
 
         # ── Fundamentals expansion ────────────────────────────────────────────
         # Growth
@@ -266,6 +421,47 @@ def get_stock_info(ticker):
         v = safe_float('shortPercentOfFloat', 4)
         if v is not None:
             response['shortPercentOfFloat'] = v
+
+        # New fundamentals
+        v = safe_float('quickRatio')
+        if v is not None:
+            response['quickRatio'] = v
+        raw = info.get('totalCash')
+        if raw is not None:
+            try:
+                response['totalCash'] = fmt_large(float(raw))
+            except Exception:
+                pass
+        raw = info.get('totalDebt')
+        if raw is not None:
+            try:
+                response['totalDebt'] = fmt_large(float(raw))
+            except Exception:
+                pass
+        raw = info.get('operatingCashflow')
+        if raw is not None:
+            try:
+                response['operatingCashflow'] = fmt_large(float(raw))
+            except Exception:
+                pass
+        raw = info.get('ebitda')
+        if raw is not None:
+            try:
+                response['ebitda'] = fmt_large(float(raw))
+            except Exception:
+                pass
+        raw = info.get('totalRevenue')
+        if raw is not None:
+            try:
+                response['revenueTTM'] = fmt_large(float(raw))
+            except Exception:
+                pass
+        v = safe_float('heldPercentInsiders', 4)
+        if v is not None:
+            response['insiderPctHeld'] = v
+        v = safe_float('heldPercentInstitutions', 4)
+        if v is not None:
+            response['institutionalPctHeld'] = v
 
         return jsonify(response)
 

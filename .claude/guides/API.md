@@ -103,6 +103,32 @@ Fundamentals, technicals, and analyst data. Always uses 1 year of history regard
 | `debtToEquity` / `currentRatio` | number | Financial health (optional) |
 | `freeCashflow` | string | Formatted (e.g. `$12.50B`, optional) |
 | `shortPercentOfFloat` | number | Short interest (optional) |
+| `evToEbitda` | number | Enterprise Value / EBITDA (optional) |
+| `pegRatio` | number | P/E to Growth ratio (optional) |
+| `dividendRate` | number | Annual dividend rate in dollars (optional) |
+| `exDividendDate` | string | Ex-dividend date `YYYY-MM-DD` (optional) |
+| `earningsDate` | string | Next earnings date `YYYY-MM-DD` (optional) |
+| `fiftyDayAverage` | number | 50-day moving average price (optional) |
+| `twoHundredDayAverage` | number | 200-day moving average price (optional) |
+| `trendAlignment` | string | `Strong Uptrend` / `Strong Downtrend` / `Bullish (Mixed)` / `Bearish (Mixed)` / `Bullish (Short-term)` / `Bearish (Short-term)` (optional) |
+| `trendDetail` | string | Human-readable MA alignment explanation (optional) |
+| `earningsProximity` | string | e.g. `14 days away`, `Earnings TODAY`, `Reported 3 days ago` (optional) |
+| `earningsProximityDays` | number | Signed days until earnings (negative = past) (optional) |
+| `earningsWarning` | boolean | True if earnings within 14 days (optional) |
+| `relStrength1M` / `relStrength3M` | number | Relative return vs SPY over 1M/3M (optional) |
+| `stock1MReturn` / `spy1MReturn` | number | Raw 1-month returns for stock and SPY (optional) |
+| `stock3MReturn` / `spy3MReturn` | number | Raw 3-month returns for stock and SPY (optional) |
+| `payoutRatio` | number | Dividend payout ratio (raw decimal, optional) |
+| `dividendHealth` | string | `Very Healthy` / `Healthy` / `Moderate` / `Stretched` / `Unsustainable` / `No Dividend` / `Unknown` (optional) |
+| `dividendHealthDetail` | string | Human-readable payout ratio explanation (optional) |
+| `quickRatio` | number | Quick ratio (optional) |
+| `totalCash` | string | Formatted total cash (e.g. `$48.30B`, optional) |
+| `totalDebt` | string | Formatted total debt (optional) |
+| `operatingCashflow` | string | Formatted operating cash flow (optional) |
+| `ebitda` | string | Formatted EBITDA (optional) |
+| `revenueTTM` | string | Formatted trailing twelve month revenue (optional) |
+| `insiderPctHeld` | number | Insider ownership (raw decimal, optional) |
+| `institutionalPctHeld` | number | Institutional ownership (raw decimal, optional) |
 
 ---
 

@@ -26,7 +26,7 @@ Hatfield_Financial/
 │   │   └── sp500_tickers.py            SP500_TICKERS, CRYPTO_TICKERS universe constants
 │   └── routes/
 │       ├── stock_data.py               GET /api/stock/<ticker>
-│       ├── stock_info.py               GET /api/stock-info/<ticker>
+│       ├── stock_info.py               GET /api/stock-info/<ticker> (also fetches SPY for relative strength)
 │       ├── backtest.py                 GET /api/backtest/<ticker>
 │       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
@@ -50,7 +50,7 @@ Hatfield_Financial/
         └── components/
             ├── AuthPage.js / AuthPage.css   Login / register form with toggle
             ├── StockChart.js           Price + Volume + MACD + ATR + Stochastic + OBV + RSI charts; expand/info UI; signal overlays
-            ├── StockInfo.js            Two-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume)
+            ├── StockInfo.js            Three-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume) + (Trend Alignment, Earnings Proximity, Rel Strength vs SPY, Dividend Health)
             ├── StrategyGuide.js        Static strategy documentation tab
             ├── Badge.js / Badge.css
             ├── StatCard.js / StatCard.css

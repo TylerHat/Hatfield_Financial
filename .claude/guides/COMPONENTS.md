@@ -259,6 +259,46 @@ const SIGNAL_COLUMNS = [
 
 ---
 
+## StockInfo
+
+**File**: `components/StockInfo.js`
+**Import**: `import StockInfo from './components/StockInfo'`
+
+Fetches `/api/stock-info/<ticker>` and renders company overview, analysis cards, key metrics, and fundamentals.
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `ticker` | string | Active ticker symbol |
+
+### Analysis Cards Layout (3 rows)
+
+| Row | Cards | CSS Class |
+|-----|-------|-----------|
+| Top (3 cols) | Valuation, Momentum (RSI 14), 52-Week Range | `info-cards-row--top` |
+| Bottom (4 cols) | Price Action, MACD, Volatility (ATR), Volume | `info-cards-row--bottom` |
+| Third (4 cols) | Trend Alignment, Earnings Proximity, Relative Strength vs SPY, Dividend Health | `info-cards-row--third` |
+
+### Third Row Cards Detail
+
+| Card | Badge Values | Color Helper |
+|------|-------------|--------------|
+| **Trend Alignment** | `Strong Uptrend` / `Strong Downtrend` / `Bullish (Mixed)` / `Bearish (Mixed)` | `trendColor()` — green for bullish, red for bearish |
+| **Earnings Proximity** | `X days away` / `Earnings TODAY` / `Reported X days ago` | red if `earningsWarning`, blue otherwise |
+| **Relative Strength vs SPY** | `1M: +X%` / `3M: +X%` badges | `relStrengthColor()` — green >+5%, red <-5%, yellow in between |
+| **Dividend Health** | `Very Healthy` / `Healthy` / `Moderate` / `Stretched` / `Unsustainable` | `divHealthColor()` — green healthy, yellow moderate, red stretched |
+
+### Key Metrics Table
+
+P/E (trailing/forward), P/B, P/S, Beta, Dividend Yield, EPS, Revenue/Share, Current Price, Analyst Rec, Analyst Target, **EV/EBITDA**, **PEG Ratio**, **Dividend Rate**, **Ex-Dividend Date**, **Earnings Date**, **50-Day MA**, **200-Day MA**
+
+### Fundamentals Table
+
+Revenue Growth, Earnings Growth, Gross/Operating/Net Margin, ROE, ROA, D/E, Current Ratio, FCF, Short % of Float, **Quick Ratio**, **Total Cash**, **Total Debt**, **Operating Cash Flow**, **EBITDA**, **Revenue (TTM)**, **Insider % Held**, **Institutional % Held**
+
+---
+
 ## StockChart
 
 **File**: `components/StockChart.js`
