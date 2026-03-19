@@ -238,7 +238,7 @@
 }
 
 .volume-chart {
-  height: 130px;
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -377,7 +377,7 @@
 
 /* ── ATR chart ─────────────────────────────────────────────────────────────── */
 .atr-chart {
-  height: 150px;
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -387,7 +387,7 @@
 
 /* ── Stochastic Oscillator panel ───────────────────────────────────────────── */
 .stoch-chart {
-  height: 150px;
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -397,7 +397,7 @@
 
 /* ── OBV chart ─────────────────────────────────────────────────────────────── */
 .obv-chart {
-  height: 150px;
+  height: 220px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 8px;
