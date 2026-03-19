@@ -125,7 +125,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20 } = stockData;
+  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d } = stockData;
 
   // Strategies where RSI context panel adds value
   const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
@@ -711,6 +711,168 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     },
   };
 
+  // ── ATR chart ───────────────────────────────────────────────────────────────
+  const atrData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'ATR (14)',
+        data: atr,
+        borderColor: '#f0883e',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: true,
+        backgroundColor: 'rgba(240,136,62,0.08)',
+      },
+    ],
+  };
+
+  const atrOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
+      title: {
+        display: true,
+        text: 'Average True Range (14)  ·  Volatility in $ terms',
+        color: '#8b949e',
+        font: { size: 12 },
+        padding: { bottom: 6 },
+      },
+      tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#e6edf3',
+        bodyColor: '#8b949e',
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
+            return `ATR: $${ctx.parsed.y.toFixed(2)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: {
+          color: '#8b949e',
+          callback: (v) => `$${v.toFixed(2)}`,
+        },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
+  // ── Stochastic Oscillator chart ────────────────────────────────────────────
+  const flat80 = dates.map(() => 80);
+  const flat20 = dates.map(() => 20);
+
+  const stochData = {
+    labels: dates,
+    datasets: [
+      {
+        label: '%K (9)',
+        data: stoch_k,
+        borderColor: '#58a6ff',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
+      },
+      {
+        label: '%D (3)',
+        data: stoch_d,
+        borderColor: '#f0883e',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+        order: 0,
+      },
+      {
+        label: 'Overbought (80)',
+        data: flat80,
+        borderColor: 'rgba(248,81,73,0.5)',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        fill: false,
+        order: 1,
+      },
+      {
+        label: 'Oversold (20)',
+        data: flat20,
+        borderColor: 'rgba(63,185,80,0.5)',
+        borderWidth: 1,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        fill: false,
+        order: 1,
+      },
+    ],
+  };
+
+  const stochOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top',
+        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+      },
+      title: {
+        display: true,
+        text: 'Stochastic (9, 3, 3)  ·  Overbought > 80  ·  Oversold < 20',
+        color: '#8b949e',
+        font: { size: 12 },
+        padding: { bottom: 6 },
+      },
+      tooltip: {
+        backgroundColor: '#161b22',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#e6edf3',
+        bodyColor: '#8b949e',
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.parsed.y === null) return null;
+            return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#8b949e', maxTicksLimit: 8, maxRotation: 0 },
+        grid: { display: false },
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: {
+          color: '#8b949e',
+          callback: (v) => v.toFixed(0),
+          stepSize: 20,
+        },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
@@ -732,6 +894,8 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       price: { className: 'price-chart', node: <Line data={priceData} options={priceOptions} /> },
       volume: { className: 'volume-chart', node: <Bar data={volumeData} options={volumeOptions} /> },
       macd: { className: 'macd-chart', node: <Bar data={macdData} options={macdOptions} /> },
+      atr: { className: 'atr-chart', node: <Line data={atrData} options={atrOptions} /> },
+      stoch: { className: 'stoch-chart', node: <Line data={stochData} options={stochOptions} /> },
       rsi: { className: 'rsi-chart', node: <Line data={rsiData} options={rsiOptions} /> },
     };
     const expanded = chartMap[expandedChart];
@@ -776,6 +940,16 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       <div className="macd-chart chart-expandable">
         <ExpandBtn chartKey="macd" />
         <Bar data={macdData} options={macdOptions} />
+      </div>
+
+      <div className="atr-chart chart-expandable">
+        <ExpandBtn chartKey="atr" />
+        <Line data={atrData} options={atrOptions} />
+      </div>
+
+      <div className="stoch-chart chart-expandable">
+        <ExpandBtn chartKey="stoch" />
+        <Line data={stochData} options={stochOptions} />
       </div>
 
       {showRsiPanel && (

@@ -40,6 +40,20 @@ def get_stock_data(ticker):
         rs = avg_gain / avg_loss.replace(0, float('nan'))
         hist['RSI'] = 100 - (100 / (1 + rs))
 
+        # ATR (14) — Average True Range
+        high_low = hist['High'] - hist['Low']
+        high_prev_close = (hist['High'] - hist['Close'].shift(1)).abs()
+        low_prev_close = (hist['Low'] - hist['Close'].shift(1)).abs()
+        true_range = pd.concat([high_low, high_prev_close, low_prev_close], axis=1).max(axis=1)
+        hist['ATR'] = true_range.ewm(alpha=1 / 14, adjust=False).mean()
+
+        # Stochastic Oscillator (9, 3, 3)
+        stoch_period = 9
+        low_min = hist['Low'].rolling(stoch_period).min()
+        high_max = hist['High'].rolling(stoch_period).max()
+        hist['Stoch_K'] = 100 * (hist['Close'] - low_min) / (high_max - low_min).replace(0, float('nan'))
+        hist['Stoch_D'] = hist['Stoch_K'].rolling(3).mean()
+
         ema12 = hist['Close'].ewm(span=12, adjust=False).mean()
         ema26 = hist['Close'].ewm(span=26, adjust=False).mean()
         macd_line = ema12 - ema26
@@ -62,6 +76,9 @@ def get_stock_data(ticker):
             'bb_upper': safe_list(hist['BB_Upper']),
             'bb_lower': safe_list(hist['BB_Lower']),
             'vol_ma20': safe_list(hist['Vol_MA20']),
+            'atr': safe_list(hist['ATR']),
+            'stoch_k': safe_list(hist['Stoch_K']),
+            'stoch_d': safe_list(hist['Stoch_D']),
         }
 
         return jsonify(data)
