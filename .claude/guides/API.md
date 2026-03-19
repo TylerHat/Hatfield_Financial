@@ -187,6 +187,206 @@ Simulates trades for a strategy over a date range and returns performance metric
 
 ---
 
+## Authentication Endpoints
+
+### POST `/api/auth/register`
+
+Create a new user account. No auth required.
+
+**Rate limit:** 3 requests/hour per IP.
+
+**Request body**
+
+```json
+{
+  "username": "string (3-30 chars)",
+  "email": "string (valid email)",
+  "password": "string (8+ chars, uppercase, lowercase, digit)"
+}
+```
+
+**Response (201)**
+
+```json
+{
+  "token": "eyJhbGciOi...",
+  "user": {
+    "id": 1,
+    "username": "tyler",
+    "email": "tyler@example.com",
+    "created_at": "2026-03-18T12:00:00"
+  }
+}
+```
+
+**Errors:** `400` validation failure, `409` email/username already exists.
+
+---
+
+### POST `/api/auth/login`
+
+Authenticate and receive a JWT token. No auth required.
+
+**Rate limit:** 5 requests/minute per IP.
+
+**Request body**
+
+```json
+{
+  "email": "string",
+  "password": "string"
+}
+```
+
+**Response (200)**
+
+```json
+{
+  "token": "eyJhbGciOi...",
+  "user": { "id": 1, "username": "tyler", "email": "tyler@example.com", "created_at": "..." }
+}
+```
+
+**Errors:** `401` invalid credentials.
+
+---
+
+### GET `/api/auth/me`
+
+Validate stored token and return current user. Requires `Authorization: Bearer <token>`.
+
+**Response (200)**
+
+```json
+{
+  "user": { "id": 1, "username": "tyler", "email": "tyler@example.com", "created_at": "..." }
+}
+```
+
+**Errors:** `401` missing/invalid/expired token.
+
+---
+
+## User Data Endpoints
+
+All user data endpoints require `Authorization: Bearer <token>`. Returns `401` if missing or invalid.
+
+### GET `/api/user/watchlists`
+
+List all watchlists with their ticker items.
+
+**Response (200)**
+
+```json
+{
+  "watchlists": [
+    {
+      "id": 1,
+      "name": "Tech Stocks",
+      "created_at": "...",
+      "items": [
+        { "id": 1, "ticker": "AAPL", "added_at": "..." }
+      ]
+    }
+  ]
+}
+```
+
+### POST `/api/user/watchlists`
+
+Create a new watchlist.
+
+**Request body:** `{ "name": "string (required)" }`
+
+**Response (201):** `{ "watchlist": { ... } }`
+
+### POST `/api/user/watchlists/<id>/items`
+
+Add a ticker to a watchlist.
+
+**Request body:** `{ "ticker": "AAPL" }`
+
+**Response (201):** `{ "item": { ... } }`
+
+**Errors:** `404` watchlist not found or not owned, `409` ticker already in watchlist.
+
+### DELETE `/api/user/watchlists/<id>/items/<ticker>`
+
+Remove a ticker from a watchlist.
+
+**Response (200):** `{ "message": "Removed" }`
+
+---
+
+### GET `/api/user/portfolio`
+
+List all portfolio holdings.
+
+**Response (200)**
+
+```json
+{
+  "holdings": [
+    {
+      "id": 1,
+      "ticker": "AAPL",
+      "shares": 10.0,
+      "cost_basis": 150.00,
+      "acquired_at": "2024-01-15",
+      "notes": "Long-term hold",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
+}
+```
+
+### POST `/api/user/portfolio`
+
+Add a new holding.
+
+**Request body:** `{ "ticker": "AAPL", "shares": 10, "cost_basis": 150.00, "acquired_at": "2024-01-15", "notes": "optional" }`
+
+**Response (201):** `{ "holding": { ... } }`
+
+### PUT `/api/user/portfolio/<id>`
+
+Update an existing holding. Accepts any subset of: `ticker`, `shares`, `cost_basis`, `acquired_at`, `notes`.
+
+**Response (200):** `{ "holding": { ... } }`
+
+### DELETE `/api/user/portfolio/<id>`
+
+Remove a holding.
+
+**Response (200):** `{ "message": "Deleted" }`
+
+---
+
+### GET `/api/user/settings`
+
+Get user settings (auto-creates defaults on first call).
+
+**Response (200)**
+
+```json
+{
+  "settings": {
+    "default_strategy": "none",
+    "default_date_range_months": 6,
+    "updated_at": "..."
+  }
+}
+```
+
+### PUT `/api/user/settings`
+
+Update settings. Accepts any subset of: `default_strategy`, `default_date_range_months`.
+
+**Response (200):** `{ "settings": { ... } }`
+
+---
+
 ## Error Responses
 
 All endpoints return errors in this shape:
@@ -197,8 +397,11 @@ All endpoints return errors in this shape:
 
 | HTTP Status | Meaning |
 |-------------|---------|
+| `400` | Invalid parameter (e.g. unknown strategy key, validation failure) |
+| `401` | Missing, invalid, or expired auth token |
 | `404` | Ticker not found or no data available |
-| `400` | Invalid parameter (e.g. unknown strategy key) |
+| `409` | Conflict (e.g. duplicate email/username, ticker already in watchlist) |
+| `429` | Rate limit exceeded (`Too many requests. Please try again later.`) |
 | `500` | Yahoo Finance error, rate limit, or network timeout |
 
 Rate limit errors surface as: `"Yahoo Finance rate limit reached. Wait a moment and try again."`

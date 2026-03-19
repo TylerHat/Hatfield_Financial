@@ -112,7 +112,8 @@ export default function StockInfo({ ticker }) {
       </div>
 
       {/* ── Analysis cards ───────────────────────────────────────── */}
-      <div className="info-cards">
+      {/* Row 1: Valuation, Momentum, 52-Week Range */}
+      <div className="info-cards-row info-cards-row--top">
 
         {/* Valuation */}
         <div className="info-card">
@@ -191,6 +192,11 @@ export default function StockInfo({ ticker }) {
             <p className="card-detail">Range data not available.</p>
           )}
         </div>
+
+      </div>
+
+      {/* Row 2: Price Action, MACD, Volatility, Volume */}
+      <div className="info-cards-row info-cards-row--bottom">
 
         {/* Consolidation */}
         <div className="info-card">

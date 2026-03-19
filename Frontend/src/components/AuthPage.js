@@ -6,7 +6,6 @@ function AuthPage() {
   const { login, register } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -39,9 +38,9 @@ function AuthPage() {
 
     try {
       if (isLogin) {
-        await login(email, password);
+        await login(username, password);
       } else {
-        await register(username, email, password);
+        await register(username, password);
       }
     } catch (err) {
       setError(err.message);
@@ -68,30 +67,15 @@ function AuthPage() {
         {error && <div className="auth-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          {!isLogin && (
-            <div className="auth-field">
-              <label htmlFor="username">Username</label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="3-30 characters"
-                autoComplete="username"
-                required
-              />
-            </div>
-          )}
-
           <div className="auth-field">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="username">Username</label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={isLogin ? 'Enter username' : '3-30 characters'}
+              autoComplete="username"
               required
             />
           </div>

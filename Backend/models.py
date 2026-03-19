@@ -9,7 +9,6 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(30), unique=True, nullable=False)
-    email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
@@ -23,7 +22,6 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
-            'email': self.email,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
