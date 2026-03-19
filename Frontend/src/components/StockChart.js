@@ -42,6 +42,9 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const [error, setError] = useState(null);
   const [strategyError, setStrategyError] = useState(null);
 
+  // Track which chart is expanded (null = none)
+  const [expandedChart, setExpandedChart] = useState(null);
+
   // Keep signal reasons accessible inside Chart.js tooltip callbacks
   const signalReasonRef = useRef({});
 
@@ -334,6 +337,71 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   };
 
   // ── MACD chart ───────────────────────────────────────────────────────────────
+
+  // (3) Histogram gradient intensity — scale opacity by magnitude
+  const histArr = macd_hist || [];
+  const histMax = Math.max(...histArr.map((v) => Math.abs(v || 0)), 0.001);
+  const histBg = histArr.map((v) => {
+    const intensity = Math.max(0.2, Math.abs(v || 0) / histMax);
+    return v >= 0
+      ? `rgba(63,185,80,${intensity.toFixed(2)})`
+      : `rgba(248,81,73,${intensity.toFixed(2)})`;
+  });
+  const histBorder = histArr.map((v) => (v >= 0 ? '#3fb950' : '#f85149'));
+
+  // (2) Crossover markers — find where MACD crosses the signal line
+  const macdArr = macd || [];
+  const sigArr = macd_signal || [];
+  const crossoverBullish = dates.map(() => null);
+  const crossoverBearish = dates.map(() => null);
+  for (let i = 1; i < macdArr.length; i++) {
+    if (macdArr[i] == null || macdArr[i - 1] == null || sigArr[i] == null || sigArr[i - 1] == null) continue;
+    const prevDiff = macdArr[i - 1] - sigArr[i - 1];
+    const currDiff = macdArr[i] - sigArr[i];
+    if (prevDiff <= 0 && currDiff > 0) crossoverBullish[i] = macdArr[i]; // bullish crossover
+    if (prevDiff >= 0 && currDiff < 0) crossoverBearish[i] = macdArr[i]; // bearish crossover
+  }
+
+  // (4) Divergence detection — price vs MACD divergence
+  // Find local peaks/troughs in 10-bar windows and compare price vs MACD direction
+  const divergenceBullish = dates.map(() => null);
+  const divergenceBearish = dates.map(() => null);
+  const divWindow = 10;
+  const closeArr = close || [];
+  if (macdArr.length > divWindow * 3) {
+    // Find local highs and lows
+    const localHighs = [];
+    const localLows = [];
+    for (let i = divWindow; i < macdArr.length - divWindow; i++) {
+      if (closeArr[i] == null || macdArr[i] == null) continue;
+      let isHigh = true;
+      let isLow = true;
+      for (let j = i - divWindow; j <= i + divWindow; j++) {
+        if (j === i || closeArr[j] == null) continue;
+        if (closeArr[j] >= closeArr[i]) isHigh = false;
+        if (closeArr[j] <= closeArr[i]) isLow = false;
+      }
+      if (isHigh) localHighs.push(i);
+      if (isLow) localLows.push(i);
+    }
+    // Bearish divergence: price makes higher high but MACD makes lower high
+    for (let k = 1; k < localHighs.length; k++) {
+      const prev = localHighs[k - 1];
+      const curr = localHighs[k];
+      if (closeArr[curr] > closeArr[prev] && macdArr[curr] < macdArr[prev]) {
+        divergenceBearish[curr] = macdArr[curr];
+      }
+    }
+    // Bullish divergence: price makes lower low but MACD makes higher low
+    for (let k = 1; k < localLows.length; k++) {
+      const prev = localLows[k - 1];
+      const curr = localLows[k];
+      if (closeArr[curr] < closeArr[prev] && macdArr[curr] > macdArr[prev]) {
+        divergenceBullish[curr] = macdArr[curr];
+      }
+    }
+  }
+
   const macdData = {
     labels: dates,
     datasets: [
@@ -341,10 +409,23 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         type: 'bar',
         label: 'Histogram',
         data: macd_hist,
-        backgroundColor: (macd_hist || []).map((v) => (v >= 0 ? 'rgba(63,185,80,0.5)' : 'rgba(248,81,73,0.5)')),
-        borderColor: (macd_hist || []).map((v) => (v >= 0 ? '#3fb950' : '#f85149')),
+        backgroundColor: histBg,
+        borderColor: histBorder,
         borderWidth: 1,
-        order: 2,
+        order: 5,
+      },
+      // (1) Zero line
+      {
+        type: 'line',
+        label: 'Zero',
+        data: dates.map(() => 0),
+        borderColor: 'rgba(139,148,158,0.5)',
+        borderWidth: 1,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        pointHitRadius: 0,
+        fill: false,
+        order: 4,
       },
       {
         type: 'line',
@@ -355,7 +436,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         pointRadius: 0,
         tension: 0.15,
         fill: false,
-        order: 1,
+        order: 2,
       },
       {
         type: 'line',
@@ -366,6 +447,62 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         pointRadius: 0,
         tension: 0.15,
         fill: false,
+        order: 1,
+      },
+      // (2) Crossover markers
+      {
+        type: 'line',
+        label: '▲ Bullish Cross',
+        data: crossoverBullish,
+        showLine: false,
+        pointStyle: 'triangle',
+        pointRotation: 0,
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 8 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 10 : 0),
+        pointBackgroundColor: '#3fb950',
+        pointBorderColor: '#1a7f37',
+        pointBorderWidth: 1.5,
+        order: 0,
+      },
+      {
+        type: 'line',
+        label: '▼ Bearish Cross',
+        data: crossoverBearish,
+        showLine: false,
+        pointStyle: 'triangle',
+        pointRotation: 180,
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 8 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 10 : 0),
+        pointBackgroundColor: '#f85149',
+        pointBorderColor: '#b62324',
+        pointBorderWidth: 1.5,
+        order: 0,
+      },
+      // (4) Divergence callouts
+      {
+        type: 'line',
+        label: '◆ Bull Divergence',
+        data: divergenceBullish,
+        showLine: false,
+        pointStyle: 'rectRot',
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 7 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 9 : 0),
+        pointBackgroundColor: '#3fb950',
+        pointBorderColor: '#e6edf3',
+        pointBorderWidth: 2,
+        order: 0,
+      },
+      {
+        type: 'line',
+        label: '◆ Bear Divergence',
+        data: divergenceBearish,
+        showLine: false,
+        pointStyle: 'rectRot',
+        pointRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 7 : 0),
+        pointHoverRadius: (ctx) => (ctx.dataset.data[ctx.dataIndex] !== null ? 9 : 0),
+        pointBackgroundColor: '#f85149',
+        pointBorderColor: '#e6edf3',
+        pointBorderWidth: 2,
         order: 0,
       },
     ],
@@ -375,11 +512,18 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: {
         display: true,
         position: 'top',
-        labels: { color: '#8b949e', usePointStyle: true, boxWidth: 8, font: { size: 11 } },
+        labels: {
+          color: '#8b949e',
+          usePointStyle: true,
+          boxWidth: 8,
+          font: { size: 11 },
+          filter: (item) => item.text !== 'Zero',
+        },
       },
       title: {
         display: true,
@@ -388,6 +532,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         font: { size: 12 },
         padding: { bottom: 6 },
       },
+      // (5) Enhanced tooltip with momentum context
       tooltip: {
         backgroundColor: '#161b22',
         borderColor: '#30363d',
@@ -396,8 +541,30 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         bodyColor: '#8b949e',
         callbacks: {
           label: (ctx) => {
+            if (ctx.dataset.label === 'Zero') return null;
             if (ctx.parsed.y === null) return null;
-            return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}`;
+            const label = ctx.dataset.label;
+            if (label === '▲ Bullish Cross') return `▲ Bullish Crossover: ${ctx.parsed.y.toFixed(4)}`;
+            if (label === '▼ Bearish Cross') return `▼ Bearish Crossover: ${ctx.parsed.y.toFixed(4)}`;
+            if (label === '◆ Bull Divergence') return `◆ Bullish Divergence — price lower low but MACD higher low`;
+            if (label === '◆ Bear Divergence') return `◆ Bearish Divergence — price higher high but MACD lower high`;
+            return `${label}: ${ctx.parsed.y.toFixed(4)}`;
+          },
+          afterBody: (items) => {
+            const idx = items[0]?.dataIndex;
+            if (idx == null || !histArr[idx]) return [];
+            const lines = [];
+            const curr = histArr[idx];
+            const prev = idx > 0 ? histArr[idx - 1] : null;
+            if (prev != null) {
+              const growing = Math.abs(curr) > Math.abs(prev);
+              const positive = curr >= 0;
+              if (positive && growing) lines.push('📈 Momentum building (bullish)');
+              else if (positive && !growing) lines.push('📉 Momentum fading (bullish weakening)');
+              else if (!positive && growing) lines.push('📉 Momentum building (bearish)');
+              else lines.push('📈 Momentum fading (bearish weakening)');
+            }
+            return lines;
           },
         },
       },
@@ -506,6 +673,45 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   const buySignals = signals.filter((s) => s.type === 'BUY');
   const sellSignals = signals.filter((s) => s.type === 'SELL');
 
+  function ExpandBtn({ chartKey }) {
+    return (
+      <button
+        className="chart-expand-btn"
+        onClick={() => setExpandedChart(chartKey)}
+        title="Expand chart"
+      >
+        ⛶
+      </button>
+    );
+  }
+
+  // Render a chart in expanded mode — fills the content area, pushes everything else down
+  if (expandedChart) {
+    const chartMap = {
+      price: { className: 'price-chart', node: <Line data={priceData} options={priceOptions} /> },
+      volume: { className: 'volume-chart', node: <Bar data={volumeData} options={volumeOptions} /> },
+      macd: { className: 'macd-chart', node: <Bar data={macdData} options={macdOptions} /> },
+      rsi: { className: 'rsi-chart', node: <Line data={rsiData} options={rsiOptions} /> },
+    };
+    const expanded = chartMap[expandedChart];
+    if (expanded) {
+      return (
+        <div className="chart-container">
+          <div className={`${expanded.className} chart-expanded`}>
+            <button
+              className="chart-close-btn"
+              onClick={() => setExpandedChart(null)}
+              title="Close expanded view"
+            >
+              ✕
+            </button>
+            {expanded.node}
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="chart-container">
       {strategyLoading && (
@@ -516,20 +722,24 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         <div className="chart-status error">{strategyError}</div>
       )}
 
-      <div className="price-chart">
+      <div className="price-chart chart-expandable">
+        <ExpandBtn chartKey="price" />
         <Line data={priceData} options={priceOptions} />
       </div>
 
-      <div className="volume-chart">
+      <div className="volume-chart chart-expandable">
+        <ExpandBtn chartKey="volume" />
         <Bar data={volumeData} options={volumeOptions} />
       </div>
 
-      <div className="macd-chart">
+      <div className="macd-chart chart-expandable">
+        <ExpandBtn chartKey="macd" />
         <Bar data={macdData} options={macdOptions} />
       </div>
 
       {showRsiPanel && (
-        <div className="rsi-chart">
+        <div className="rsi-chart chart-expandable">
+          <ExpandBtn chartKey="rsi" />
           <Line data={rsiData} options={rsiOptions} />
         </div>
       )}
