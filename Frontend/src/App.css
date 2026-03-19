@@ -506,11 +506,17 @@
   color: #8b949e;
 }
 
-/* Analysis cards grid */
-.info-cards {
+/* Analysis cards grid — two fixed rows */
+.info-cards-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
+  margin-bottom: 12px;
+}
+.info-cards-row--top {
+  grid-template-columns: repeat(3, 1fr);
+}
+.info-cards-row--bottom {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .info-card {

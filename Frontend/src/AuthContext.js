@@ -56,10 +56,10 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('hf_auth_expired', handleExpired);
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (username, password) => {
     const res = await apiFetch('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -72,10 +72,10 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const register = async (username, email, password) => {
+  const register = async (username, password) => {
     const res = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, email, password }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
     if (!res.ok) {

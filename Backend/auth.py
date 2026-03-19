@@ -44,16 +44,13 @@ def login_required(f):
     return decorated
 
 
-def validate_registration(username, email, password):
+def validate_registration(username, password):
     """Validate registration fields. Returns error string or None."""
     if not username or len(username) < 3 or len(username) > 30:
         return 'Username must be between 3 and 30 characters'
 
     if not re.match(r'^[a-zA-Z0-9_]+$', username):
         return 'Username can only contain letters, numbers, and underscores'
-
-    if not email or not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
-        return 'Invalid email address'
 
     if not password or len(password) < 8:
         return 'Password must be at least 8 characters'
