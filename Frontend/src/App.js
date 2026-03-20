@@ -10,7 +10,6 @@ import StatCard, { StatCardGrid } from './components/StatCard';
 import DataTable from './components/DataTable';
 import Badge from './components/Badge';
 import Backtester from './components/Backtester';
-import PerformanceDashboard from './components/PerformanceDashboard';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -309,12 +308,6 @@ function App() {
           Backtester
         </button>
         <button
-          className={`tab-btn ${activeTab === 'performance' ? 'active' : ''}`}
-          onClick={() => setActiveTab('performance')}
-        >
-          Performance
-        </button>
-        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -422,14 +415,6 @@ function App() {
           />
         )}
 
-        {activeTab === 'performance' && (
-          <PerformanceDashboard
-            ticker={submittedTicker}
-            strategy={strategy}
-            startDate={startDate}
-            endDate={endDate}
-          />
-        )}
 
         {activeTab === 'guide' && <StrategyGuide />}
       </main>
