@@ -20,6 +20,7 @@ from routes.strategies.ma_confluence import mac_bp
 from routes.auth_routes import auth_bp
 from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp
+from routes.batch_signals import batch_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -38,6 +39,7 @@ def ratelimit_handler(e):
 
 app.register_blueprint(stock_data_bp)
 app.register_blueprint(stock_info_bp)
+app.register_blueprint(batch_bp)          # before strategy BPs so /strategy/<name>/batch wins over /<ticker>
 app.register_blueprint(bb_bp)
 app.register_blueprint(ped_bp)
 app.register_blueprint(rs_bp)

@@ -6,6 +6,77 @@ from datetime import datetime, timedelta
 ped_bp = Blueprint('post_earnings_drift', __name__)
 
 
+def compute_signals(hist_df, earnings_dates):
+    """Compute post-earnings drift signals from OHLCV DataFrame and earnings dates.
+
+    Args:
+        hist_df: OHLCV DataFrame with DatetimeIndex.
+        earnings_dates: pd.DatetimeIndex or pd.Index of earnings report dates.
+    """
+    if earnings_dates is None or len(earnings_dates) == 0:
+        return []
+
+    hist = hist_df
+    signals = []
+
+    # Normalize timezone for comparison
+    hist_tz = hist.index.tz
+
+    # Align earnings timezone to hist
+    earn_idx = earnings_dates
+    if hasattr(earn_idx, 'tz'):
+        if earn_idx.tz is not None and hist_tz is None:
+            earn_idx = earn_idx.tz_localize(None)
+        elif earn_idx.tz is None and hist_tz is not None:
+            earn_idx = earn_idx.tz_localize(str(hist_tz))
+
+    for earn_date in earn_idx:
+        post = hist[hist.index > earn_date]
+        pre = hist[hist.index <= earn_date]
+
+        if len(post) < 2 or pre.empty:
+            continue
+
+        pre_close = float(pre.iloc[-1]['Close'])
+        day1_close = float(post.iloc[0]['Close'])
+        day2_close = float(post.iloc[1]['Close'])
+        earn_str = earn_date.strftime('%Y-%m-%d')
+
+        day1_pct = abs((day1_close - pre_close) / pre_close) if pre_close > 0 else 0
+
+        if day1_close > pre_close and day2_close > day1_close:
+            score = min(100, int(day1_pct * 500))
+            conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
+            signals.append({
+                'date': post.index[0].strftime('%Y-%m-%d'),
+                'price': round(day1_close, 2),
+                'type': 'BUY',
+                'score': score,
+                'conviction': conviction,
+                'reason': (
+                    f'Post-earnings upward drift detected '
+                    f'(earnings: {earn_str}, +{((day1_close/pre_close)-1)*100:.1f}% day 1)'
+                ),
+            })
+
+        elif day1_close < pre_close and day2_close < day1_close:
+            score = min(100, int(day1_pct * 500))
+            conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
+            signals.append({
+                'date': post.index[0].strftime('%Y-%m-%d'),
+                'price': round(day1_close, 2),
+                'type': 'SELL',
+                'score': score,
+                'conviction': conviction,
+                'reason': (
+                    f'Post-earnings downward drift detected '
+                    f'(earnings: {earn_str}, {((day1_close/pre_close)-1)*100:.1f}% day 1)'
+                ),
+            })
+
+    return signals
+
+
 @ped_bp.route('/api/strategy/post-earnings-drift/<ticker>')
 def post_earnings_drift(ticker):
     try:
@@ -21,80 +92,31 @@ def post_earnings_drift(ticker):
         if hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
-        # Attempt to retrieve earnings dates
         try:
             earnings = stock.earnings_dates
         except Exception:
             earnings = None
 
-        signals = []
+        earnings_idx = earnings.index if earnings is not None and not earnings.empty else pd.DatetimeIndex([])
 
-        if earnings is not None and not earnings.empty:
-            # Normalize timezone for comparison
-            hist_tz = hist.index.tz
-            if hist_tz is not None:
-                start_ts = pd.Timestamp(start).tz_localize(str(hist_tz))
-                end_ts = pd.Timestamp(end).tz_localize(str(hist_tz))
-            else:
-                start_ts = pd.Timestamp(start)
-                end_ts = pd.Timestamp(end)
+        # Filter earnings to user date range
+        hist_tz = hist.index.tz
+        if hist_tz is not None:
+            start_ts = pd.Timestamp(start).tz_localize(str(hist_tz))
+            end_ts = pd.Timestamp(end).tz_localize(str(hist_tz))
+        else:
+            start_ts = pd.Timestamp(start)
+            end_ts = pd.Timestamp(end)
 
-            # Align earnings timezone to hist
-            if earnings.index.tz is not None and hist_tz is None:
-                earnings.index = earnings.index.tz_localize(None)
-            elif earnings.index.tz is None and hist_tz is not None:
-                earnings.index = earnings.index.tz_localize(str(hist_tz))
+        # Align earnings tz before filtering
+        if earnings_idx.tz is not None and hist_tz is None:
+            earnings_idx = earnings_idx.tz_localize(None)
+        elif earnings_idx.tz is None and hist_tz is not None:
+            earnings_idx = earnings_idx.tz_localize(str(hist_tz))
 
-            earnings_in_range = earnings[
-                (earnings.index >= start_ts) & (earnings.index <= end_ts)
-            ]
+        earnings_in_range = earnings_idx[(earnings_idx >= start_ts) & (earnings_idx <= end_ts)]
 
-            for earn_date in earnings_in_range.index:
-                # Days in hist after the earnings date
-                post = hist[hist.index > earn_date]
-                pre = hist[hist.index <= earn_date]
-
-                if len(post) < 2 or pre.empty:
-                    continue
-
-                pre_close = float(pre.iloc[-1]['Close'])
-                day1_close = float(post.iloc[0]['Close'])
-                day2_close = float(post.iloc[1]['Close'])
-                earn_str = earn_date.strftime('%Y-%m-%d')
-
-                day1_pct = abs((day1_close - pre_close) / pre_close) if pre_close > 0 else 0
-
-                # Upward drift: day1 and day2 both above pre-earnings close
-                if day1_close > pre_close and day2_close > day1_close:
-                    score = min(100, int(day1_pct * 500))
-                    conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
-                    signals.append({
-                        'date': post.index[0].strftime('%Y-%m-%d'),
-                        'price': round(day1_close, 2),
-                        'type': 'BUY',
-                        'score': score,
-                        'conviction': conviction,
-                        'reason': (
-                            f'Post-earnings upward drift detected '
-                            f'(earnings: {earn_str}, +{((day1_close/pre_close)-1)*100:.1f}% day 1)'
-                        ),
-                    })
-
-                # Downward drift: day1 below pre-earnings close and continuing down
-                elif day1_close < pre_close and day2_close < day1_close:
-                    score = min(100, int(day1_pct * 500))
-                    conviction = 'HIGH' if score >= 60 else 'MEDIUM' if score >= 30 else 'LOW'
-                    signals.append({
-                        'date': post.index[0].strftime('%Y-%m-%d'),
-                        'price': round(day1_close, 2),
-                        'type': 'SELL',
-                        'score': score,
-                        'conviction': conviction,
-                        'reason': (
-                            f'Post-earnings downward drift detected '
-                            f'(earnings: {earn_str}, {((day1_close/pre_close)-1)*100:.1f}% day 1)'
-                        ),
-                    })
+        signals = compute_signals(hist, earnings_in_range)
 
         return jsonify({'signals': signals})
 

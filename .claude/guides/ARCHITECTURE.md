@@ -33,6 +33,7 @@ Hatfield_Financial/
 │       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
 │       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (30-min cache)
+│       ├── batch_signals.py            GET /api/strategy/<name>/batch — batch strategy signals for all S&P 500 (30-min cache)
 │       └── strategies/
 │           ├── bollinger_bands.py
 │           ├── mean_reversion.py
@@ -55,7 +56,7 @@ Hatfield_Financial/
             ├── StockChart.js           Price + Volume + MACD + ATR + Stochastic + OBV + RSI charts; expand/info UI; signal overlays
             ├── StockInfo.js            Three-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume) + (Trend Alignment, Earnings Proximity, Rel Strength vs SPY, Dividend Health)
             ├── StrategyGuide.js        Static strategy documentation tab
-            ├── Recommendations.js / Recommendations.css   Recommendations tab (filter bar, DataTable, on-demand strategy signals)
+            ├── Recommendations.js / Recommendations.css   Recommendations tab (filter bar, DataTable, batch strategy signals)
             ├── Badge.js / Badge.css
             ├── StatCard.js / StatCard.css
             └── DataTable.js / DataTable.css

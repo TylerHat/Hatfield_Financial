@@ -21,6 +21,7 @@ recommendations_bp = Blueprint('recommendations', __name__)
 
 _cache = SimpleCache()
 _CACHE_KEY = 'sp500_recommendations'
+_OHLCV_CACHE_KEY = 'sp500_ohlcv_raw'
 _CACHE_TTL = 1800  # 30 minutes
 
 # Lock to prevent multiple simultaneous fetches
@@ -215,6 +216,7 @@ def _fetch_all_data():
     all_tickers = tickers + ['SPY']
     try:
         raw = yf.download(all_tickers, period='1y', group_by='ticker', threads=True, progress=False)
+        _cache.set(_OHLCV_CACHE_KEY, raw)
     except Exception:
         return [], 0, len(tickers)
 

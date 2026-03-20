@@ -369,7 +369,7 @@ Maps signal dates to chart data index positions so scatter points align with pri
 **File**: `components/Recommendations.js` + `Recommendations.css`
 **Import**: `import Recommendations from './components/Recommendations'`
 
-S&P 500 batch screener tab. Fetches `/api/recommendations`, displays a filterable DataTable of all stocks with technical and fundamental signals. Supports on-demand strategy signal analysis for individual stocks.
+S&P 500 batch screener tab. Fetches `/api/recommendations`, displays a filterable DataTable of all stocks with technical and fundamental signals. Selecting a strategy fetches batch signals for all stocks and adds dynamic columns to the table.
 
 ### Props
 
@@ -382,32 +382,29 @@ S&P 500 batch screener tab. Fetches `/api/recommendations`, displays a filterabl
 | State | Type | Description |
 |-------|------|-------------|
 | `stocks` | array | Full list of stock objects from API |
-| `filter` | string | Text filter applied to ticker/name |
-| `selectedStrategy` | string \| null | Strategy key for on-demand signal fetch |
-| `expandedTicker` | string \| null | Ticker whose detail panel is currently open |
+| `filter` | string | Active recommendation filter key (`all`, `strong_buy`, etc.) |
+| `selectedStrategy` | string | Strategy key (`none` or a strategy slug) |
+| `batchSignals` | `{ loading, error, data }` | Batch signal results keyed by ticker |
 
 ### Features
 
-- **Filter bar**: text input filters the stock list by ticker or company name
-- **Strategy dropdown**: select a strategy to fetch signals for the expanded stock
-- **DataTable with clickable rows**: uses the `onRowClick` prop to expand a detail panel for the clicked stock
-- **Detail panel**: shows on-demand strategy signals for the selected stock, with a button to navigate to full Stock Analysis
-- **Loading state**: renders a loading indicator while the API returns `202 (loading)`; polls until data is ready
+- **Filter bar**: buttons filter by recommendation type (All, Strong Buy, Buy, Hold, Sell, Strong Sell) with counts
+- **Strategy dropdown**: select a strategy to fetch `/api/strategy/<name>/batch` for all S&P 500 stocks
+- **Dynamic signal columns**: when a strategy is selected, 4 columns are appended — Signal (BUY/SELL Badge or "None"), Signal Date, Conviction, Score
+- **DataTable with clickable rows**: uses `onRowClick` to navigate to Stock Analysis tab
+- **Loading state**: renders a loading banner while the API returns `202 (loading)`; retries after 10s
 
 ### CSS Classes
 
 ```
-recommendations
-recommendations__header
-recommendations__filter-bar
-recommendations__filter-input
-recommendations__strategy-select
-recommendations__table
-recommendations__detail-panel
-recommendations__detail-header
-recommendations__detail-signals
-recommendations__loading
-recommendations__nav-btn
+rec-tab
+rec-header / rec-header__title / rec-header__meta
+rec-filter-bar / rec-filter-btn / rec-filter-btn--active / rec-filter-btn__count
+rec-strategy-bar / rec-strategy-bar__label / rec-strategy-bar__loading / rec-strategy-bar__error
+rec-loading-banner / rec-loading-banner__title / rec-loading-banner__subtitle / rec-loading-spinner
+rec-positive / rec-negative / rec-neutral
+rec-detail / rec-detail__header / rec-detail__ticker / rec-detail__close / rec-detail__nav-link
+rec-signal-card / rec-signal-card__field / rec-signal-card__label / rec-signal-card__value
 ```
 
 ---

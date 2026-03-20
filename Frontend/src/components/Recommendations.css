@@ -105,6 +105,18 @@
   border-color: #58a6ff;
 }
 
+.rec-strategy-bar__loading {
+  font-size: 0.8rem;
+  color: #58a6ff;
+  display: flex;
+  align-items: center;
+}
+
+.rec-strategy-bar__error {
+  font-size: 0.8rem;
+  color: #f85149;
+}
+
 /* ── Loading banner ───────────────────────────────────────────────────────── */
 
 .rec-loading-banner {

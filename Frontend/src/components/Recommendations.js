@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
@@ -76,7 +76,7 @@ const REC_COLUMNS = [
       <span>
         <strong style={{ color: '#e6edf3' }}>{val}</strong>
         <span style={{ color: '#8b949e', marginLeft: 6, fontSize: '0.8rem' }}>
-          {row.name && row.name.length > 25 ? row.name.slice(0, 25) + '…' : row.name}
+          {row.name && row.name.length > 25 ? row.name.slice(0, 25) + '\u2026' : row.name}
         </span>
       </span>
     ),
@@ -87,7 +87,7 @@ const REC_COLUMNS = [
     numeric: true,
     sortable: true,
     width: '100px',
-    render: (val) => val != null ? `$${val.toFixed(2)}` : '—',
+    render: (val) => val != null ? `$${val.toFixed(2)}` : '\u2014',
   },
   {
     key: 'dayChangePct',
@@ -96,7 +96,7 @@ const REC_COLUMNS = [
     sortable: true,
     width: '110px',
     render: (val) => {
-      if (val == null) return '—';
+      if (val == null) return '\u2014';
       const cls = val > 0 ? 'rec-positive' : val < 0 ? 'rec-negative' : 'rec-neutral';
       return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
     },
@@ -145,10 +145,48 @@ const REC_COLUMNS = [
     sortable: true,
     width: '110px',
     render: (val) => {
-      if (val == null) return '—';
+      if (val == null) return '\u2014';
       const cls = val > 0 ? 'rec-positive' : val < 0 ? 'rec-negative' : 'rec-neutral';
       return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
     },
+  },
+];
+
+const SIGNAL_COLUMNS = [
+  {
+    key: 'signalType',
+    label: 'Signal',
+    sortable: true,
+    width: '90px',
+    render: (val) => {
+      if (!val) return <span className="rec-neutral">None</span>;
+      return <Badge variant={val === 'BUY' ? 'buy' : 'sell'} size="sm">{val}</Badge>;
+    },
+  },
+  {
+    key: 'signalDate',
+    label: 'Signal Date',
+    sortable: true,
+    width: '110px',
+    render: (val) => val || '',
+  },
+  {
+    key: 'signalConviction',
+    label: 'Conviction',
+    sortable: true,
+    width: '100px',
+    render: (val) => {
+      if (!val) return '';
+      return <Badge variant={val.toLowerCase()} size="sm">{val}</Badge>;
+    },
+  },
+  {
+    key: 'signalScore',
+    label: 'Score',
+    numeric: true,
+    sortable: true,
+    width: '80px',
+    render: (val) => val != null ? val : '',
   },
 ];
 
@@ -158,8 +196,7 @@ export default function Recommendations({ onNavigateToStock }) {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [selectedStrategy, setSelectedStrategy] = useState('none');
-  const [expandedTicker, setExpandedTicker] = useState(null);
-  const [strategySignals, setStrategySignals] = useState({});
+  const [batchSignals, setBatchSignals] = useState({ loading: false, error: null, data: {} });
 
   // Fetch recommendations on mount
   useEffect(() => {
@@ -174,7 +211,6 @@ export default function Recommendations({ onNavigateToStock }) {
         if (data.error) {
           setError(data.error);
         } else if (data.status === 'loading') {
-          // Backend is still fetching — retry after a delay
           setTimeout(() => {
             if (!cancelled) {
               setLoading(true);
@@ -189,7 +225,7 @@ export default function Recommendations({ onNavigateToStock }) {
                 .catch(() => { if (!cancelled) { setError('Failed to load data.'); setLoading(false); } });
             }
           }, 10000);
-          return; // stay in loading state
+          return;
         } else {
           setStocks(data.stocks || []);
         }
@@ -202,50 +238,40 @@ export default function Recommendations({ onNavigateToStock }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch strategy signals when expanded ticker or strategy changes
-  const fetchSignals = useCallback((ticker) => {
-    if (selectedStrategy === 'none' || !ticker) return;
-
-    setStrategySignals((prev) => ({
-      ...prev,
-      [ticker]: { loading: true, error: null, signals: [] },
-    }));
-
-    apiFetch(`/api/strategy/${selectedStrategy}/${ticker}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setStrategySignals((prev) => ({
-          ...prev,
-          [ticker]: { loading: false, error: data.error || null, signals: data.signals || [] },
-        }));
-      })
-      .catch(() => {
-        setStrategySignals((prev) => ({
-          ...prev,
-          [ticker]: { loading: false, error: 'Failed to fetch signals.', signals: [] },
-        }));
-      });
-  }, [selectedStrategy]);
-
-  // Handle row click
-  const handleRowClick = useCallback((row) => {
-    const ticker = row.ticker;
-    if (expandedTicker === ticker) {
-      setExpandedTicker(null);
+  // Fetch batch signals when strategy changes
+  useEffect(() => {
+    if (selectedStrategy === 'none') {
+      setBatchSignals({ loading: false, error: null, data: {} });
       return;
     }
-    setExpandedTicker(ticker);
-    if (selectedStrategy !== 'none') {
-      fetchSignals(ticker);
-    }
-  }, [expandedTicker, selectedStrategy, fetchSignals]);
 
-  // Re-fetch signals when strategy changes and a ticker is expanded
-  useEffect(() => {
-    if (expandedTicker && selectedStrategy !== 'none') {
-      fetchSignals(expandedTicker);
-    }
-  }, [selectedStrategy, expandedTicker, fetchSignals]);
+    let cancelled = false;
+    setBatchSignals({ loading: true, error: null, data: {} });
+
+    apiFetch(`/api/strategy/${selectedStrategy}/batch`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.error) {
+          setBatchSignals({ loading: false, error: data.error, data: {} });
+        } else if (data.status === 'loading') {
+          setBatchSignals({ loading: false, error: 'S&P 500 data not yet loaded. Please wait for the table to load first.', data: {} });
+        } else {
+          setBatchSignals({ loading: false, error: null, data: data.signals || {} });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBatchSignals({ loading: false, error: 'Failed to fetch signals.', data: {} });
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedStrategy]);
+
+  // Dynamic columns: add signal columns when a strategy is selected
+  const activeColumns = useMemo(() => {
+    if (selectedStrategy === 'none') return REC_COLUMNS;
+    return [...REC_COLUMNS, ...SIGNAL_COLUMNS];
+  }, [selectedStrategy]);
 
   // Compute filter counts
   const counts = {};
@@ -259,15 +285,19 @@ export default function Recommendations({ onNavigateToStock }) {
     ? stocks
     : stocks.filter((s) => s.recommendationKey === filter);
 
-  // Add _rowClass for selected row
-  const rows = filteredStocks.map((s) => ({
-    ...s,
-    _rowClass: s.ticker === expandedTicker ? 'rec-row--selected' : '',
-  }));
-
-  // Get expanded stock's signal data
-  const expandedData = expandedTicker ? strategySignals[expandedTicker] : null;
-  const expandedStock = expandedTicker ? stocks.find((s) => s.ticker === expandedTicker) : null;
+  // Merge signal data into rows
+  const rows = useMemo(() => {
+    return filteredStocks.map((s) => {
+      const sig = batchSignals.data[s.ticker] || null;
+      return {
+        ...s,
+        signalType: sig?.type || null,
+        signalDate: sig?.date || null,
+        signalConviction: sig?.conviction || null,
+        signalScore: sig?.score ?? null,
+      };
+    });
+  }, [filteredStocks, batchSignals.data]);
 
   return (
     <div className="rec-tab">
@@ -322,12 +352,21 @@ export default function Recommendations({ onNavigateToStock }) {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+          {batchSignals.loading && (
+            <span className="rec-strategy-bar__loading">
+              <span className="rec-loading-spinner" />
+              Computing signals for all stocks…
+            </span>
+          )}
+          {batchSignals.error && (
+            <span className="rec-strategy-bar__error">{batchSignals.error}</span>
+          )}
         </div>
       )}
 
       {/* Data table */}
       <DataTable
-        columns={REC_COLUMNS}
+        columns={activeColumns}
         rows={rows}
         defaultSortKey="ticker"
         defaultSortDir="asc"
@@ -336,94 +375,8 @@ export default function Recommendations({ onNavigateToStock }) {
         error={error}
         emptyMessage="No stocks match the selected filter."
         rowKey="ticker"
-        onRowClick={handleRowClick}
+        onRowClick={onNavigateToStock ? (row) => onNavigateToStock(row.ticker) : undefined}
       />
-
-      {/* Detail panel */}
-      {expandedTicker && expandedStock && (
-        <div className="rec-detail">
-          <div className="rec-detail__header">
-            <span className="rec-detail__ticker">
-              {expandedTicker} — {expandedStock.name}
-            </span>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {onNavigateToStock && (
-                <button
-                  className="rec-detail__nav-link"
-                  onClick={() => onNavigateToStock(expandedTicker)}
-                >
-                  Open in Stock Analysis →
-                </button>
-              )}
-              <button
-                className="rec-detail__close"
-                onClick={() => setExpandedTicker(null)}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {selectedStrategy === 'none' && (
-            <p className="rec-detail__prompt">
-              Select a strategy above to view signals for {expandedTicker}.
-            </p>
-          )}
-
-          {selectedStrategy !== 'none' && expandedData?.loading && (
-            <p className="rec-detail__loading">
-              <span className="rec-loading-spinner" />
-              Loading {STRATEGIES.find((s) => s.value === selectedStrategy)?.label} signals…
-            </p>
-          )}
-
-          {selectedStrategy !== 'none' && expandedData?.error && (
-            <p className="rec-detail__error">{expandedData.error}</p>
-          )}
-
-          {selectedStrategy !== 'none' && expandedData && !expandedData.loading && !expandedData.error && (
-            <div className="rec-detail__signals">
-              {expandedData.signals.length === 0 && (
-                <p className="rec-detail__no-signals">
-                  No signals generated for {expandedTicker} with this strategy.
-                </p>
-              )}
-              {expandedData.signals.slice(-5).reverse().map((sig, i) => (
-                <div key={i} className="rec-signal-card">
-                  <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Date</span>
-                    <span className="rec-signal-card__value">{sig.date}</span>
-                  </div>
-                  <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Price</span>
-                    <span className="rec-signal-card__value">${sig.price?.toFixed(2)}</span>
-                  </div>
-                  <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Signal</span>
-                    <span className="rec-signal-card__value">
-                      <Badge variant={sig.type === 'BUY' ? 'buy' : 'sell'} size="sm">
-                        {sig.type}
-                      </Badge>
-                    </span>
-                  </div>
-                  <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Conviction</span>
-                    <span className="rec-signal-card__value">
-                      <Badge variant={sig.conviction?.toLowerCase()} size="sm">
-                        {sig.conviction} ({sig.score})
-                      </Badge>
-                    </span>
-                  </div>
-                  <div className="rec-signal-card__field rec-signal-card__reason">
-                    <span className="rec-signal-card__label">Reason</span>
-                    <span className="rec-signal-card__value">{sig.reason}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -245,6 +245,46 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 
 ---
 
+## GET `/api/strategy/<strategy_name>/batch`
+
+Runs a strategy on all S&P 500 stocks using cached OHLCV data. Returns the most recent signal (within 30 days) for each ticker. Cached per strategy for 30 minutes.
+
+**Path params**
+
+| Param | Description |
+|-------|-------------|
+| `strategy_name` | One of: `rsi`, `bollinger-bands`, `macd-crossover`, `mean-reversion`, `volatility-squeeze`, `52-week-breakout`, `ma-confluence`, `relative-strength`, `post-earnings-drift` |
+
+**Requires**: S&P 500 OHLCV data must be cached first (load the Recommendations tab). Returns 202 if not yet available.
+
+**Response** `200`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `strategy` | string | Strategy key echoed back |
+| `signals` | object | Map of `ticker → signal \| null`. Null means no signal in past 30 days. |
+| `signals[ticker].type` | string | `BUY` or `SELL` |
+| `signals[ticker].date` | string | `YYYY-MM-DD` |
+| `signals[ticker].price` | number | Price at signal |
+| `signals[ticker].conviction` | string | `HIGH`, `MEDIUM`, or `LOW` |
+| `signals[ticker].score` | number | Numeric score |
+| `signalCount` | number | Count of non-null signals |
+| `lastUpdated` | string | ISO timestamp |
+
+**Response** `202` (OHLCV not yet cached)
+
+```json
+{ "status": "loading", "message": "S&P 500 data not yet loaded..." }
+```
+
+**Response** `400` (unknown strategy)
+
+```json
+{ "error": "Unknown strategy: foo. Valid: [...]" }
+```
+
+---
+
 ## GET `/api/backtest/<ticker>`
 
 Simulates trades for a strategy over a date range and returns performance metrics.
