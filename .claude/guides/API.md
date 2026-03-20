@@ -187,6 +187,64 @@ Returns BUY/SELL signals for the given strategy. See `FIN_STRATEGIES.md` for sig
 
 ---
 
+## GET `/api/recommendations`
+
+Batch S&P 500 stock recommendations with technical + fundamental signals. Data is cached in-memory for 30 minutes.
+
+**Query params**: None
+
+**Response (200)**
+
+```json
+{
+  "stocks": [
+    {
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "currentPrice": 185.20,
+      "dayChangePct": 1.25,
+      "analystRecommendation": "Strong Buy",
+      "recommendationKey": "strong_buy",
+      "priceAction": "Bullish",
+      "macdStatus": "BULLISH CROSSOVER",
+      "volatilityStatus": "Normal Volatility",
+      "trendAlignment": "Strong Uptrend",
+      "momentum": "STRONG MOMENTUM"
+    }
+  ],
+  "lastUpdated": "2026-03-19T14:30:00",
+  "count": 485,
+  "failedCount": 18,
+  "totalTickers": 503
+}
+```
+
+**Response (202)** — returned while data is still being fetched on first request or after cache expiry:
+
+```json
+{ "status": "loading" }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stocks[].ticker` | string | Uppercase ticker symbol |
+| `stocks[].name` | string | Company name |
+| `stocks[].currentPrice` | number | Latest price |
+| `stocks[].dayChangePct` | number | Intraday % change |
+| `stocks[].analystRecommendation` | string | e.g. `Strong Buy`, `Buy`, `Hold` |
+| `stocks[].recommendationKey` | string | Machine-readable key e.g. `strong_buy` |
+| `stocks[].priceAction` | string | Price action status |
+| `stocks[].macdStatus` | string | MACD status string |
+| `stocks[].volatilityStatus` | string | Volatility status string |
+| `stocks[].trendAlignment` | string | Trend alignment label |
+| `stocks[].momentum` | string | Momentum status |
+| `lastUpdated` | string | ISO timestamp of last cache refresh |
+| `count` | number | Number of stocks successfully fetched |
+| `failedCount` | number | Number of tickers that failed to fetch |
+| `totalTickers` | number | Total S&P 500 tickers attempted |
+
+---
+
 ## GET `/api/backtest/<ticker>`
 
 Simulates trades for a strategy over a date range and returns performance metrics.

@@ -125,14 +125,12 @@
 | Task | Time | Priority | Impact |
 |------|------|----------|--------|
 | Portfolio backtester | 6 hours | HIGH | "Test strategy on your holdings" |
-| Performance dashboard | 3 hours | MEDIUM | Track accuracy vs portfolio |
 | Fundamentals expansion (Alpha Vantage) | 2 hours | LOW | Richer data (earnings surprise, growth) |
 | Volatility squeeze + VWAP strategies | 1 hour | LOW | Advanced trader support |
 | **Total** | **12 hours** | | **Credibility** |
 
 **Expected Outcome**:
 - Backtester: "This strategy made +15% on AAPL in 2024"
-- Performance dashboard: "Avg win rate: 58%, avg profit/trade: +2.1%"
 - Users trust the system
 
 ---
@@ -411,7 +409,7 @@ Before building portfolio tracker, confirm with intended users:
 **Your path to success**:
 1. **Phase 1** (3 hours): Improve signal quality (trend filters, new strategies)
 2. **Phase 2** (10 hours): Enable portfolio tracking (users can invest)
-3. **Phase 3** (12 hours): Build credibility (backtester, screener, performance dashboard)
+3. **Phase 3** (12 hours): Build credibility (backtester, screener)
 4. **Phase 4** (Ongoing): Monetize (free core, premium add-ons)
 
 **By Month 3**: Launch MVP with 6+ strategies, portfolio tracking, and earnings calendar.

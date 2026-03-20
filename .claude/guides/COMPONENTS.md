@@ -169,6 +169,7 @@ Sortable, scannable data table for signals, screener results, and any tabular fi
 | `error` | string \| null | `null` | Shows red error state when set |
 | `caption` | string \| null | `null` | Accessible `<caption>` for screen readers |
 | `rowKey` | string \| function \| null | `null` | React key: field name, `(row, i) => key` function, or falls back to index |
+| `onRowClick` | `(row) => void` \| null | `null` | Called when a row is clicked. Adds `dt-tr--clickable` cursor style to rows. |
 
 ### ColumnDef Shape
 
@@ -360,6 +361,54 @@ Each chart panel has two buttons (visible on hover):
 ### Helper: `buildSignalArray()`
 
 Maps signal dates to chart data index positions so scatter points align with price line x-axis.
+
+---
+
+## Recommendations
+
+**File**: `components/Recommendations.js` + `Recommendations.css`
+**Import**: `import Recommendations from './components/Recommendations'`
+
+S&P 500 batch screener tab. Fetches `/api/recommendations`, displays a filterable DataTable of all stocks with technical and fundamental signals. Supports on-demand strategy signal analysis for individual stocks.
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `onNavigateToStock` | `(ticker: string) => void` | Callback to switch to Stock Analysis tab with the given ticker |
+
+### Internal State
+
+| State | Type | Description |
+|-------|------|-------------|
+| `stocks` | array | Full list of stock objects from API |
+| `filter` | string | Text filter applied to ticker/name |
+| `selectedStrategy` | string \| null | Strategy key for on-demand signal fetch |
+| `expandedTicker` | string \| null | Ticker whose detail panel is currently open |
+
+### Features
+
+- **Filter bar**: text input filters the stock list by ticker or company name
+- **Strategy dropdown**: select a strategy to fetch signals for the expanded stock
+- **DataTable with clickable rows**: uses the `onRowClick` prop to expand a detail panel for the clicked stock
+- **Detail panel**: shows on-demand strategy signals for the selected stock, with a button to navigate to full Stock Analysis
+- **Loading state**: renders a loading indicator while the API returns `202 (loading)`; polls until data is ready
+
+### CSS Classes
+
+```
+recommendations
+recommendations__header
+recommendations__filter-bar
+recommendations__filter-input
+recommendations__strategy-select
+recommendations__table
+recommendations__detail-panel
+recommendations__detail-header
+recommendations__detail-signals
+recommendations__loading
+recommendations__nav-btn
+```
 
 ---
 

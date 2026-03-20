@@ -669,7 +669,6 @@ for i in range(1, len(hist)):
 | VWAP deviation strategy | 1 hour | LOW | Intraday traders |
 | Fundamentals expansion (Alpha Vantage) | 4 hours | MEDIUM | Richer data |
 | Portfolio backtester | 8 hours | HIGH | Test strategies on real data |
-| Performance dashboard | 4 hours | MEDIUM | Track accuracy |
 | Crypto support | 2 hours | LOW | Market expansion |
 | **Total** | **24+ hours** | **MEDIUM-HIGH** | |
 

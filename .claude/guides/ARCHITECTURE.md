@@ -21,6 +21,8 @@ Hatfield_Financial/
 │   ├── auth.py                         JWT helpers (create/decode token), @login_required decorator
 │   ├── models.py                       SQLAlchemy models (User, Watchlist, Portfolio, Settings)
 │   ├── requirements.txt
+│   ├── sp500.py                        Static S&P 500 ticker list
+│   ├── cache.py                        Thread-safe in-memory cache with TTL
 │   ├── instance/                       SQLite database (hatfield.db, gitignored)
 │   ├── data/
 │   │   └── sp500_tickers.py            SP500_TICKERS, CRYPTO_TICKERS universe constants
@@ -30,6 +32,7 @@ Hatfield_Financial/
 │       ├── backtest.py                 GET /api/backtest/<ticker>
 │       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
+│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (30-min cache)
 │       └── strategies/
 │           ├── bollinger_bands.py
 │           ├── mean_reversion.py
@@ -52,6 +55,7 @@ Hatfield_Financial/
             ├── StockChart.js           Price + Volume + MACD + ATR + Stochastic + OBV + RSI charts; expand/info UI; signal overlays
             ├── StockInfo.js            Three-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume) + (Trend Alignment, Earnings Proximity, Rel Strength vs SPY, Dividend Health)
             ├── StrategyGuide.js        Static strategy documentation tab
+            ├── Recommendations.js / Recommendations.css   Recommendations tab (filter bar, DataTable, on-demand strategy signals)
             ├── Badge.js / Badge.css
             ├── StatCard.js / StatCard.css
             └── DataTable.js / DataTable.css
@@ -104,6 +108,7 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 
 ### Tab Structure
 - **Stock Analysis** — StockChart + StockInfo
+- **Recommendations** — Recommendations (S&P 500 batch screener with filter bar, strategy signals)
 - **Components** — Badge, StatCard, DataTable showcase
 - **Strategy Guide** — StrategyGuide (static docs)
 
