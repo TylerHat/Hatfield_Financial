@@ -34,6 +34,8 @@ import './DataTable.css';
  * rowKey           : string | ((row, i) => string)
  *                    Key field name or function for React key prop. Falls back
  *                    to row index if not set.
+ * onRowClick       : (row, index) => void
+ *                    Optional callback fired when a body row is clicked.
  */
 export default function DataTable({
   columns = [],
@@ -46,6 +48,7 @@ export default function DataTable({
   error = null,
   caption = null,
   rowKey = null,
+  onRowClick = null,
 }) {
   const [sortKey, setSortKey] = useState(defaultSortKey);
   const [sortDir, setSortDir] = useState(defaultSortDir);
@@ -196,6 +199,8 @@ export default function DataTable({
               <tr
                 key={getRowKey(row, i)}
                 className={['dt-tr', row._rowClass].filter(Boolean).join(' ')}
+                onClick={onRowClick ? () => onRowClick(row, i) : undefined}
+                style={onRowClick ? { cursor: 'pointer' } : undefined}
               >
                 {columns.map((col) => {
                   const raw = row[col.key];

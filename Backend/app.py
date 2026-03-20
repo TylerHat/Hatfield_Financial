@@ -19,6 +19,7 @@ from routes.strategies.breakout_52week import bk_bp
 from routes.strategies.ma_confluence import mac_bp
 from routes.auth_routes import auth_bp
 from routes.user_data import user_data_bp
+from routes.recommendations import recommendations_bp
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -49,6 +50,7 @@ app.register_blueprint(bk_bp)
 app.register_blueprint(mac_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(user_data_bp)
+app.register_blueprint(recommendations_bp)
 
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])

@@ -10,6 +10,7 @@ import StatCard, { StatCardGrid } from './components/StatCard';
 import DataTable from './components/DataTable';
 import Badge from './components/Badge';
 import Backtester from './components/Backtester';
+import Recommendations from './components/Recommendations';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -308,6 +309,12 @@ function App() {
           Backtester
         </button>
         <button
+          className={`tab-btn ${activeTab === 'recommendations' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recommendations')}
+        >
+          Recommendations
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -415,6 +422,16 @@ function App() {
           />
         )}
 
+
+        {activeTab === 'recommendations' && (
+          <Recommendations
+            onNavigateToStock={(ticker) => {
+              setInputValue(ticker);
+              setSubmittedTicker(ticker);
+              setActiveTab('analysis');
+            }}
+          />
+        )}
 
         {activeTab === 'guide' && <StrategyGuide />}
       </main>
