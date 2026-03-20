@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, date
@@ -160,10 +161,26 @@ def get_stock_info(ticker):
                 if dates_list:
                     earnings_date_str = str(dates_list[0].date()) if hasattr(dates_list[0], 'date') else str(dates_list[0])
             elif isinstance(cal, pd.DataFrame) and 'Earnings Date' in cal.columns:
-                val = cal['Earnings Date'].iloc[0]
-                earnings_date_str = str(val.date()) if hasattr(val, 'date') else str(val)
+                ed_val = cal['Earnings Date'].iloc[0]
+                earnings_date_str = str(ed_val.date()) if hasattr(ed_val, 'date') else str(ed_val)
         except Exception:
             pass
+
+        # Fallback: use get_earnings_dates() if calendar didn't yield a result
+        if earnings_date_str is None:
+            try:
+                ed_df = stock.get_earnings_dates(limit=4)
+                if ed_df is not None and not ed_df.empty:
+                    today_ts = pd.Timestamp(date.today())
+                    if ed_df.index.tz is not None:
+                        today_ts = today_ts.tz_localize(ed_df.index.tz)
+                    future = ed_df[ed_df.index >= today_ts]
+                    if not future.empty:
+                        earnings_date_str = future.index[-1].strftime('%Y-%m-%d')
+                    else:
+                        earnings_date_str = ed_df.index[0].strftime('%Y-%m-%d')
+            except Exception:
+                pass
 
         earnings_proximity = None
         earnings_proximity_days = None
@@ -218,20 +235,25 @@ def get_stock_info(ticker):
             if val is None or val == 'N/A':
                 return None
             try:
-                return round(float(val), decimals)
+                f = float(val)
+                if math.isnan(f) or math.isinf(f):
+                    return None
+                return round(f, decimals)
             except Exception:
                 return None
 
         def fmt_large(val):
             if val is None:
                 return None
-            if val >= 1e12:
-                return f'${val / 1e12:.2f}T'
-            if val >= 1e9:
-                return f'${val / 1e9:.2f}B'
-            if val >= 1e6:
-                return f'${val / 1e6:.2f}M'
-            return f'${val:,.0f}'
+            sign = '-' if val < 0 else ''
+            v = abs(val)
+            if v >= 1e12:
+                return f'{sign}${v / 1e12:.2f}T'
+            if v >= 1e9:
+                return f'{sign}${v / 1e9:.2f}B'
+            if v >= 1e6:
+                return f'{sign}${v / 1e6:.2f}M'
+            return f'{sign}${v:,.0f}'
 
         # ── Valuation assessment ──────────────────────────────────────────────
         pe = safe_float('trailingPE')
@@ -275,6 +297,21 @@ def get_stock_info(ticker):
         rec_key = info.get('recommendationKey') or ''
         analyst_rec = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
 
+        # ── Forward P/E (with fallback computation) ─────────────────────────
+        forward_pe = safe_float('forwardPE')
+        if forward_pe is None and price:
+            forward_eps = safe_float('forwardEps')
+            if forward_eps and forward_eps > 0:
+                forward_pe = round(price / forward_eps, 2)
+
+        # ── PEG Ratio (with fallback computation) ───────────────────────────
+        peg = safe_float('pegRatio')
+        if peg is None and pe is not None and pe > 0:
+            earnings_growth = safe_float('earningsGrowth', 4)
+            if earnings_growth is not None and earnings_growth > 0:
+                growth_pct = earnings_growth * 100
+                peg = round(pe / growth_pct, 2)
+
         response = {
             'ticker': ticker.upper(),
             'name': info.get('longName') or info.get('shortName', ticker.upper()),
@@ -284,7 +321,7 @@ def get_stock_info(ticker):
             'dayChange': day_change_pct,
             'marketCap': fmt_large(info.get('marketCap')),
             'trailingPE': pe,
-            'forwardPE': safe_float('forwardPE'),
+            'forwardPE': forward_pe,
             'priceToBook': safe_float('priceToBook'),
             'priceToSales': safe_float('priceToSalesTrailingTwelveMonths'),
             'beta': safe_float('beta'),
@@ -314,7 +351,7 @@ def get_stock_info(ticker):
             'volumeTrend': volume_trend,
             # New key metrics
             'evToEbitda': safe_float('enterpriseToEbitda'),
-            'pegRatio': safe_float('pegRatio'),
+            'pegRatio': peg,
             'dividendRate': safe_float('dividendRate'),
             'fiftyDayAverage': safe_float('fiftyDayAverage'),
             'twoHundredDayAverage': safe_float('twoHundredDayAverage'),
@@ -344,6 +381,11 @@ def get_stock_info(ticker):
 
         # ── Dividend Health ──────────────────────────────────────────────────
         payout_ratio = safe_float('payoutRatio', 4)
+        if payout_ratio is None:
+            div_rate = safe_float('dividendRate')
+            eps = safe_float('trailingEps')
+            if div_rate is not None and eps is not None and eps > 0:
+                payout_ratio = round(div_rate / eps, 4)
         div_health = None
         div_health_detail = ''
         if payout_ratio is not None:
