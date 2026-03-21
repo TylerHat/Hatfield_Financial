@@ -1,6 +1,4 @@
-import React, { useEffect, useState } from 'react';
-
-import { apiFetch } from '../api';
+import React from 'react';
 
 function fmt(val, prefix = '', suffix = '', fallback = 'N/A') {
   if (val === null || val === undefined) return fallback;
@@ -90,29 +88,10 @@ function divHealthColor(health) {
   return 'gray';
 }
 
-export default function StockInfo({ ticker }) {
-  const [info, setInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!ticker) return;
-    setLoading(true);
-    setError(null);
-    setInfo(null);
-
-    apiFetch(`/api/stock-info/${ticker}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) setError(data.error);
-        else setInfo(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError('Could not load stock info.');
-        setLoading(false);
-      });
-  }, [ticker]);
+export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, stockInfoError }) {
+  const info = stockInfoData;
+  const loading = stockInfoLoading;
+  const error = stockInfoError;
 
   if (loading) return <div className="info-loading">Loading analysis for {ticker}…</div>;
   if (error) return <div className="info-error">{error}</div>;

@@ -1,7 +1,8 @@
 import pandas as pd
-import yfinance as yf
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+
+from data_fetcher import get_ohlcv
 
 mr_bp = Blueprint('mean_reversion', __name__)
 
@@ -14,13 +15,10 @@ def mean_reversion(ticker):
 
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
-        # Extra lookback for MA200 trend filter (200 trading days ≈ 280 calendar days)
-        fetch_start = user_start - timedelta(days=280)
 
-        stock = yf.Ticker(ticker.upper())
-        hist = stock.history(start=fetch_start, end=end)
+        hist = get_ohlcv(ticker, user_start, end)
 
-        if hist.empty:
+        if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
         # 200-day MA trend filter — only buy dips in uptrends

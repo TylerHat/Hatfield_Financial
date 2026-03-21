@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
-import yfinance as yf
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+
+from data_fetcher import get_ohlcv, get_spy_history
 
 backtest_bp = Blueprint('backtest', __name__)
 
@@ -127,9 +128,10 @@ def _get_signals_mean_reversion(hist, user_start):
 
 
 def _get_signals_relative_strength(ticker, hist, user_start, end):
-    spy = yf.Ticker('SPY')
     fetch_start = user_start - timedelta(days=20)
-    spy_hist = spy.history(start=fetch_start, end=end)
+    spy_hist = get_spy_history(fetch_start, end)
+    if spy_hist is None or spy_hist.empty:
+        return []
 
     combined = pd.DataFrame({'stock': hist['Close'], 'spy': spy_hist['Close']}).dropna()
     combined['rs'] = combined['stock'] / combined['spy']
@@ -343,21 +345,9 @@ def run_backtest(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        # Determine warmup based on strategy
-        warmup_map = {
-            'bollinger-bands': 40,
-            'rsi': 60,
-            'macd-crossover': 90,
-            'mean-reversion': 280,
-            'relative-strength': 20,
-        }
-        warmup_days = warmup_map.get(strategy, 60)
-        fetch_start = user_start - timedelta(days=warmup_days)
+        hist = get_ohlcv(ticker, user_start, end)
 
-        stock = yf.Ticker(ticker.upper())
-        hist = stock.history(start=fetch_start, end=end)
-
-        if hist.empty:
+        if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}".'}), 404
 
         # Generate signals inline for each strategy

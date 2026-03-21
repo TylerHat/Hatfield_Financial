@@ -1,4 +1,5 @@
 import os
+import threading
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -19,7 +20,7 @@ from routes.strategies.breakout_52week import bk_bp
 from routes.strategies.ma_confluence import mac_bp
 from routes.auth_routes import auth_bp
 from routes.user_data import user_data_bp
-from routes.recommendations import recommendations_bp
+from routes.recommendations import recommendations_bp, prewarm_cache
 
 app = Flask(__name__)
 CORS(app, origins=['http://localhost:3000'])
@@ -58,6 +59,10 @@ limiter.limit('3/hour')(app.view_functions['auth.register'])
 
 with app.app_context():
     db.create_all()
+
+# Pre-warm the S&P 500 recommendations cache in a background thread so the
+# first user to hit the Recommendations tab doesn't wait 30-60s.
+threading.Thread(target=prewarm_cache, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

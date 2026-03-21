@@ -1,7 +1,8 @@
 import pandas as pd
-import yfinance as yf
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+
+from data_fetcher import get_ohlcv, get_spy_history
 
 rs_bp = Blueprint('relative_strength', __name__)
 
@@ -14,16 +15,11 @@ def relative_strength(ticker):
 
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
-        # Extra lookback so the 10-day RS moving average is populated
-        fetch_start = user_start - timedelta(days=20)
 
-        stock = yf.Ticker(ticker.upper())
-        spy = yf.Ticker('SPY')
+        hist = get_ohlcv(ticker, user_start, end)
+        spy_hist = get_spy_history(user_start - timedelta(days=20), end)
 
-        hist = stock.history(start=fetch_start, end=end)
-        spy_hist = spy.history(start=fetch_start, end=end)
-
-        if hist.empty:
+        if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
         # Align on common dates

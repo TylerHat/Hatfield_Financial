@@ -265,13 +265,16 @@ const SIGNAL_COLUMNS = [
 **File**: `components/StockInfo.js`
 **Import**: `import StockInfo from './components/StockInfo'`
 
-Fetches `/api/stock-info/<ticker>` and renders company overview, analysis cards, key metrics, and fundamentals.
+Renders company overview, analysis cards, key metrics, and fundamentals. Data is fetched once in `App.js` and passed down via props (no internal fetch).
 
 ### Props
 
 | Prop | Type | Description |
 |------|------|-------------|
 | `ticker` | string | Active ticker symbol |
+| `stockInfoData` | object \| null | Pre-fetched stock-info response from App.js |
+| `stockInfoLoading` | boolean | Whether stock-info is currently loading |
+| `stockInfoError` | string \| null | Error message if stock-info fetch failed |
 
 ### Analysis Cards Layout (3 rows)
 
