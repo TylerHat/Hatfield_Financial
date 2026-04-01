@@ -26,6 +26,23 @@ _SPY_TTL = 600          # 10 minutes — shared across all RS calculations
 # Maximum warmup any strategy needs (mean-reversion, ma-confluence, 52-week)
 _MAX_WARMUP_DAYS = 280
 
+# ── Rate-limit throttle ─────────────────────────────────────────────────────
+# Minimum seconds between yfinance HTTP calls to avoid Yahoo 429s.
+_MIN_CALL_INTERVAL = 0.25  # 4 calls/sec max
+_last_call_ts = 0.0
+_throttle_lock = threading.Lock()
+
+
+def _throttle():
+    """Sleep if needed to stay under the yfinance call rate."""
+    global _last_call_ts
+    with _throttle_lock:
+        now = time.time()
+        elapsed = now - _last_call_ts
+        if elapsed < _MIN_CALL_INTERVAL:
+            time.sleep(_MIN_CALL_INTERVAL - elapsed)
+        _last_call_ts = time.time()
+
 
 def _cache_get(key, ttl):
     """Return cached value if it exists and hasn't expired, else None."""
@@ -40,6 +57,22 @@ def _cache_set(key, data):
     """Store data with current timestamp."""
     with _lock:
         _cache[key] = {'data': data, 'ts': time.time()}
+
+
+# ── Ticker object cache ─────────────────────────────────────────────────────
+# Reuse the same yf.Ticker object for the same symbol to avoid redundant
+# session setup and allow yfinance internal caching.
+_ticker_objects = {}
+_ticker_lock = threading.Lock()
+
+
+def _get_ticker(symbol):
+    """Get or create a cached yf.Ticker object."""
+    symbol = symbol.upper()
+    with _ticker_lock:
+        if symbol not in _ticker_objects:
+            _ticker_objects[symbol] = yf.Ticker(symbol)
+        return _ticker_objects[symbol]
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
@@ -63,7 +96,6 @@ def get_ohlcv(ticker, start, end):
     pandas.DataFrame or None
     """
     ticker = ticker.upper()
-    # Normalize dates to date-only strings for cache key stability
     start_str = start.strftime('%Y-%m-%d')
     end_str = end.strftime('%Y-%m-%d')
     key = f'ohlcv:{ticker}:{start_str}:{end_str}'
@@ -72,8 +104,9 @@ def get_ohlcv(ticker, start, end):
     if cached is not None:
         return cached
 
+    _throttle()
     fetch_start = start - timedelta(days=_MAX_WARMUP_DAYS)
-    stock = yf.Ticker(ticker)
+    stock = _get_ticker(ticker)
     hist = stock.history(start=fetch_start, end=end)
 
     if hist is not None and not hist.empty:
@@ -97,7 +130,8 @@ def get_ticker_info(ticker):
     if cached is not None:
         return cached
 
-    stock = yf.Ticker(ticker)
+    _throttle()
+    stock = _get_ticker(ticker)
     info = stock.info
     if info:
         _cache_set(key, info)
@@ -120,7 +154,8 @@ def get_earnings_dates(ticker, limit=20):
     if cached is not None:
         return cached
 
-    stock = yf.Ticker(ticker)
+    _throttle()
+    stock = _get_ticker(ticker)
     try:
         cal = stock.get_earnings_dates(limit=limit)
         if cal is not None and not cal.empty:
@@ -135,15 +170,6 @@ def get_spy_history(start, end):
     """
     Fetch SPY OHLCV with a dedicated 10-min cache.
     Shared across stock_info, relative_strength, and backtest routes.
-
-    Parameters
-    ----------
-    start : datetime
-    end : datetime
-
-    Returns
-    -------
-    pandas.DataFrame or None
     """
     start_str = start.strftime('%Y-%m-%d')
     end_str = end.strftime('%Y-%m-%d')
@@ -153,7 +179,8 @@ def get_spy_history(start, end):
     if cached is not None:
         return cached
 
-    spy = yf.Ticker('SPY')
+    _throttle()
+    spy = _get_ticker('SPY')
     hist = spy.history(start=start, end=end)
 
     if hist is not None and not hist.empty:
@@ -173,7 +200,8 @@ def get_spy_period(period='3mo'):
     if cached is not None:
         return cached
 
-    spy = yf.Ticker('SPY')
+    _throttle()
+    spy = _get_ticker('SPY')
     hist = spy.history(period=period)
 
     if hist is not None and not hist.empty:
