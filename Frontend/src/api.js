@@ -61,8 +61,8 @@ export async function apiFetch(path, options = {}) {
     window.dispatchEvent(new Event('hf_auth_expired'));
   }
 
-  // Cache successful GET responses
-  if (isGet && response.ok) {
+  // Cache successful GET responses (200 only — skip 202 "loading" state)
+  if (isGet && response.status === 200) {
     _cacheSet(path, response);
   }
 
