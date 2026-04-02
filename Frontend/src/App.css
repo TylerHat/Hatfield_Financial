@@ -222,6 +222,28 @@
   border-color: #58a6ff;
 }
 
+/* ── Chart controls bar (sticky, sits between StockInfo and charts) ─────────── */
+.chart-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.chart-controls-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
 /* ── Chart container ─────────────────────────────────────────────────────────── */
 .chart-container {
   display: flex;

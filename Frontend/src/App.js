@@ -32,7 +32,7 @@ function toISODate(d) {
 function defaultDates() {
   const end = new Date();
   const start = new Date(end);
-  start.setMonth(start.getMonth() - 6);
+  start.setFullYear(start.getFullYear() - 1);
   return { start: toISODate(start), end: toISODate(end) };
 }
 
@@ -368,13 +368,37 @@ function App() {
               )}
             </div>
 
+            {submittedTicker && stockInfo && (
+              <div className="info-overview">
+                <div className="overview-name">
+                  <span className="overview-ticker">{stockInfo.ticker}</span>
+                  <span className="overview-company">{stockInfo.name}</span>
+                </div>
+                <div className="overview-meta">
+                  {stockInfo.sector !== 'N/A' && <span className="overview-pill">{stockInfo.sector}</span>}
+                  {stockInfo.industry !== 'N/A' && <span className="overview-pill">{stockInfo.industry}</span>}
+                  {stockInfo.marketCap && <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>}
+                </div>
+              </div>
+            )}
+
             {submittedTicker && (
               <StockSnapshot info={stockInfo} loading={stockInfoLoading} error={stockInfoError} />
             )}
 
             {submittedTicker && (
-              <div className="controls-row">
-                <span className="ticker-label">{submittedTicker}</span>
+              <StockInfo
+                ticker={submittedTicker}
+                stockInfoData={stockInfo}
+                stockInfoLoading={stockInfoLoading}
+                stockInfoError={stockInfoError}
+                hideOverview
+              />
+            )}
+
+            {submittedTicker && dateRangeValid && (
+              <div className="chart-controls-bar">
+                <span className="chart-controls-title">Technical Charts</span>
                 <div className="strategy-group">
                   <label htmlFor="strategy-select">Strategy:</label>
                   <select
@@ -394,15 +418,6 @@ function App() {
                   </select>
                 </div>
               </div>
-            )}
-
-            {submittedTicker && (
-              <StockInfo
-                ticker={submittedTicker}
-                stockInfoData={stockInfo}
-                stockInfoLoading={stockInfoLoading}
-                stockInfoError={stockInfoError}
-              />
             )}
 
             {submittedTicker && dateRangeValid && (
