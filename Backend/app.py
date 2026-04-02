@@ -23,7 +23,9 @@ from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp, prewarm_cache
 
 app = Flask(__name__)
-CORS(app, origins=[os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')])
+_raw_origin = os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')
+_origins = [o.strip() for o in _raw_origin.split(',') if o.strip()]
+CORS(app, origins=_origins)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///hatfield.db')
