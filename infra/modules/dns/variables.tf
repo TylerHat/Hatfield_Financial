@@ -3,17 +3,17 @@ variable "app_name" {
 }
 
 variable "domain_name" {
-  description = "Root domain registered in Route 53 (e.g. hatfield-financial.com)"
+  description = "Root domain (e.g. hatfield-financial.com)"
   type        = string
 }
 
 variable "cloudfront_domain_name" {
-  description = "CloudFront distribution domain name (e.g. d1abc123.cloudfront.net)"
+  description = "CloudFront distribution domain name"
   type        = string
 }
 
 variable "cloudfront_hosted_zone_id" {
-  description = "CloudFront's fixed hosted zone ID for Route 53 alias records"
+  description = "CloudFront hosted zone ID for Route 53 alias records"
   type        = string
 }
 
