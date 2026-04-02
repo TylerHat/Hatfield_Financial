@@ -1,8 +1,12 @@
 flask
 flask-cors
 flask-sqlalchemy
+flask-migrate
 PyJWT
 flask-limiter
 yfinance
 pandas
 numpy
+gunicorn
+psycopg2-binary
+python-dotenv
