@@ -90,31 +90,8 @@ const SIGNAL_COLUMNS = [
   },
 ];
 
-// ── Stock snapshot panel: StatCards driven by /api/stock-info/:ticker ────────
-function StockSnapshot({ ticker }) {
-  const [info, setInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!ticker) return;
-    setLoading(true);
-    setError(null);
-    setInfo(null);
-
-    apiFetch(`/api/stock-info/${ticker}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) setError(data.error);
-        else setInfo(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError('Could not load snapshot data.');
-        setLoading(false);
-      });
-  }, [ticker]);
-
+// ── Stock snapshot panel: StatCards driven by shared stock-info data ─────────
+function StockSnapshot({ info, loading, error }) {
   // Determine accent color for price-change card based on sign.
   function priceAccent() {
     if (!info?.dayChange) return 'default';
@@ -127,8 +104,6 @@ function StockSnapshot({ ticker }) {
     const sign = v >= 0 ? '+' : '';
     return `${sign}${Number(v).toFixed(2)}%`;
   }
-
-  if (!ticker) return null;
 
   return (
     <div className="snapshot-section">
@@ -251,6 +226,30 @@ function App() {
   // DataTable without a second fetch. StockChart passes them up via onSignals.
   const [liveSignals, setLiveSignals] = useState([]);
 
+  // Shared stock-info data — one fetch feeds both StockSnapshot and StockInfo.
+  const [stockInfo, setStockInfo] = useState(null);
+  const [stockInfoLoading, setStockInfoLoading] = useState(false);
+  const [stockInfoError, setStockInfoError] = useState(null);
+
+  useEffect(() => {
+    if (!submittedTicker) return;
+    setStockInfoLoading(true);
+    setStockInfoError(null);
+    setStockInfo(null);
+
+    apiFetch(`/api/stock-info/${submittedTicker}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) setStockInfoError(data.error);
+        else setStockInfo(data);
+        setStockInfoLoading(false);
+      })
+      .catch(() => {
+        setStockInfoError('Could not load stock info.');
+        setStockInfoLoading(false);
+      });
+  }, [submittedTicker]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const clean = inputValue.trim().toUpperCase();
@@ -369,7 +368,9 @@ function App() {
               )}
             </div>
 
-            {submittedTicker && <StockSnapshot ticker={submittedTicker} />}
+            {submittedTicker && (
+              <StockSnapshot info={stockInfo} loading={stockInfoLoading} error={stockInfoError} />
+            )}
 
             {submittedTicker && (
               <div className="controls-row">
@@ -395,7 +396,14 @@ function App() {
               </div>
             )}
 
-            {submittedTicker && <StockInfo ticker={submittedTicker} />}
+            {submittedTicker && (
+              <StockInfo
+                ticker={submittedTicker}
+                stockInfoData={stockInfo}
+                stockInfoLoading={stockInfoLoading}
+                stockInfoError={stockInfoError}
+              />
+            )}
 
             {submittedTicker && dateRangeValid && (
               <StockChart

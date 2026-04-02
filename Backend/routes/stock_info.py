@@ -1,8 +1,10 @@
 import math
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify
+
+from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates
 
 stock_info_bp = Blueprint('stock_info', __name__)
 
@@ -46,13 +48,16 @@ def compute_consolidation(hist, window=20):
 @stock_info_bp.route('/api/stock-info/<ticker>')
 def get_stock_info(ticker):
     try:
-        stock = yf.Ticker(ticker.upper())
-        info = stock.info
+        info = get_ticker_info(ticker)
+        if not info:
+            return jsonify({'error': f'No data for {ticker.upper()}'}), 404
 
         # Use 1 year of daily data for computed indicators regardless of chart date range
-        hist = stock.history(period='1y')
+        end_dt = datetime.today()
+        start_dt = end_dt - timedelta(days=365)
+        hist = get_ohlcv(ticker, start_dt, end_dt)
 
-        if hist.empty:
+        if hist is None or hist.empty:
             return jsonify({'error': f'No data for {ticker.upper()}'}), 404
 
         # ── RSI ───────────────────────────────────────────────────────────────
@@ -155,7 +160,8 @@ def get_stock_info(ticker):
         # ── Earnings Proximity ───────────────────────────────────────────────
         earnings_date_str = None
         try:
-            cal = stock.calendar
+            stock_obj = yf.Ticker(ticker.upper())
+            cal = stock_obj.calendar
             if isinstance(cal, dict) and 'Earnings Date' in cal:
                 dates_list = cal['Earnings Date']
                 if dates_list:
@@ -166,10 +172,10 @@ def get_stock_info(ticker):
         except Exception:
             pass
 
-        # Fallback: use get_earnings_dates() if calendar didn't yield a result
+        # Fallback: use cached get_earnings_dates() if calendar didn't yield a result
         if earnings_date_str is None:
             try:
-                ed_df = stock.get_earnings_dates(limit=4)
+                ed_df = cached_get_earnings_dates(ticker, limit=4)
                 if ed_df is not None and not ed_df.empty:
                     today_ts = pd.Timestamp(date.today())
                     if ed_df.index.tz is not None:
@@ -205,12 +211,10 @@ def get_stock_info(ticker):
                 pass
 
         # ── Relative Strength vs SPY ─────────────────────────────────────────
-        # Note: adds ~0.5-1s latency due to second yfinance fetch; could be cached
         rel_strength_data = {}
         try:
-            spy = yf.Ticker('SPY')
-            spy_hist = spy.history(period='3mo')
-            if not spy_hist.empty and len(hist) >= 63 and len(spy_hist) >= 63:
+            spy_hist = get_spy_period('3mo')
+            if spy_hist is not None and not spy_hist.empty and len(hist) >= 63 and len(spy_hist) >= 63:
                 stock_1m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-22]) - 1) * 100
                 spy_1m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-22]) - 1) * 100
                 stock_3m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-63]) - 1) * 100

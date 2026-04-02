@@ -266,6 +266,37 @@ def _fetch_all_data():
     return stocks, failed, len(tickers)
 
 
+def prewarm_cache():
+    """Pre-warm the recommendations cache in a background thread.
+    Called from app.py on server start so the first user doesn't wait 60s."""
+    global _fetching
+
+    cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
+    if cached:
+        return  # already warm
+
+    with _fetch_lock:
+        cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
+        if cached:
+            return
+        _fetching = True
+
+    try:
+        stocks, failed, total = _fetch_all_data()
+        result = {
+            'stocks': stocks,
+            'lastUpdated': datetime.utcnow().isoformat() + 'Z',
+            'count': len(stocks),
+            'failedCount': failed,
+            'totalTickers': total,
+        }
+        _cache.set(_CACHE_KEY, result)
+    except Exception:
+        pass
+    finally:
+        _fetching = False
+
+
 @recommendations_bp.route('/api/recommendations')
 def get_recommendations():
     global _fetching

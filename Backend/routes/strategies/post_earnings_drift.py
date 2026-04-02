@@ -1,7 +1,8 @@
 import pandas as pd
-import yfinance as yf
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
+
+from data_fetcher import get_ohlcv, get_earnings_dates
 
 ped_bp = Blueprint('post_earnings_drift', __name__)
 
@@ -15,17 +16,13 @@ def post_earnings_drift(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        stock = yf.Ticker(ticker.upper())
-        hist = stock.history(start=start, end=end)
+        hist = get_ohlcv(ticker, start, end)
 
-        if hist.empty:
+        if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
-        # Attempt to retrieve earnings dates
-        try:
-            earnings = stock.earnings_dates
-        except Exception:
-            earnings = None
+        # Attempt to retrieve earnings dates (cached)
+        earnings = get_earnings_dates(ticker)
 
         signals = []
 

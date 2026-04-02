@@ -22,7 +22,8 @@ Hatfield_Financial/
 │   ├── models.py                       SQLAlchemy models (User, Watchlist, Portfolio, Settings)
 │   ├── requirements.txt
 │   ├── sp500.py                        Static S&P 500 ticker list
-│   ├── cache.py                        Thread-safe in-memory cache with TTL
+│   ├── cache.py                        Thread-safe in-memory cache with TTL (used by recommendations)
+│   ├── data_fetcher.py                 Shared data-fetching layer with caching (OHLCV, info, SPY, earnings)
 │   ├── instance/                       SQLite database (hatfield.db, gitignored)
 │   ├── data/
 │   │   └── sp500_tickers.py            SP500_TICKERS, CRYPTO_TICKERS universe constants
@@ -66,10 +67,15 @@ Hatfield_Financial/
 ## Data Flow
 
 ```
-User → React Tab → apiFetch(/api/*) → Flask route → yfinance → pandas/numpy → JSON → Chart.js
-                        ↓
-                  Bearer token injected from localStorage
-                  401 → clears token, dispatches hf_auth_expired → AuthPage
+User → React Tab → apiFetch(/api/*) → Flask route → data_fetcher (cached) → yfinance → pandas/numpy → JSON → Chart.js
+                        ↓                           ↓
+                  Bearer token injected        In-memory cache layer:
+                  from localStorage            - OHLCV: 5-min TTL (280-day warmup)
+                  401 → clears token           - Ticker info: 15-min TTL
+                                               - SPY: 10-min TTL (shared globally)
+                                               - Earnings: 1-hour TTL
+                  apiFetch client-side cache:
+                  - GET responses: 2-min TTL (max 50 entries)
 ```
 
 ### Auth Flow
@@ -105,12 +111,18 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - All fetch calls use `apiFetch()` from `src/api.js`
 - Automatically injects `Authorization: Bearer <token>` header
 - On 401: clears localStorage, dispatches `hf_auth_expired` custom event
+- Client-side response cache: GET requests cached for 2 minutes (max 50 entries)
 
 ### Tab Structure
 - **Stock Analysis** — StockChart + StockInfo
 - **Recommendations** — Recommendations (S&P 500 batch screener with filter bar, strategy signals)
 - **Components** — Badge, StatCard, DataTable showcase
 - **Strategy Guide** — StrategyGuide (static docs)
+
+### Stock Info Flow
+- `App.js` fetches `/api/stock-info/<ticker>` once per ticker change
+- Result shared to `StockSnapshot` (price/change cards) and `StockInfo` (analysis cards) via props
+- Eliminates the prior duplicate fetch from both components
 
 ### Signal Flow
 - `StockChart` fetches strategy signals, lifts them to `App.js` via `onSignals` prop
@@ -127,8 +139,15 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 
 ### Route Rules
 - No provider logic inside routes — routes call helpers only
+- All yfinance data fetched via `data_fetcher.py` (not called directly from routes)
 - Services handle: input validation, caching, normalization, error mapping
 - All errors return `{ "error": "message" }` with appropriate HTTP status code
+
+### Data Fetcher (`Backend/data_fetcher.py`)
+- Centralized caching layer; all routes use `get_ohlcv()`, `get_ticker_info()`, `get_spy_history()`, `get_earnings_dates()`
+- `get_ohlcv()` always fetches with 280-day warmup (max any strategy needs), cached 5 min
+- SPY data cached globally (10-min TTL), shared across stock_info, relative_strength, backtest
+- Recommendations cache pre-warmed on server start via background thread
 
 ### Database Layer
 - SQLite stored in `Backend/instance/hatfield.db` (gitignored)
