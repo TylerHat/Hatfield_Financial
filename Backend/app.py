@@ -1,9 +1,19 @@
+import logging
 import os
 import threading
-from flask import Flask, jsonify
+from time import time
+
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+logger = logging.getLogger(__name__)
 
 from models import db
 from routes.stock_data import stock_data_bp
@@ -34,6 +44,21 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri='memory://')
+
+@app.before_request
+def _start_timer():
+    g.start_time = time()
+
+@app.after_request
+def _log_request(response):
+    duration_ms = round((time() - g.start_time) * 1000)
+    logger.info('%s %s → %d (%dms)', request.method, request.path, response.status_code, duration_ms)
+    return response
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error('Unhandled 500 on %s %s: %s', request.method, request.path, e, exc_info=True)
+    return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/health')
 def health():

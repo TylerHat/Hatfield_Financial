@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find . -type f -name \"*.py\" -o -name \"*.js\" -o -name \"*.json\" | grep -E \"\\\\.\\(py|js|json\\)$\" | head -40)"
+      "Bash(find . -type f -name \"*.py\" -o -name \"*.js\" -o -name \"*.json\" | grep -E \"\\\\.\\(py|js|json\\)$\" | head -40)",
+      "Bash(curl:*)",
+      "Bash(cd:*)"
     ]
   }
 }

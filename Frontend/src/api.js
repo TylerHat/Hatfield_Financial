@@ -47,15 +47,24 @@ export async function apiFetch(path, options = {}) {
 
   if (isGet) {
     const cached = _cacheGet(path);
-    if (cached) return cached;
+    if (cached) {
+      console.log('[API] GET', path, '→ (client cache)');
+      return cached;
+    }
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (err) {
+    console.error('[API] Network error on', method, path, err);
+    throw err;
+  }
+
+  console.log('[API]', method, path, '→', response.status);
 
   if (response.status === 401 && token) {
+    console.warn('[API] 401 on', path, '— clearing auth token');
     localStorage.removeItem('hf_token');
     localStorage.removeItem('hf_user');
     window.dispatchEvent(new Event('hf_auth_expired'));

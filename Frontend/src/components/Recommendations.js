@@ -161,44 +161,52 @@ export default function Recommendations({ onNavigateToStock }) {
   const [expandedTicker, setExpandedTicker] = useState(null);
   const [strategySignals, setStrategySignals] = useState({});
 
-  // Fetch recommendations on mount
+  // Fetch recommendations on mount with polling until data is ready
   useEffect(() => {
     let cancelled = false;
+    let retryCount = 0;
+    const MAX_RETRIES = 18; // up to ~3 minutes at 10s intervals
+
     setLoading(true);
     setError(null);
 
-    apiFetch('/api/recommendations')
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        if (data.error) {
-          setError(data.error);
-        } else if (data.status === 'loading') {
-          // Backend is still fetching — retry after a delay
-          setTimeout(() => {
-            if (!cancelled) {
-              setLoading(true);
-              apiFetch('/api/recommendations')
-                .then((r2) => r2.json())
-                .then((data2) => {
-                  if (cancelled) return;
-                  if (data2.error) setError(data2.error);
-                  else setStocks(data2.stocks || []);
-                  setLoading(false);
-                })
-                .catch(() => { if (!cancelled) { setError('Failed to load data.'); setLoading(false); } });
+    function doFetch() {
+      console.log('[Recommendations] fetching (attempt', retryCount + 1, '/', MAX_RETRIES + 1, ')');
+      apiFetch('/api/recommendations')
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (data.error) {
+            console.error('[Recommendations] server error:', data.error);
+            setError(data.error);
+            setLoading(false);
+          } else if (data.status === 'loading') {
+            // Backend is still prewarming — keep polling
+            retryCount++;
+            console.warn('[Recommendations] backend still prewarming — retry', retryCount, '/', MAX_RETRIES);
+            if (retryCount >= MAX_RETRIES) {
+              console.error('[Recommendations] max retries reached — giving up');
+              setError('Data is taking too long to load. Please refresh and try again.');
+              setLoading(false);
+            } else {
+              setTimeout(() => { if (!cancelled) doFetch(); }, 10000);
             }
-          }, 10000);
-          return; // stay in loading state
-        } else {
-          setStocks(data.stocks || []);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) { setError('Failed to connect to server.'); setLoading(false); }
-      });
+          } else {
+            console.log('[Recommendations] loaded', (data.stocks || []).length, 'stocks', `(${data.failedCount} failed, updated ${data.lastUpdated})`);
+            setStocks(data.stocks || []);
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            console.error('[Recommendations] fetch error:', err);
+            setError('Failed to connect to server.');
+            setLoading(false);
+          }
+        });
+    }
 
+    doFetch();
     return () => { cancelled = true; };
   }, []);
 
@@ -206,6 +214,7 @@ export default function Recommendations({ onNavigateToStock }) {
   const fetchSignals = useCallback((ticker) => {
     if (selectedStrategy === 'none' || !ticker) return;
 
+    console.log('[Recommendations] fetching signals for', ticker, 'strategy:', selectedStrategy);
     setStrategySignals((prev) => ({
       ...prev,
       [ticker]: { loading: true, error: null, signals: [] },
@@ -214,12 +223,18 @@ export default function Recommendations({ onNavigateToStock }) {
     apiFetch(`/api/strategy/${selectedStrategy}/${ticker}`)
       .then((r) => r.json())
       .then((data) => {
+        if (data.error) {
+          console.error('[Recommendations] signal error for', ticker, ':', data.error);
+        } else {
+          console.log('[Recommendations] signals for', ticker, ':', (data.signals || []).length, 'signals');
+        }
         setStrategySignals((prev) => ({
           ...prev,
           [ticker]: { loading: false, error: data.error || null, signals: data.signals || [] },
         }));
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[Recommendations] signal fetch failed for', ticker, ':', err);
         setStrategySignals((prev) => ({
           ...prev,
           [ticker]: { loading: false, error: 'Failed to fetch signals.', signals: [] },
