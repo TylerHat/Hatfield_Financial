@@ -51,16 +51,9 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 86400   # 1 day
-    max_ttl     = 31536000 # 1 year
+    # AWS-managed policies (replaces deprecated forwarded_values block)
+    cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    origin_request_policy_id = "216adef5-5c7f-47e4-b989-5492eafa07d3" # Managed-CORS-S3Origin
   }
 
   # Return index.html for any 404 so React Router handles routing client-side
