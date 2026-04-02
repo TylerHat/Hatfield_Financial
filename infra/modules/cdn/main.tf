@@ -51,9 +51,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    # AWS-managed policies (replaces deprecated forwarded_values block)
-    cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
-    origin_request_policy_id = "216adef5-5c7f-47e4-b989-5492eafa07d3" # Managed-CORS-S3Origin
+    # AWS-managed CachingOptimized policy (OAC handles S3 request signing — no origin request policy needed)
+    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   }
 
   # Return index.html for any 404 so React Router handles routing client-side
