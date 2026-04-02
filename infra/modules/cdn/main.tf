@@ -31,6 +31,19 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# ── CloudFront Response Headers Policy ───────────────────────────────────────
+resource "aws_cloudfront_response_headers_policy" "frontend" {
+  name = "${var.app_name}-response-headers"
+
+  security_headers_config {
+    content_security_policy {
+      # unsafe-eval required by Chart.js; unsafe-inline required for React inline styles
+      content_security_policy = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.${var.domain_name};"
+      override                = true
+    }
+  }
+}
+
 # ── CloudFront Distribution ───────────────────────────────────────────────────
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
@@ -52,7 +65,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
 
     # AWS-managed CachingOptimized policy (OAC handles S3 request signing — no origin request policy needed)
-    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    cache_policy_id             = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    response_headers_policy_id  = aws_cloudfront_response_headers_policy.frontend.id
   }
 
   # Return index.html for any 404 so React Router handles routing client-side

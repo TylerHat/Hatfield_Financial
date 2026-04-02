@@ -102,12 +102,18 @@ jobs:
             --query 'taskDefinition' \
             --output json | jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
 
-          # Update the container image and ALLOWED_ORIGIN env var in the definition
+          # Update the container image and ensure ALLOWED_ORIGIN is set (upsert)
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
             --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" \
             --arg ORIGIN "https://$DOMAIN_NAME" \
             '.containerDefinitions[0].image = $IMAGE |
-             (.containerDefinitions[0].environment[] | select(.name == "ALLOWED_ORIGIN")).value = $ORIGIN')
+             .containerDefinitions[0].environment =
+               ([.containerDefinitions[0].environment[] | select(.name != "ALLOWED_ORIGIN")] +
+                [{"name": "ALLOWED_ORIGIN", "value": $ORIGIN}])')
+
+          # Validate ALLOWED_ORIGIN is present before registering
+          echo "ALLOWED_ORIGIN will be set to: https://$DOMAIN_NAME"
+          echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment[] | select(.name == "ALLOWED_ORIGIN")'
 
           # Register the updated task definition and capture its ARN
           NEW_TASK_ARN=$(aws ecs register-task-definition \
