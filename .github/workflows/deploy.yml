@@ -81,10 +81,32 @@ jobs:
           docker push ${{ secrets.ECR_REPOSITORY }}:latest
 
       - name: Deploy to ECS (rolling update)
+        env:
+          IMAGE_TAG: ${{ github.sha }}
         run: |
+          # Fetch the current task definition and strip read-only fields
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_TASK_FAMILY }} \
+            --query 'taskDefinition' \
+            --output json | jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
+
+          # Update the container image and ALLOWED_ORIGIN env var in the definition
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG" \
+            --arg ORIGIN "https://${{ secrets.DOMAIN_NAME }}" \
+            '.containerDefinitions[0].image = $IMAGE |
+             (.containerDefinitions[0].environment[] | select(.name == "ALLOWED_ORIGIN")).value = $ORIGIN')
+
+          # Register the updated task definition and capture its ARN
+          NEW_TASK_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          # Update the service to use the new revision
           aws ecs update-service \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --service ${{ secrets.ECS_SERVICE }} \
-            --force-new-deployment \
+            --task-definition "$NEW_TASK_ARN" \
             --query 'service.serviceName' \
             --output text
