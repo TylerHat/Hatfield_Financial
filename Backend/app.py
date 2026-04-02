@@ -32,6 +32,10 @@ db.init_app(app)
 
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri='memory://')
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'ok'}), 200
+
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify({'error': 'Too many requests. Please try again later.'}), 429
