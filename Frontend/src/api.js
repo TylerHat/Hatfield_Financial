@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // ── Client-side response cache (2-min TTL) ──────────────────────────────────
 // Prevents redundant GET requests when switching tabs or re-rendering.

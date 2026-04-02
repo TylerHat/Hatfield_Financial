@@ -48,3 +48,11 @@ build/
 # Cache
 .cache/
 *.cache
+
+# Terraform — never commit real secrets or local state
+infra/terraform.tfvars
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/plan_output.txt

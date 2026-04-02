@@ -22,10 +22,10 @@ from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:3000'])
+CORS(app, origins=[os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')])
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hatfield.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///hatfield.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -60,4 +60,4 @@ with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(port=int(os.environ.get('PORT', 5000)), debug=False)

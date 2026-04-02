@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and fill in the values.
+# terraform.tfvars is in .gitignore — never commit it.
+
+aws_region  = "us-east-1"
+app_name    = "hatfield-financial"
+domain_name = "hatfield-financial.com"
+db_username = "name"
+db_password = "password"
+secret_key  = "idkGoodLuckGuesing!"
