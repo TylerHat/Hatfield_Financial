@@ -73,15 +73,12 @@ jobs:
 
       - name: Build, tag, and push image to ECR
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ./Backend
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
-          # Also tag as latest for convenience
-          docker tag $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG \
-                     $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:latest
-          docker push $ECR_REGISTRY/${{ secrets.ECR_REPOSITORY }}:latest
+          docker build -t ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ./Backend
+          docker push ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker tag ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY }}:latest
 
       - name: Deploy to ECS (rolling update)
         run: |

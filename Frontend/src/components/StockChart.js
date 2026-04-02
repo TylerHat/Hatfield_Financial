@@ -117,6 +117,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         setSignals([]);
         setStrategyLoading(false);
       });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, strategy, startDate, endDate, stockData]);
 
   if (loading) {
