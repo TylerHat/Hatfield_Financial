@@ -4,8 +4,10 @@ Batch-fetches S&P 500 stock data with analyst recommendations and technical indi
 Results are cached in-memory for 30 minutes.
 """
 
+import logging
 import math
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -16,6 +18,8 @@ from flask import Blueprint, jsonify
 
 from cache import SimpleCache
 from sp500 import get_sp500_tickers
+
+logger = logging.getLogger(__name__)
 
 recommendations_bp = Blueprint('recommendations', __name__)
 
@@ -58,9 +62,11 @@ def _get_ticker_info(ticker):
         stock = yf.Ticker(ticker)
         info = stock.info
         if not info or info.get('regularMarketPrice') is None and info.get('currentPrice') is None:
+            logger.debug('No price data for %s — skipping', ticker)
             return (ticker, None)
         return (ticker, info)
-    except Exception:
+    except Exception as e:
+        logger.debug('Info fetch failed for %s: %s', ticker, e)
         return (ticker, None)
 
 
@@ -202,7 +208,8 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'trendAlignment': trend_alignment,
             'momentum': momentum,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning('_build_stock_data failed for ticker: %s', e)
         return None
 
 
@@ -210,12 +217,16 @@ def _fetch_all_data():
     """Fetch S&P 500 data: batch history via yf.download + individual info via threads."""
     global _fetching
     tickers = get_sp500_tickers()
+    logger.info('Starting S&P 500 fetch for %d tickers', len(tickers))
 
     # ── Step 1: Batch download historical data (includes SPY) ─────────
     all_tickers = tickers + ['SPY']
+    t0 = time.time()
     try:
         raw = yf.download(all_tickers, period='1y', group_by='ticker', threads=True, progress=False)
-    except Exception:
+        logger.info('yf.download completed in %.1fs — %d rows returned', time.time() - t0, len(raw))
+    except Exception as e:
+        logger.error('yf.download failed: %s', e, exc_info=True)
         return [], 0, len(tickers)
 
     # ── Step 2: Compute SPY 1-month return ────────────────────────────
@@ -224,10 +235,12 @@ def _fetch_all_data():
         spy_close = raw['SPY']['Close'].dropna()
         if len(spy_close) >= 22:
             spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
-    except Exception:
-        pass
+            logger.info('SPY 1M return: %.2f%%', spy_1m_return)
+    except Exception as e:
+        logger.warning('Could not compute SPY return: %s', e)
 
     # ── Step 3: Fetch info dicts concurrently ─────────────────────────
+    t1 = time.time()
     info_map = {}
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = {executor.submit(_get_ticker_info, t): t for t in tickers}
@@ -236,8 +249,9 @@ def _fetch_all_data():
                 t, info = future.result(timeout=10)
                 if info:
                     info_map[t] = info
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug('Future result error: %s', e)
+    logger.info('Info fetch completed in %.1fs — %d/%d succeeded', time.time() - t1, len(info_map), len(tickers))
 
     # ── Step 4: Build stock records ───────────────────────────────────
     stocks = []
@@ -251,9 +265,11 @@ def _fetch_all_data():
         try:
             hist_df = raw[t].dropna(how='all')
             if hist_df.empty or len(hist_df) < 50:
+                logger.debug('%s: insufficient history (%d rows) — skipping', t, len(hist_df) if not hist_df.empty else 0)
                 failed += 1
                 continue
-        except Exception:
+        except Exception as e:
+            logger.debug('%s: history extraction error: %s', t, e)
             failed += 1
             continue
 
@@ -263,6 +279,7 @@ def _fetch_all_data():
         else:
             failed += 1
 
+    logger.info('Built %d stock records — %d failed out of %d', len(stocks), failed, len(tickers))
     return stocks, failed, len(tickers)
 
 
@@ -273,7 +290,8 @@ def prewarm_cache():
 
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
     if cached:
-        return  # already warm
+        logger.info('Prewarm skipped — cache already warm (%d stocks)', cached.get('count', 0))
+        return
 
     with _fetch_lock:
         cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
@@ -281,6 +299,8 @@ def prewarm_cache():
             return
         _fetching = True
 
+    logger.info('Prewarm started')
+    t0 = time.time()
     try:
         stocks, failed, total = _fetch_all_data()
         result = {
@@ -291,8 +311,9 @@ def prewarm_cache():
             'totalTickers': total,
         }
         _cache.set(_CACHE_KEY, result)
-    except Exception:
-        pass
+        logger.info('Prewarm complete in %.1fs — %d stocks cached (%d failed)', time.time() - t0, len(stocks), failed)
+    except Exception as e:
+        logger.error('Prewarm failed: %s', e, exc_info=True)
     finally:
         _fetching = False
 
@@ -304,20 +325,24 @@ def get_recommendations():
     # Check cache first
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
     if cached:
+        logger.info('Cache hit — returning %d stocks', cached.get('count', 0))
         return jsonify(cached)
 
     # Prevent multiple simultaneous fetches
     if _fetching:
+        logger.info('Fetch in progress — returning 202')
         return jsonify({
             'status': 'loading',
             'message': 'S&P 500 data is currently being fetched. Please try again in a moment.',
         }), 202
 
+    logger.info('Cache miss — starting on-demand fetch')
     try:
         with _fetch_lock:
             # Double-check cache after acquiring lock
             cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
             if cached:
+                logger.info('Cache hit after lock — returning %d stocks', cached.get('count', 0))
                 return jsonify(cached)
 
             _fetching = True
@@ -332,9 +357,11 @@ def get_recommendations():
             'totalTickers': total,
         }
         _cache.set(_CACHE_KEY, result)
+        logger.info('On-demand fetch complete — %d stocks returned (%d failed)', len(stocks), failed)
         return jsonify(result)
 
     except Exception as e:
+        logger.error('get_recommendations failed: %s', e, exc_info=True)
         return jsonify({
             'error': f'Failed to fetch recommendations: {str(e)}',
             'stocks': [],
