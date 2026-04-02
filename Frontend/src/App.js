@@ -32,7 +32,7 @@ function toISODate(d) {
 function defaultDates() {
   const end = new Date();
   const start = new Date(end);
-  start.setMonth(start.getMonth() - 6);
+  start.setFullYear(start.getFullYear() - 1);
   return { start: toISODate(start), end: toISODate(end) };
 }
 
@@ -373,8 +373,17 @@ function App() {
             )}
 
             {submittedTicker && (
-              <div className="controls-row">
-                <span className="ticker-label">{submittedTicker}</span>
+              <StockInfo
+                ticker={submittedTicker}
+                stockInfoData={stockInfo}
+                stockInfoLoading={stockInfoLoading}
+                stockInfoError={stockInfoError}
+              />
+            )}
+
+            {submittedTicker && dateRangeValid && (
+              <div className="chart-controls-bar">
+                <span className="chart-controls-title">Technical Charts</span>
                 <div className="strategy-group">
                   <label htmlFor="strategy-select">Strategy:</label>
                   <select
@@ -394,15 +403,6 @@ function App() {
                   </select>
                 </div>
               </div>
-            )}
-
-            {submittedTicker && (
-              <StockInfo
-                ticker={submittedTicker}
-                stockInfoData={stockInfo}
-                stockInfoLoading={stockInfoLoading}
-                stockInfoError={stockInfoError}
-              />
             )}
 
             {submittedTicker && dateRangeValid && (
