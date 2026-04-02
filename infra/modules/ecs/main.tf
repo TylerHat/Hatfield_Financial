@@ -35,8 +35,8 @@ resource "aws_ecs_task_definition" "backend" {
       ]
 
       environment = [
-        { name = "DATABASE_URL",   value = var.database_url },
-        { name = "SECRET_KEY",     value = var.secret_key },
+        { name = "DATABASE_URL", value = var.database_url },
+        { name = "SECRET_KEY", value = var.secret_key },
         { name = "ALLOWED_ORIGIN", value = var.allowed_origin }
       ]
 
