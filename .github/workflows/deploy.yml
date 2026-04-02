@@ -89,6 +89,13 @@ jobs:
           ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
           DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
         run: |
+          # Strip any trailing whitespace/newlines from secret values
+          ECS_TASK_FAMILY=$(echo "$ECS_TASK_FAMILY" | tr -d '[:space:]')
+          ECS_CLUSTER=$(echo "$ECS_CLUSTER" | tr -d '[:space:]')
+          ECS_SERVICE=$(echo "$ECS_SERVICE" | tr -d '[:space:]')
+          ECR_REPOSITORY=$(echo "$ECR_REPOSITORY" | tr -d '[:space:]')
+          DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d '[:space:]')
+
           # Fetch the current task definition and strip read-only fields
           TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition "$ECS_TASK_FAMILY" \
