@@ -102,6 +102,28 @@ resource "aws_iam_user_policy" "github_actions" {
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
         Resource = "*"
+      },
+      # Terraform state — read/write tfstate bucket + lock table (needed for infra.yml plan)
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.app_name}-tfstate",
+          "arn:aws:s3:::${var.app_name}-tfstate/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.app_name}-tfstate-lock"
       }
     ]
   })
