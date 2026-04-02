@@ -88,7 +88,7 @@ function divHealthColor(health) {
   return 'gray';
 }
 
-export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, stockInfoError }) {
+export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, stockInfoError, hideOverview = false }) {
   const info = stockInfoData;
   const loading = stockInfoLoading;
   const error = stockInfoError;
@@ -102,17 +102,19 @@ export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, sto
   return (
     <div className="stock-info">
       {/* ── Company overview ─────────────────────────────────────── */}
-      <div className="info-overview">
-        <div className="overview-name">
-          <span className="overview-ticker">{info.ticker}</span>
-          <span className="overview-company">{info.name}</span>
+      {!hideOverview && (
+        <div className="info-overview">
+          <div className="overview-name">
+            <span className="overview-ticker">{info.ticker}</span>
+            <span className="overview-company">{info.name}</span>
+          </div>
+          <div className="overview-meta">
+            {info.sector !== 'N/A' && <span className="overview-pill">{info.sector}</span>}
+            {info.industry !== 'N/A' && <span className="overview-pill">{info.industry}</span>}
+            {info.marketCap && <span className="overview-pill">Mkt Cap: {info.marketCap}</span>}
+          </div>
         </div>
-        <div className="overview-meta">
-          {info.sector !== 'N/A' && <span className="overview-pill">{info.sector}</span>}
-          {info.industry !== 'N/A' && <span className="overview-pill">{info.industry}</span>}
-          {info.marketCap && <span className="overview-pill">Mkt Cap: {info.marketCap}</span>}
-        </div>
-      </div>
+      )}
 
       {/* ── Analysis cards ───────────────────────────────────────── */}
       {/* Row 1: Valuation, Momentum, 52-Week Range */}

@@ -368,6 +368,20 @@ function App() {
               )}
             </div>
 
+            {submittedTicker && stockInfo && (
+              <div className="info-overview">
+                <div className="overview-name">
+                  <span className="overview-ticker">{stockInfo.ticker}</span>
+                  <span className="overview-company">{stockInfo.name}</span>
+                </div>
+                <div className="overview-meta">
+                  {stockInfo.sector !== 'N/A' && <span className="overview-pill">{stockInfo.sector}</span>}
+                  {stockInfo.industry !== 'N/A' && <span className="overview-pill">{stockInfo.industry}</span>}
+                  {stockInfo.marketCap && <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>}
+                </div>
+              </div>
+            )}
+
             {submittedTicker && (
               <StockSnapshot info={stockInfo} loading={stockInfoLoading} error={stockInfoError} />
             )}
@@ -378,6 +392,7 @@ function App() {
                 stockInfoData={stockInfo}
                 stockInfoLoading={stockInfoLoading}
                 stockInfoError={stockInfoError}
+                hideOverview
               />
             )}
 
