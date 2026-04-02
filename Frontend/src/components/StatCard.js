@@ -42,7 +42,7 @@ export default function StatCard({
   function getDeltaClass(d) {
     if (d === null || d === undefined) return '';
     const str = String(d);
-    const num = parseFloat(str.replace(/[^0-9.\-]/g, ''));
+    const num = parseFloat(str.replace(/[^0-9.-]/g, ''));
     if (str.startsWith('+') || (!str.startsWith('-') && num > 0)) return 'stat-card__delta--positive';
     if (str.startsWith('-') || num < 0) return 'stat-card__delta--negative';
     return 'stat-card__delta--neutral';

@@ -10,7 +10,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import StatCard, { StatCardGrid } from './StatCard';
+import StatCard from './StatCard';
 import DataTable from './DataTable';
 import Badge from './Badge';
 import './Backtester.css';
