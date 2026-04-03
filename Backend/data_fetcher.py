@@ -22,6 +22,7 @@ _OHLCV_TTL = 300       # 5 minutes — covers strategy switching
 _INFO_TTL = 900         # 15 minutes — fundamentals change slowly
 _EARNINGS_TTL = 3600    # 1 hour — rarely changes intraday
 _SPY_TTL = 600          # 10 minutes — shared across all RS calculations
+_ANALYST_TTL = 1800     # 30 minutes — analyst data changes infrequently
 
 # Maximum warmup any strategy needs (mean-reversion, ma-confluence, 52-week)
 _MAX_WARMUP_DAYS = 280
@@ -208,6 +209,67 @@ def get_spy_period(period='3mo'):
         _cache_set(key, hist)
         return hist
     return None
+
+
+def get_analyst_data(ticker):
+    """
+    Fetch analyst-specific data (price targets, recommendation counts,
+    upgrades/downgrades, earnings & revenue estimates) with 30-min TTL.
+
+    Returns
+    -------
+    dict or None
+    """
+    ticker = ticker.upper()
+    key = f'analyst:{ticker}'
+
+    cached = _cache_get(key, _ANALYST_TTL)
+    if cached is not None:
+        return cached
+
+    stock = _get_ticker(ticker)
+    data = {}
+
+    _throttle()
+    try:
+        pt = stock.analyst_price_targets
+        if pt:
+            data['price_targets'] = pt
+    except Exception:
+        pass
+
+    try:
+        rs = stock.recommendations_summary
+        if rs is not None and not rs.empty:
+            data['recommendations_summary'] = rs
+    except Exception:
+        pass
+
+    _throttle()
+    try:
+        ud = stock.upgrades_downgrades
+        if ud is not None and not ud.empty:
+            data['upgrades_downgrades'] = ud.head(50)
+    except Exception:
+        pass
+
+    try:
+        ee = stock.earnings_estimate
+        if ee is not None and not ee.empty:
+            data['earnings_estimate'] = ee
+    except Exception:
+        pass
+
+    try:
+        re_ = stock.revenue_estimate
+        if re_ is not None and not re_.empty:
+            data['revenue_estimate'] = re_
+    except Exception:
+        pass
+
+    if data:
+        _cache_set(key, data)
+    return data if data else None
 
 
 def clear_cache(prefix=None):
