@@ -7,7 +7,7 @@ Documents yfinance behavior, known quirks, and defensive patterns already establ
 ## Data Source
 
 All market data comes from **Yahoo Finance via the `yfinance` Python library**. No API key required.
-No database — every request fetches live from Yahoo Finance and computes indicators on the fly.
+Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 15-min, SPY 10-min, earnings 1-hr). User data is stored in SQLite (local) or PostgreSQL (prod).
 
 ---
 
@@ -174,7 +174,7 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 - **International tickers**: may work with exchange suffixes (e.g. `ASML.AS`) but timezone handling becomes more complex
 - **Earnings dates**: only reliable for ~2 years of history; far-future dates may be estimates
 - **`info` dict instability**: yfinance occasionally changes field names across library versions — if a field goes missing, `safe_float()` returns `None` gracefully
-- **No caching layer yet**: every request hits Yahoo Finance directly; duplicate calls within a session re-fetch the same data
+- **Caching**: in-memory tiered TTL via `data_fetcher.py`; not persistent across restarts
 
 ---
 
@@ -184,5 +184,5 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 - A new data source is added (not just yfinance)
 - A new yfinance quirk or defensive pattern is discovered
 - The RSI implementation is standardized across the codebase
-- A caching layer is added (remove "No caching layer yet" from Known Limitations)
+- The caching strategy changes (TTLs, persistence, new providers)
 - A new `stock.info` field is used and has known null behavior
