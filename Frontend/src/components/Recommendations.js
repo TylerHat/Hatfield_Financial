@@ -160,18 +160,19 @@ export default function Recommendations({ onNavigateToStock }) {
   const [selectedStrategy, setSelectedStrategy] = useState('none');
   const [expandedTicker, setExpandedTicker] = useState(null);
   const [strategySignals, setStrategySignals] = useState({});
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  // Fetch recommendations on mount with polling until data is ready
+  // Fetch recommendations on mount with progressive loading
   useEffect(() => {
     let cancelled = false;
     let retryCount = 0;
-    const MAX_RETRIES = 18; // up to ~3 minutes at 10s intervals
+    const MAX_RETRIES = 60; // up to ~5 minutes at 5s intervals
 
     setLoading(true);
     setError(null);
 
     function doFetch() {
-      console.log('[Recommendations] fetching (attempt', retryCount + 1, '/', MAX_RETRIES + 1, ')');
+      console.log('[Recommendations] fetching (attempt', retryCount + 1, ')');
       apiFetch('/api/recommendations')
         .then((r) => r.json())
         .then((data) => {
@@ -181,19 +182,13 @@ export default function Recommendations({ onNavigateToStock }) {
             setError(data.error);
             setLoading(false);
           } else if (data.status === 'loading') {
-            // Backend is still prewarming — keep polling
-            retryCount++;
-            console.warn('[Recommendations] backend still prewarming — retry', retryCount, '/', MAX_RETRIES);
-            if (retryCount >= MAX_RETRIES) {
-              console.error('[Recommendations] max retries reached — giving up');
-              setError('Data is taking too long to load. Please refresh and try again.');
-              setLoading(false);
-            } else {
-              setTimeout(() => { if (!cancelled) doFetch(); }, 10000);
-            }
+            // Backend is still prewarming — switch to progress polling
+            console.warn('[Recommendations] backend prewarming — polling progress');
+            pollProgress();
           } else {
             console.log('[Recommendations] loaded', (data.stocks || []).length, 'stocks', `(${data.failedCount} failed, updated ${data.lastUpdated})`);
             setStocks(data.stocks || []);
+            setProgress({ current: 0, total: 0 });
             setLoading(false);
           }
         })
@@ -202,6 +197,46 @@ export default function Recommendations({ onNavigateToStock }) {
             console.error('[Recommendations] fetch error:', err);
             setError('Failed to connect to server.');
             setLoading(false);
+          }
+        });
+    }
+
+    function pollProgress() {
+      if (cancelled) return;
+      retryCount++;
+      if (retryCount >= MAX_RETRIES) {
+        console.error('[Recommendations] max retries reached — giving up');
+        setError('Data is taking too long to load. Please refresh and try again.');
+        setLoading(false);
+        return;
+      }
+
+      apiFetch('/api/recommendations/progress')
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+
+          if (data.status === 'complete') {
+            // Fetch finished — get the full cached result
+            setStocks(data.stocks || []);
+            setProgress({ current: 0, total: 0 });
+            setLoading(false);
+            return;
+          }
+
+          // Show partial results as they arrive
+          if (data.stocks && data.stocks.length > 0) {
+            setStocks(data.stocks);
+          }
+          setProgress({ current: data.progress || 0, total: data.total || 0 });
+
+          // Continue polling
+          setTimeout(pollProgress, 5000);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            // Retry on transient errors
+            setTimeout(pollProgress, 5000);
           }
         });
     }
@@ -296,21 +331,33 @@ export default function Recommendations({ onNavigateToStock }) {
         )}
       </div>
 
-      {/* Loading banner */}
+      {/* Loading banner with progress */}
       {loading && (
         <div className="rec-loading-banner">
           <div className="rec-loading-banner__title">
             <span className="rec-loading-spinner" />
-            Loading S&P 500 data…
+            {progress.total > 0
+              ? `Loading S\u0026P 500 data\u2026 ${progress.current}/${progress.total} (${Math.round((progress.current / progress.total) * 100)}%)`
+              : 'Loading S\u0026P 500 data\u2026'}
           </div>
+          {progress.total > 0 && (
+            <div className="rec-loading-banner__progress-bar">
+              <div
+                className="rec-loading-banner__progress-fill"
+                style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+              />
+            </div>
+          )}
           <div className="rec-loading-banner__subtitle">
-            This may take up to a minute on first load. Data is cached for 30 minutes.
+            {stocks.length > 0
+              ? `${stocks.length} stocks loaded so far \u2014 showing partial results below.`
+              : 'This may take a couple of minutes on first load. Data is cached for 4 hours.'}
           </div>
         </div>
       )}
 
-      {/* Filter bar */}
-      {!loading && !error && (
+      {/* Filter bar — show even during loading if partial results exist */}
+      {!error && (stocks.length > 0 || !loading) && (
         <div className="rec-filter-bar">
           {FILTERS.map((f) => (
             <button
@@ -326,7 +373,7 @@ export default function Recommendations({ onNavigateToStock }) {
       )}
 
       {/* Strategy selector */}
-      {!loading && !error && (
+      {!error && (stocks.length > 0 || !loading) && (
         <div className="rec-strategy-bar">
           <span className="rec-strategy-bar__label">Strategy signal:</span>
           <select
@@ -340,14 +387,14 @@ export default function Recommendations({ onNavigateToStock }) {
         </div>
       )}
 
-      {/* Data table */}
+      {/* Data table — show partial results while loading */}
       <DataTable
         columns={REC_COLUMNS}
         rows={rows}
         defaultSortKey="ticker"
         defaultSortDir="asc"
         stickyHeader
-        loading={loading}
+        loading={loading && stocks.length === 0}
         error={error}
         emptyMessage="No stocks match the selected filter."
         rowKey="ticker"

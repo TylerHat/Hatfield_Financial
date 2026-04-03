@@ -6,11 +6,14 @@ This eliminates redundant fetches when the user switches strategies on the
 same ticker, and keeps SPY data cached globally.
 """
 
+import logging
 import threading
 import time
 from datetime import datetime, timedelta
 
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 # ── Cache storage ────────────────────────────────────────────────────────────
 
@@ -19,9 +22,10 @@ _lock = threading.Lock()
 
 # TTLs (seconds)
 _OHLCV_TTL = 300       # 5 minutes — covers strategy switching
-_INFO_TTL = 900         # 15 minutes — fundamentals change slowly
+_INFO_TTL = 1800        # 30 minutes — fundamentals change slowly
 _EARNINGS_TTL = 3600    # 1 hour — rarely changes intraday
 _SPY_TTL = 600          # 10 minutes — shared across all RS calculations
+_ANALYST_TTL = 1800     # 30 minutes — analyst data changes infrequently
 
 # Maximum warmup any strategy needs (mean-reversion, ma-confluence, 52-week)
 _MAX_WARMUP_DAYS = 280
@@ -33,11 +37,22 @@ _last_call_ts = 0.0
 _throttle_lock = threading.Lock()
 
 
+_call_count = 0
+_call_count_reset = 0.0
+
+
 def _throttle():
     """Sleep if needed to stay under the yfinance call rate."""
-    global _last_call_ts
+    global _last_call_ts, _call_count, _call_count_reset
     with _throttle_lock:
         now = time.time()
+        # Log calls per minute
+        if now - _call_count_reset > 60:
+            if _call_count > 0:
+                logger.info('yfinance calls in last minute: %d', _call_count)
+            _call_count = 0
+            _call_count_reset = now
+        _call_count += 1
         elapsed = now - _last_call_ts
         if elapsed < _MIN_CALL_INTERVAL:
             time.sleep(_MIN_CALL_INTERVAL - elapsed)
@@ -208,6 +223,67 @@ def get_spy_period(period='3mo'):
         _cache_set(key, hist)
         return hist
     return None
+
+
+def get_analyst_data(ticker):
+    """
+    Fetch analyst-specific data (price targets, recommendation counts,
+    upgrades/downgrades, earnings & revenue estimates) with 30-min TTL.
+
+    Returns
+    -------
+    dict or None
+    """
+    ticker = ticker.upper()
+    key = f'analyst:{ticker}'
+
+    cached = _cache_get(key, _ANALYST_TTL)
+    if cached is not None:
+        return cached
+
+    stock = _get_ticker(ticker)
+    data = {}
+
+    _throttle()
+    try:
+        pt = stock.analyst_price_targets
+        if pt:
+            data['price_targets'] = pt
+    except Exception:
+        pass
+
+    try:
+        rs = stock.recommendations_summary
+        if rs is not None and not rs.empty:
+            data['recommendations_summary'] = rs
+    except Exception:
+        pass
+
+    _throttle()
+    try:
+        ud = stock.upgrades_downgrades
+        if ud is not None and not ud.empty:
+            data['upgrades_downgrades'] = ud.head(50)
+    except Exception:
+        pass
+
+    try:
+        ee = stock.earnings_estimate
+        if ee is not None and not ee.empty:
+            data['earnings_estimate'] = ee
+    except Exception:
+        pass
+
+    try:
+        re_ = stock.revenue_estimate
+        if re_ is not None and not re_.empty:
+            data['revenue_estimate'] = re_
+    except Exception:
+        pass
+
+    if data:
+        _cache_set(key, data)
+    return data if data else None
 
 
 def clear_cache(prefix=None):
