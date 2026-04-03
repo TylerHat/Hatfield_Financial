@@ -6,11 +6,14 @@ This eliminates redundant fetches when the user switches strategies on the
 same ticker, and keeps SPY data cached globally.
 """
 
+import logging
 import threading
 import time
 from datetime import datetime, timedelta
 
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 # ── Cache storage ────────────────────────────────────────────────────────────
 
@@ -19,7 +22,7 @@ _lock = threading.Lock()
 
 # TTLs (seconds)
 _OHLCV_TTL = 300       # 5 minutes — covers strategy switching
-_INFO_TTL = 900         # 15 minutes — fundamentals change slowly
+_INFO_TTL = 1800        # 30 minutes — fundamentals change slowly
 _EARNINGS_TTL = 3600    # 1 hour — rarely changes intraday
 _SPY_TTL = 600          # 10 minutes — shared across all RS calculations
 _ANALYST_TTL = 1800     # 30 minutes — analyst data changes infrequently
@@ -34,11 +37,22 @@ _last_call_ts = 0.0
 _throttle_lock = threading.Lock()
 
 
+_call_count = 0
+_call_count_reset = 0.0
+
+
 def _throttle():
     """Sleep if needed to stay under the yfinance call rate."""
-    global _last_call_ts
+    global _last_call_ts, _call_count, _call_count_reset
     with _throttle_lock:
         now = time.time()
+        # Log calls per minute
+        if now - _call_count_reset > 60:
+            if _call_count > 0:
+                logger.info('yfinance calls in last minute: %d', _call_count)
+            _call_count = 0
+            _call_count_reset = now
+        _call_count += 1
         elapsed = now - _last_call_ts
         if elapsed < _MIN_CALL_INTERVAL:
             time.sleep(_MIN_CALL_INTERVAL - elapsed)

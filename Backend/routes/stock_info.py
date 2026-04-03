@@ -1,6 +1,5 @@
 import math
 import pandas as pd
-import yfinance as yf
 from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify
 
@@ -160,33 +159,18 @@ def get_stock_info(ticker):
         # ── Earnings Proximity ───────────────────────────────────────────────
         earnings_date_str = None
         try:
-            stock_obj = yf.Ticker(ticker.upper())
-            cal = stock_obj.calendar
-            if isinstance(cal, dict) and 'Earnings Date' in cal:
-                dates_list = cal['Earnings Date']
-                if dates_list:
-                    earnings_date_str = str(dates_list[0].date()) if hasattr(dates_list[0], 'date') else str(dates_list[0])
-            elif isinstance(cal, pd.DataFrame) and 'Earnings Date' in cal.columns:
-                ed_val = cal['Earnings Date'].iloc[0]
-                earnings_date_str = str(ed_val.date()) if hasattr(ed_val, 'date') else str(ed_val)
+            ed_df = cached_get_earnings_dates(ticker, limit=4)
+            if ed_df is not None and not ed_df.empty:
+                today_ts = pd.Timestamp(date.today())
+                if ed_df.index.tz is not None:
+                    today_ts = today_ts.tz_localize(ed_df.index.tz)
+                future = ed_df[ed_df.index >= today_ts]
+                if not future.empty:
+                    earnings_date_str = future.index[-1].strftime('%Y-%m-%d')
+                else:
+                    earnings_date_str = ed_df.index[0].strftime('%Y-%m-%d')
         except Exception:
             pass
-
-        # Fallback: use cached get_earnings_dates() if calendar didn't yield a result
-        if earnings_date_str is None:
-            try:
-                ed_df = cached_get_earnings_dates(ticker, limit=4)
-                if ed_df is not None and not ed_df.empty:
-                    today_ts = pd.Timestamp(date.today())
-                    if ed_df.index.tz is not None:
-                        today_ts = today_ts.tz_localize(ed_df.index.tz)
-                    future = ed_df[ed_df.index >= today_ts]
-                    if not future.empty:
-                        earnings_date_str = future.index[-1].strftime('%Y-%m-%d')
-                    else:
-                        earnings_date_str = ed_df.index[0].strftime('%Y-%m-%d')
-            except Exception:
-                pass
 
         earnings_proximity = None
         earnings_proximity_days = None

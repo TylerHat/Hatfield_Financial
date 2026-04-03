@@ -421,7 +421,7 @@ function App() {
               />
             )}
 
-            {submittedTicker && dateRangeValid && (
+            {submittedTicker && dateRangeValid && stockInfo && (
               <div className="chart-controls-bar">
                 <span className="chart-controls-title">Technical Charts</span>
                 <div className="strategy-group">
@@ -445,7 +445,7 @@ function App() {
               </div>
             )}
 
-            {submittedTicker && dateRangeValid && (
+            {submittedTicker && dateRangeValid && stockInfo && (
               <StockChart
                 ticker={submittedTicker}
                 strategy={strategy}

@@ -1,7 +1,7 @@
 """
 GET /api/recommendations
 Batch-fetches S&P 500 stock data with analyst recommendations and technical indicators.
-Results are cached in-memory for 30 minutes.
+Results are cached in-memory for 4 hours.
 """
 
 import logging
@@ -17,6 +17,7 @@ import yfinance as yf
 from flask import Blueprint, jsonify
 
 from cache import SimpleCache
+from data_fetcher import get_ticker_info as cached_get_ticker_info
 from sp500 import get_sp500_tickers
 
 logger = logging.getLogger(__name__)
@@ -25,11 +26,22 @@ recommendations_bp = Blueprint('recommendations', __name__)
 
 _cache = SimpleCache()
 _CACHE_KEY = 'sp500_recommendations'
-_CACHE_TTL = 1800  # 30 minutes
+_CACHE_TTL = 14400  # 4 hours
 
 # Lock to prevent multiple simultaneous fetches
 _fetch_lock = threading.Lock()
 _fetching = False
+
+# Progress tracking for progressive loading
+_progress_lock = threading.Lock()
+_progress_current = 0
+_progress_total = 0
+_partial_results = []
+
+# Chunked fetching config
+_CHUNK_SIZE = 50
+_CHUNK_DELAY = 0.5  # seconds between chunks
+_MAX_WORKERS = 5
 
 
 def _safe_float(val, decimals=2):
@@ -57,11 +69,11 @@ def _compute_rsi(close_series, period=14):
 
 
 def _get_ticker_info(ticker):
-    """Fetch info dict for a single ticker. Returns (ticker, info) or (ticker, None)."""
+    """Fetch info dict for a single ticker via the throttled/cached data_fetcher.
+    Returns (ticker, info) or (ticker, None)."""
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        if not info or info.get('regularMarketPrice') is None and info.get('currentPrice') is None:
+        info = cached_get_ticker_info(ticker)
+        if not info or (info.get('regularMarketPrice') is None and info.get('currentPrice') is None):
             logger.debug('No price data for %s — skipping', ticker)
             return (ticker, None)
         return (ticker, info)
@@ -239,47 +251,69 @@ def _fetch_all_data():
     except Exception as e:
         logger.warning('Could not compute SPY return: %s', e)
 
-    # ── Step 3: Fetch info dicts concurrently ─────────────────────────
+    # ── Step 3+4: Fetch info + build records in chunks ─────────────────
+    global _progress_current, _progress_total, _partial_results
     t1 = time.time()
-    info_map = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {executor.submit(_get_ticker_info, t): t for t in tickers}
-        for future in as_completed(futures):
-            try:
-                t, info = future.result(timeout=10)
-                if info:
-                    info_map[t] = info
-            except Exception as e:
-                logger.debug('Future result error: %s', e)
-    logger.info('Info fetch completed in %.1fs — %d/%d succeeded', time.time() - t1, len(info_map), len(tickers))
-
-    # ── Step 4: Build stock records ───────────────────────────────────
     stocks = []
     failed = 0
-    for t in tickers:
-        info = info_map.get(t)
-        if not info:
-            failed += 1
-            continue
 
-        try:
-            hist_df = raw[t].dropna(how='all')
-            if hist_df.empty or len(hist_df) < 50:
-                logger.debug('%s: insufficient history (%d rows) — skipping', t, len(hist_df) if not hist_df.empty else 0)
+    with _progress_lock:
+        _progress_current = 0
+        _progress_total = len(tickers)
+        _partial_results = []
+
+    for chunk_start in range(0, len(tickers), _CHUNK_SIZE):
+        chunk = tickers[chunk_start:chunk_start + _CHUNK_SIZE]
+
+        # Fetch info for this chunk with limited concurrency
+        info_map = {}
+        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+            futures = {executor.submit(_get_ticker_info, t): t for t in chunk}
+            for future in as_completed(futures):
+                try:
+                    t, info = future.result(timeout=10)
+                    if info:
+                        info_map[t] = info
+                except Exception as e:
+                    logger.debug('Future result error: %s', e)
+
+        # Build stock records for this chunk
+        for t in chunk:
+            info = info_map.get(t)
+            if not info:
                 failed += 1
                 continue
-        except Exception as e:
-            logger.debug('%s: history extraction error: %s', t, e)
-            failed += 1
-            continue
 
-        record = _build_stock_data(t, info, hist_df, spy_1m_return)
-        if record:
-            stocks.append(record)
-        else:
-            failed += 1
+            try:
+                hist_df = raw[t].dropna(how='all')
+                if hist_df.empty or len(hist_df) < 50:
+                    logger.debug('%s: insufficient history (%d rows) — skipping', t, len(hist_df) if not hist_df.empty else 0)
+                    failed += 1
+                    continue
+            except Exception as e:
+                logger.debug('%s: history extraction error: %s', t, e)
+                failed += 1
+                continue
 
-    logger.info('Built %d stock records — %d failed out of %d', len(stocks), failed, len(tickers))
+            record = _build_stock_data(t, info, hist_df, spy_1m_return)
+            if record:
+                stocks.append(record)
+            else:
+                failed += 1
+
+        # Update progress for progressive loading
+        with _progress_lock:
+            _progress_current = min(chunk_start + _CHUNK_SIZE, len(tickers))
+            _partial_results = list(stocks)
+
+        logger.info('Chunk %d-%d done — %d stocks so far', chunk_start, chunk_start + len(chunk), len(stocks))
+
+        # Small delay between chunks to avoid rate limit bursts
+        if chunk_start + _CHUNK_SIZE < len(tickers):
+            time.sleep(_CHUNK_DELAY)
+
+    logger.info('Info fetch + build completed in %.1fs — %d stocks, %d failed out of %d',
+                time.time() - t1, len(stocks), failed, len(tickers))
     return stocks, failed, len(tickers)
 
 
@@ -369,3 +403,35 @@ def get_recommendations():
 
     finally:
         _fetching = False
+
+
+@recommendations_bp.route('/api/recommendations/progress')
+def get_recommendations_progress():
+    """Return partial results and progress while a fetch is in progress."""
+    # If cache is warm, return the full result
+    cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
+    if cached:
+        return jsonify({
+            'status': 'complete',
+            'stocks': cached.get('stocks', []),
+            'progress': cached.get('totalTickers', 0),
+            'total': cached.get('totalTickers', 0),
+        })
+
+    # If not fetching, nothing to report
+    if not _fetching:
+        return jsonify({
+            'status': 'idle',
+            'stocks': [],
+            'progress': 0,
+            'total': 0,
+        })
+
+    # Return partial results from in-progress fetch
+    with _progress_lock:
+        return jsonify({
+            'status': 'loading',
+            'stocks': list(_partial_results),
+            'progress': _progress_current,
+            'total': _progress_total,
+        })
