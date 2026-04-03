@@ -59,6 +59,31 @@ def _throttle():
         _last_call_ts = time.time()
 
 
+_RETRY_DELAY = 3        # seconds to wait after a rate-limit hit
+_MAX_RETRIES = 3        # retry attempts per yfinance attribute
+
+
+def _fetch_with_retry(fn, label):
+    """Call *fn()* up to _MAX_RETRIES times, retrying on rate-limit errors."""
+    for attempt in range(_MAX_RETRIES + 1):
+        _throttle()
+        try:
+            return fn()
+        except Exception as exc:
+            msg = str(exc).lower()
+            if '429' in msg or 'rate' in msg or 'too many' in msg:
+                if attempt < _MAX_RETRIES:
+                    logger.warning('%s rate-limited, retrying in %ds (attempt %d/%d)',
+                                   label, _RETRY_DELAY, attempt + 1, _MAX_RETRIES)
+                    time.sleep(_RETRY_DELAY)
+                    continue
+                logger.warning('%s rate-limited, exhausted retries', label)
+            else:
+                logger.debug('%s fetch failed: %s', label, exc)
+            return None
+    return None
+
+
 def _cache_get(key, ttl):
     """Return cached value if it exists and hasn't expired, else None."""
     with _lock:
@@ -244,42 +269,25 @@ def get_analyst_data(ticker):
     stock = _get_ticker(ticker)
     data = {}
 
-    _throttle()
-    try:
-        pt = stock.analyst_price_targets
-        if pt:
-            data['price_targets'] = pt
-    except Exception:
-        pass
+    pt = _fetch_with_retry(lambda: stock.analyst_price_targets, f'{ticker} price_targets')
+    if pt:
+        data['price_targets'] = pt
 
-    try:
-        rs = stock.recommendations_summary
-        if rs is not None and not rs.empty:
-            data['recommendations_summary'] = rs
-    except Exception:
-        pass
+    rs = _fetch_with_retry(lambda: stock.recommendations_summary, f'{ticker} recommendations_summary')
+    if rs is not None and hasattr(rs, 'empty') and not rs.empty:
+        data['recommendations_summary'] = rs
 
-    _throttle()
-    try:
-        ud = stock.upgrades_downgrades
-        if ud is not None and not ud.empty:
-            data['upgrades_downgrades'] = ud.head(50)
-    except Exception:
-        pass
+    ud = _fetch_with_retry(lambda: stock.upgrades_downgrades, f'{ticker} upgrades_downgrades')
+    if ud is not None and hasattr(ud, 'empty') and not ud.empty:
+        data['upgrades_downgrades'] = ud.head(50)
 
-    try:
-        ee = stock.earnings_estimate
-        if ee is not None and not ee.empty:
-            data['earnings_estimate'] = ee
-    except Exception:
-        pass
+    ee = _fetch_with_retry(lambda: stock.earnings_estimate, f'{ticker} earnings_estimate')
+    if ee is not None and hasattr(ee, 'empty') and not ee.empty:
+        data['earnings_estimate'] = ee
 
-    try:
-        re_ = stock.revenue_estimate
-        if re_ is not None and not re_.empty:
-            data['revenue_estimate'] = re_
-    except Exception:
-        pass
+    re_ = _fetch_with_retry(lambda: stock.revenue_estimate, f'{ticker} revenue_estimate')
+    if re_ is not None and hasattr(re_, 'empty') and not re_.empty:
+        data['revenue_estimate'] = re_
 
     if data:
         _cache_set(key, data)
