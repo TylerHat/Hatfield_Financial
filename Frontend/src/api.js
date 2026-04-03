@@ -53,12 +53,24 @@ export async function apiFetch(path, options = {}) {
     }
   }
 
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 3000;
   let response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  } catch (err) {
-    console.error('[API] Network error on', method, path, err);
-    throw err;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    } catch (err) {
+      console.error('[API] Network error on', method, path, err);
+      throw err;
+    }
+
+    if (response.status === 429 && attempt < MAX_RETRIES) {
+      console.warn(`[API] 429 on ${method} ${path} — retrying in ${RETRY_DELAY / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY));
+      continue;
+    }
+    break;
   }
 
   console.log('[API]', method, path, '→', response.status);
