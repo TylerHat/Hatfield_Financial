@@ -11,6 +11,7 @@ import DataTable from './components/DataTable';
 import Badge from './components/Badge';
 import Backtester from './components/Backtester';
 import Recommendations from './components/Recommendations';
+import AnalystPanel from './components/AnalystPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -231,6 +232,10 @@ function App() {
   const [stockInfoLoading, setStockInfoLoading] = useState(false);
   const [stockInfoError, setStockInfoError] = useState(null);
 
+  // Analyst coverage data — fetched alongside stock-info.
+  const [analystData, setAnalystData] = useState(null);
+  const [analystLoading, setAnalystLoading] = useState(false);
+
   useEffect(() => {
     if (!submittedTicker) return;
     setStockInfoLoading(true);
@@ -248,6 +253,17 @@ function App() {
         setStockInfoError('Could not load stock info.');
         setStockInfoLoading(false);
       });
+
+    // Fetch analyst data in parallel
+    setAnalystLoading(true);
+    setAnalystData(null);
+    apiFetch(`/api/analyst-data/${submittedTicker}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setAnalystData(data);
+        setAnalystLoading(false);
+      })
+      .catch(() => setAnalystLoading(false));
   }, [submittedTicker]);
 
   const handleSubmit = (e) => {
@@ -393,6 +409,15 @@ function App() {
                 stockInfoLoading={stockInfoLoading}
                 stockInfoError={stockInfoError}
                 hideOverview
+              />
+            )}
+
+            {submittedTicker && (
+              <AnalystPanel
+                data={analystData}
+                ticker={submittedTicker}
+                currentPrice={stockInfo?.currentPrice}
+                loading={analystLoading}
               />
             )}
 

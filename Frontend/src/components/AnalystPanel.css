@@ -1,0 +1,275 @@
+/* ── Analyst Panel ─────────────────────────────────────────────────────── */
+
+.ap-panel {
+  margin-top: 18px;
+  padding: 16px 18px 18px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.ap-loading,
+.ap-empty {
+  color: #8b949e;
+  font-size: 0.88rem;
+  padding: 12px 0;
+}
+
+/* ── Overview row ─────────────────────────────────────────────────────── */
+
+.ap-overview-row {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.ap-overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  min-width: 140px;
+}
+
+.ap-overview-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8b949e;
+}
+
+.ap-overview-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ap-upside.positive { color: #3fb950; }
+.ap-upside.negative { color: #f85149; }
+
+/* ── Price target bar ─────────────────────────────────────────────────── */
+
+.ap-target-bar-wrap {
+  margin: 12px 0 18px;
+}
+
+.ap-target-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.ap-target-bar {
+  position: relative;
+  height: 10px;
+  background: linear-gradient(90deg, #3fb950 0%, #d2993a 50%, #f85149 100%);
+  border-radius: 5px;
+  margin-bottom: 24px;
+}
+
+.ap-marker {
+  position: absolute;
+  top: -2px;
+  transform: translateX(-50%);
+}
+
+.ap-marker-line {
+  width: 2px;
+  height: 14px;
+  margin: 0 auto;
+  border-radius: 1px;
+}
+
+.ap-marker--price .ap-marker-line { background: #e6edf3; }
+.ap-marker--mean .ap-marker-line  { background: #58a6ff; }
+.ap-marker--median .ap-marker-line { background: #bc8cff; }
+
+.ap-marker-label {
+  display: block;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.ap-marker--price .ap-marker-label  { color: #e6edf3; }
+.ap-marker--mean .ap-marker-label   { color: #58a6ff; }
+.ap-marker--median .ap-marker-label { color: #bc8cff; }
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+
+.ap-section {
+  margin-top: 18px;
+}
+
+.ap-subsection-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #c9d1d9;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Recommendation breakdown bar ─────────────────────────────────────── */
+
+.ap-rec-bar-wrap {
+  margin-top: 6px;
+}
+
+.ap-rec-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ap-rec-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  transition: width 0.3s ease;
+}
+
+.ap-rec-segment-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.ap-rec-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.ap-rec-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: #8b949e;
+}
+
+.ap-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Recommendation trend table ───────────────────────────────────────── */
+
+.ap-trend-table-wrap {
+  overflow-x: auto;
+}
+
+.ap-trend-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.ap-trend-table th {
+  padding: 6px 10px;
+  text-align: center;
+  font-weight: 600;
+  color: #8b949e;
+  border-bottom: 1px solid #30363d;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ap-trend-table th:first-child {
+  text-align: left;
+}
+
+.ap-trend-table td {
+  padding: 6px 10px;
+  text-align: center;
+  color: #c9d1d9;
+  border-bottom: 1px solid #21262d;
+}
+
+.ap-trend-table td:first-child {
+  text-align: left;
+  color: #8b949e;
+  font-weight: 500;
+}
+
+.ap-trend-green { color: #3fb950 !important; }
+.ap-trend-yellow { color: #d2993a !important; }
+.ap-trend-red { color: #f85149 !important; }
+
+/* ── Estimates ────────────────────────────────────────────────────────── */
+
+.ap-estimates-section {
+  margin-top: 18px;
+}
+
+.ap-estimates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.ap-estimate-card {
+  padding: 10px 14px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+
+.ap-estimate-period {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.ap-estimate-avg {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ap-estimate-range {
+  font-size: 0.78rem;
+  color: #8b949e;
+  margin-top: 2px;
+}
+
+.ap-estimate-analysts {
+  font-size: 0.72rem;
+  color: #58a6ff;
+  margin-top: 3px;
+}
+
+.ap-estimate-growth {
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.ap-estimate-growth.positive { color: #3fb950; }
+.ap-estimate-growth.negative { color: #f85149; }
+
+.ap-estimate-yago {
+  font-size: 0.72rem;
+  color: #8b949e;
+  margin-top: 2px;
+}
