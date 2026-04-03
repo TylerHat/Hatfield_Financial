@@ -33,11 +33,6 @@ function fmtLarge(val) {
   return `${sign}$${abs.toLocaleString()}`;
 }
 
-function fmtPct(val) {
-  if (val == null) return 'N/A';
-  return `${(val * 100).toFixed(1)}%`;
-}
-
 function fmtNum(val, prefix = '', suffix = '') {
   if (val == null) return 'N/A';
   return `${prefix}${val}${suffix}`;
