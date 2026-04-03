@@ -34,7 +34,8 @@ from routes.recommendations import recommendations_bp, prewarm_cache
 
 app = Flask(__name__)
 _raw_origin = os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')
-_origins = [o.strip() for o in _raw_origin.split(',') if o.strip()]
+_origins = list({o.strip() for o in _raw_origin.split(',') if o.strip()} | {'https://hatfield-financial.com'})
+logger.info('CORS allowed origins: %s', _origins)
 CORS(app, origins=_origins)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
