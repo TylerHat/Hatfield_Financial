@@ -37,7 +37,9 @@ app = Flask(__name__)
 _raw_origin = os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')
 _origins = list({o.strip() for o in _raw_origin.split(',') if o.strip()} | {'https://hatfield-financial.com'})
 logger.info('CORS allowed origins: %s', _origins)
-CORS(app, origins=_origins)
+CORS(app, origins=_origins, supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///hatfield.db')
