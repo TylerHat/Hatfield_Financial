@@ -50,12 +50,14 @@ db.init_app(app)
 
 # Optimize SQLite for EFS: WAL mode improves concurrent reads, busy_timeout
 # prevents "database is locked" errors under load.
-@sa_event.listens_for(db.engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, connection_record):
-    cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.close()
+with app.app_context():
+    if 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']:
+        @sa_event.listens_for(db.engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
 
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri='memory://')
 
