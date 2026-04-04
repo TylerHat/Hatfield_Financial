@@ -98,21 +98,9 @@ with app.app_context():
 
 # Pre-warm the recommendations cache in the background so the first user
 # request doesn't block the server while fetching 500 tickers.
-# Use a file lock so only ONE gunicorn worker triggers the prewarm.
-def _guarded_prewarm():
-    import tempfile  # noqa: E402
-    lock_path = os.path.join(tempfile.gettempdir(), 'hatfield_prewarm.lock')
-    try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
-        try:
-            prewarm_cache()
-        finally:
-            os.unlink(lock_path)
-    except FileExistsError:
-        logger.info('Prewarm skipped — another worker is handling it')
-
-threading.Thread(target=_guarded_prewarm, daemon=True).start()
+# gunicorn --preload loads this module once before forking workers,
+# so this thread starts exactly once regardless of worker count.
+threading.Thread(target=prewarm_cache, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', 5000)), debug=False)
