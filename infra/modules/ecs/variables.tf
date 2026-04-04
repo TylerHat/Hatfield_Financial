@@ -22,10 +22,6 @@ variable "ecs_security_group_id" {
   type = string
 }
 
-variable "alb_security_group_id" {
-  type = string
-}
-
 variable "ecs_task_execution_role_arn" {
   type = string
 }
@@ -35,16 +31,21 @@ variable "secret_key" {
   sensitive = true
 }
 
-variable "database_url" {
-  type      = string
-  sensitive = true
-}
-
 variable "allowed_origin" {
   type = string
 }
 
-variable "acm_certificate_arn" {
-  description = "ACM certificate ARN for api.hatfield-financial.com (attached to HTTPS listener)"
+variable "efs_file_system_id" {
+  description = "EFS file system ID for persistent SQLite storage"
+  type        = string
+}
+
+variable "efs_access_point_id" {
+  description = "EFS access point ID for the /data directory"
+  type        = string
+}
+
+variable "service_discovery_service_arn" {
+  description = "Cloud Map service ARN for API Gateway integration"
   type        = string
 }

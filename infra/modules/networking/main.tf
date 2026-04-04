@@ -56,47 +56,18 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# ── Security Group: ALB ───────────────────────────────────────────────────────
-resource "aws_security_group" "alb" {
-  name        = "${var.app_name}-alb-sg"
-  description = "Allow HTTPS inbound to ALB"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.app_name}-alb-sg" }
-}
-
 # ── Security Group: ECS tasks ─────────────────────────────────────────────────
 resource "aws_security_group" "ecs" {
   name        = "${var.app_name}-ecs-sg"
-  description = "Allow traffic from ALB to ECS tasks"
+  description = "Allow traffic from API Gateway VPC Link to ECS tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+    description = "API Gateway VPC Link traffic"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
   egress {
@@ -109,25 +80,3 @@ resource "aws_security_group" "ecs" {
   tags = { Name = "${var.app_name}-ecs-sg" }
 }
 
-# ── Security Group: RDS ───────────────────────────────────────────────────────
-resource "aws_security_group" "db" {
-  name        = "${var.app_name}-db-sg"
-  description = "Allow PostgreSQL from ECS tasks only"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.app_name}-db-sg" }
-}

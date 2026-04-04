@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy import event as sa_event
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +47,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+
+# Optimize SQLite for EFS: WAL mode improves concurrent reads, busy_timeout
+# prevents "database is locked" errors under load.
+@sa_event.listens_for(db.engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri='memory://')
 
@@ -91,7 +101,7 @@ app.register_blueprint(analyst_data_bp)
 
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])
-limiter.limit('3/hour')(app.view_functions['auth.register'])
+limiter.limit('30/hour')(app.view_functions['auth.register'])
 
 with app.app_context():
     db.create_all()
