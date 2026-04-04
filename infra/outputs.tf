@@ -15,11 +15,6 @@ output "ecs_service_name" {
   value       = module.ecs.service_name
 }
 
-output "alb_dns_name" {
-  description = "ALB DNS name (raw) — REACT_APP_API_URL should be https://api.{domain_name}"
-  value       = module.ecs.alb_dns_name
-}
-
 output "s3_frontend_bucket" {
   description = "S3 bucket name — set as S3_BUCKET_NAME in GitHub secrets"
   value       = module.cdn.bucket_name

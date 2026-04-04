@@ -17,12 +17,12 @@ variable "cloudfront_hosted_zone_id" {
   type        = string
 }
 
-variable "alb_dns_name" {
-  description = "ALB DNS name"
+variable "api_gateway_domain_target" {
+  description = "API Gateway custom domain target name"
   type        = string
 }
 
-variable "alb_hosted_zone_id" {
-  description = "ALB hosted zone ID for Route 53 alias records"
+variable "api_gateway_hosted_zone_id" {
+  description = "API Gateway custom domain hosted zone ID for Route 53 alias records"
   type        = string
 }

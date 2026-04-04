@@ -16,8 +16,8 @@ resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.app_name}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "1024"
-  memory                   = "2048"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn            = var.ecs_task_execution_role_arn
 
@@ -35,9 +35,17 @@ resource "aws_ecs_task_definition" "backend" {
       ]
 
       environment = [
-        { name = "DATABASE_URL", value = var.database_url },
+        { name = "DATABASE_URL", value = "sqlite:////mnt/efs/hatfield.db" },
         { name = "SECRET_KEY", value = var.secret_key },
         { name = "ALLOWED_ORIGIN", value = var.allowed_origin }
+      ]
+
+      mountPoints = [
+        {
+          sourceVolume  = "efs-data"
+          containerPath = "/mnt/efs"
+          readOnly      = false
+        }
       ]
 
       logConfiguration = {
@@ -59,70 +67,26 @@ resource "aws_ecs_task_definition" "backend" {
     }
   ])
 
+  volume {
+    name = "efs-data"
+
+    efs_volume_configuration {
+      file_system_id     = var.efs_file_system_id
+      transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = var.efs_access_point_id
+        iam             = "DISABLED"
+      }
+    }
+  }
+
   tags = { Name = "${var.app_name}-task-def" }
 }
 
-# ── Application Load Balancer ─────────────────────────────────────────────────
-resource "aws_lb" "main" {
-  name               = "${var.app_name}-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [var.alb_security_group_id]
-  subnets            = var.public_subnet_ids
-
-  tags = { Name = "${var.app_name}-alb" }
-}
-
-resource "aws_lb_target_group" "backend" {
-  name        = "${var.app_name}-tg"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
-
-  health_check {
-    path                = "/health"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    matcher             = "200"
-  }
-
-  tags = { Name = "${var.app_name}-tg" }
-}
-
-# HTTP listener — redirects all traffic to HTTPS
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
-}
-
-# HTTPS listener — terminates TLS, forwards to ECS target group
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = 443
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_certificate_arn
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
-  }
-}
-
 # ── ECS Service ───────────────────────────────────────────────────────────────
+# WARNING: desired_count must stay at 1 — SQLite on EFS does not support
+# concurrent writers. Scaling to 2+ tasks will cause database corruption.
 resource "aws_ecs_service" "backend" {
   name            = "${var.app_name}-service"
   cluster         = aws_ecs_cluster.main.id
@@ -136,13 +100,11 @@ resource "aws_ecs_service" "backend" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = "backend"
-    container_port   = 8000
+  service_registries {
+    registry_arn   = var.service_discovery_service_arn
+    container_name = "backend"
+    container_port = 8000
   }
-
-  depends_on = [aws_lb_listener.http, aws_lb_listener.https]
 
   # Ignore task_definition changes from GitHub Actions deploys —
   # Terraform only manages infrastructure, not image versions.

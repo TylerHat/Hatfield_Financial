@@ -10,17 +10,6 @@ variable "app_name" {
   default     = "hatfield-financial"
 }
 
-variable "db_username" {
-  description = "RDS master username"
-  type        = string
-}
-
-variable "db_password" {
-  description = "RDS master password"
-  type        = string
-  sensitive   = true
-}
-
 variable "secret_key" {
   description = "Flask SECRET_KEY value stored in Secrets Manager"
   type        = string
