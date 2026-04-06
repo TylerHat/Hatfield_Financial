@@ -189,7 +189,7 @@ Returns BUY/SELL signals for the given strategy. See `FIN_STRATEGIES.md` for sig
 
 ## GET `/api/recommendations`
 
-Batch S&P 500 stock recommendations with technical + fundamental signals. Data is cached in-memory for 30 minutes.
+Batch S&P 500 stock recommendations with technical + fundamental signals. Data is cached in-memory for 4 hours.
 
 **Query params**: None
 
@@ -222,7 +222,7 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 **Response (202)** — returned while data is still being fetched on first request or after cache expiry:
 
 ```json
-{ "status": "loading" }
+{ "status": "loading", "message": "S&P 500 data is currently being fetched. Please try again in a moment." }
 ```
 
 | Field | Type | Description |
@@ -266,24 +266,36 @@ Simulates trades for a strategy over a date range and returns performance metric
 {
   "trades": [
     {
-      "entry_date": "2024-01-10",
-      "entry_price": 180.00,
-      "exit_date": "2024-02-05",
-      "exit_price": 192.50,
-      "pnl": 125.00,
-      "pnl_pct": 6.94
+      "date": "2024-02-05",
+      "type": "SELL",
+      "entryDate": "2024-01-10",
+      "entryPrice": 180.00,
+      "price": 192.50,
+      "shares": 55,
+      "value": 10587.50,
+      "pnl": 687.50,
+      "pnlPct": 6.94,
+      "status": "CLOSED"
     }
   ],
   "equityCurve": [
-    { "date": "2024-01-02", "equity": 10000.00 }
+    { "date": "2024-01-02", "value": 10000.00 }
   ],
   "summary": {
-    "totalReturn": 12.5,
-    "totalReturnPct": 12.5,
+    "startingCapital": 10000.00,
+    "finalValue": 10687.50,
+    "totalReturn": 6.88,
+    "totalReturnDollar": 687.50,
     "winRate": 66.7,
-    "totalTrades": 6,
+    "numTrades": 6,
+    "numWins": 4,
+    "numLosses": 2,
+    "avgWinPct": 5.2,
+    "avgLossPct": -2.1,
+    "profitFactor": 3.5,
+    "bestTrade": 8.3,
+    "worstTrade": -3.1,
     "maxDrawdown": -4.2,
-    "sharpeRatio": 1.35,
     "unrealizedPnl": 85.00,
     "unrealizedPnlPct": 3.4,
     "hasUnrealized": true
@@ -299,14 +311,13 @@ Simulates trades for a strategy over a date range and returns performance metric
 
 Create a new user account. No auth required.
 
-**Rate limit:** 3 requests/hour per IP.
+**Rate limit:** 30 requests/hour per IP.
 
 **Request body**
 
 ```json
 {
   "username": "string (3-30 chars)",
-  "email": "string (valid email)",
   "password": "string (8+ chars, uppercase, lowercase, digit)"
 }
 ```
@@ -319,13 +330,12 @@ Create a new user account. No auth required.
   "user": {
     "id": 1,
     "username": "tyler",
-    "email": "tyler@example.com",
     "created_at": "2026-03-18T12:00:00"
   }
 }
 ```
 
-**Errors:** `400` validation failure, `409` email/username already exists.
+**Errors:** `400` validation failure, `409` username already exists.
 
 ---
 
@@ -339,7 +349,7 @@ Authenticate and receive a JWT token. No auth required.
 
 ```json
 {
-  "email": "string",
+  "username": "string",
   "password": "string"
 }
 ```
@@ -349,7 +359,7 @@ Authenticate and receive a JWT token. No auth required.
 ```json
 {
   "token": "eyJhbGciOi...",
-  "user": { "id": 1, "username": "tyler", "email": "tyler@example.com", "created_at": "..." }
+  "user": { "id": 1, "username": "tyler", "created_at": "..." }
 }
 ```
 
@@ -365,11 +375,65 @@ Validate stored token and return current user. Requires `Authorization: Bearer <
 
 ```json
 {
-  "user": { "id": 1, "username": "tyler", "email": "tyler@example.com", "created_at": "..." }
+  "user": { "id": 1, "username": "tyler", "created_at": "..." }
 }
 ```
 
 **Errors:** `401` missing/invalid/expired token.
+
+---
+
+## GET `/api/analyst-data/<ticker>`
+
+Analyst coverage data including price targets, recommendation trends, upgrades/downgrades, and earnings/revenue estimates.
+
+**Response (200)**
+
+```json
+{
+  "ticker": "AAPL",
+  "priceTargets": {
+    "current": 185.20,
+    "low": 150.00,
+    "high": 250.00,
+    "mean": 210.50,
+    "median": 215.00
+  },
+  "numberOfAnalysts": 35,
+  "recommendationTrend": [...],
+  "recommendationCounts": {
+    "strongBuy": 15,
+    "buy": 10,
+    "hold": 8,
+    "sell": 1,
+    "strongSell": 1,
+    "total": 35
+  },
+  "consensusRecommendation": "Buy",
+  "upgradesDowngrades": [...],
+  "earningsEstimate": {...},
+  "revenueEstimate": {...}
+}
+```
+
+**Errors:** `404` ticker not found, `500` data fetch failure.
+
+---
+
+## GET `/api/recommendations/progress`
+
+Returns progress updates during the batch S&P 500 data fetch.
+
+**Response (200)**
+
+```json
+{
+  "status": "fetching",
+  "fetched": 250,
+  "total": 503,
+  "pct": 49.7
+}
+```
 
 ---
 
@@ -511,6 +575,18 @@ All endpoints return errors in this shape:
 | `500` | Yahoo Finance error, rate limit, or network timeout |
 
 Rate limit errors surface as: `"Yahoo Finance rate limit reached. Wait a moment and try again."`
+
+---
+
+## GET `/health`
+
+Health check endpoint. No auth required.
+
+**Response (200)**
+
+```json
+{ "status": "ok" }
+```
 
 ---
 
