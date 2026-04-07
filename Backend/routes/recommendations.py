@@ -1,15 +1,19 @@
 """
 GET /api/recommendations
 Batch-fetches S&P 500 stock data with analyst recommendations and technical indicators.
-Results are cached in-memory for 20 minutes.
+Results are cached in-memory for 20 minutes.  When a Lambda pre-compute is running,
+the endpoint reads from S3 first and falls back to local computation.
 """
 
+import gc
+import json
 import logging
 import math
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import yfinance as yf
@@ -234,34 +238,31 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
 
 
 def _fetch_all_data():
-    """Fetch S&P 500 data: batch history via yf.download + individual info via threads."""
+    """Fetch S&P 500 data in memory-efficient batches.
+
+    Downloads OHLCV in chunks of _CHUNK_SIZE tickers, processes each chunk,
+    then discards the raw DataFrame before starting the next batch.
+    Peak memory is ~50 tickers instead of ~500.
+    """
     global _fetching
     tickers = get_sp500_tickers()
     logger.info('Starting S&P 500 fetch for %d tickers', len(tickers))
-
-    # ── Step 1: Batch download historical data (includes SPY) ─────────
-    all_tickers = tickers + ['SPY']
     t0 = time.time()
-    try:
-        raw = yf.download(all_tickers, period='1y', group_by='ticker', threads=True, progress=False)
-        logger.info('yf.download completed in %.1fs — %d rows returned', time.time() - t0, len(raw))
-    except Exception as e:
-        logger.error('yf.download failed: %s', e, exc_info=True)
-        return [], 0, len(tickers)
 
-    # ── Step 2: Compute SPY 1-month return ────────────────────────────
+    # ── Step 1: Download SPY separately (small, kept in memory) ───────
     spy_1m_return = None
     try:
-        spy_close = raw['SPY']['Close'].dropna()
+        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
+        spy_close = spy_raw['Close'].dropna()
         if len(spy_close) >= 22:
             spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
             logger.info('SPY 1M return: %.2f%%', spy_1m_return)
+        del spy_raw
     except Exception as e:
-        logger.warning('Could not compute SPY return: %s', e)
+        logger.warning('Could not fetch/compute SPY return: %s', e)
 
-    # ── Step 3+4: Fetch info + build records in chunks ─────────────────
+    # ── Step 2: Process tickers in batched download + build cycles ─────
     global _progress_current, _progress_total, _partial_results
-    t1 = time.time()
     stocks = []
     failed = 0
 
@@ -273,7 +274,16 @@ def _fetch_all_data():
     for chunk_start in range(0, len(tickers), _CHUNK_SIZE):
         chunk = tickers[chunk_start:chunk_start + _CHUNK_SIZE]
 
-        # Fetch info for this chunk with limited concurrency
+        # 2a: Download OHLCV for this chunk only
+        try:
+            chunk_raw = yf.download(chunk, period='10mo', group_by='ticker',
+                                    threads=True, progress=False)
+        except Exception as e:
+            logger.error('yf.download failed for chunk %d: %s', chunk_start, e)
+            failed += len(chunk)
+            continue
+
+        # 2b: Fetch .info concurrently
         info_map = {}
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {executor.submit(_get_ticker_info, t): t for t in chunk}
@@ -285,12 +295,17 @@ def _fetch_all_data():
                 except Exception as e:
                     logger.debug('Future result error: %s', e)
 
-        # Build stock records for this chunk (info may be None — that's OK)
+        # 2c: Build stock records (info may be None — that's OK)
         for t in chunk:
             try:
-                hist_df = raw[t].dropna(how='all')
+                # Single-ticker download returns flat columns, not nested by ticker
+                if len(chunk) == 1:
+                    hist_df = chunk_raw.dropna(how='all')
+                else:
+                    hist_df = chunk_raw[t].dropna(how='all')
                 if hist_df.empty or len(hist_df) < 50:
-                    logger.debug('%s: insufficient history (%d rows) — skipping', t, len(hist_df) if not hist_df.empty else 0)
+                    logger.debug('%s: insufficient history (%d rows) — skipping',
+                                 t, len(hist_df) if not hist_df.empty else 0)
                     failed += 1
                     continue
             except Exception as e:
@@ -304,30 +319,71 @@ def _fetch_all_data():
             else:
                 failed += 1
 
-        # Update progress for progressive loading
+        # 2d: Free batch memory before next iteration
+        del chunk_raw
+        gc.collect()
+
+        # 2e: Update progress for progressive loading
         with _progress_lock:
             _progress_current = min(chunk_start + _CHUNK_SIZE, len(tickers))
             _partial_results = list(stocks)
 
-        logger.info('Chunk %d-%d done — %d stocks so far', chunk_start, chunk_start + len(chunk), len(stocks))
+        logger.info('Chunk %d-%d done — %d stocks so far',
+                     chunk_start, chunk_start + len(chunk), len(stocks))
 
         # Small delay between chunks to avoid rate limit bursts
         if chunk_start + _CHUNK_SIZE < len(tickers):
             time.sleep(_CHUNK_DELAY)
 
-    logger.info('Info fetch + build completed in %.1fs — %d stocks, %d failed out of %d',
-                time.time() - t1, len(stocks), failed, len(tickers))
+    logger.info('Fetch completed in %.1fs — %d stocks, %d failed out of %d',
+                time.time() - t0, len(stocks), failed, len(tickers))
     return stocks, failed, len(tickers)
+
+
+def _read_s3_cache():
+    """Try reading pre-computed results from S3. Returns dict or None."""
+    bucket = os.environ.get('S3_CACHE_BUCKET')
+    if not bucket:
+        return None
+    try:
+        import boto3
+        s3 = boto3.client('s3')
+        resp = s3.get_object(Bucket=bucket, Key='recommendations/latest.json')
+        last_modified = resp['LastModified']
+        age_seconds = (datetime.now(timezone.utc) - last_modified).total_seconds()
+        if age_seconds > 1500:  # 25 min — stale beyond TTL + buffer
+            logger.info('S3 cache is %.0fs old — stale, skipping', age_seconds)
+            return None
+        data = json.loads(resp['Body'].read())
+        logger.info('S3 cache hit — %d stocks, %.0fs old', data.get('count', 0), age_seconds)
+        return data
+    except Exception as e:
+        logger.debug('S3 cache read failed: %s', e)
+        return None
 
 
 def prewarm_cache():
     """Pre-warm the recommendations cache in a background thread.
-    Called from app.py on server start so the first user doesn't wait 60s."""
+    Called from app.py on server start so the first user doesn't wait 60s.
+    Checks S3 first (Lambda pre-compute), falls back to local fetch."""
     global _fetching
 
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
     if cached:
         logger.info('Prewarm skipped — cache already warm (%d stocks)', cached.get('count', 0))
+        return
+
+    # Try S3 before doing the heavy local fetch
+    s3_data = _read_s3_cache()
+    if s3_data:
+        _cache.set(_CACHE_KEY, s3_data)
+        logger.info('Prewarm from S3 — %d stocks cached', s3_data.get('count', 0))
+        return
+
+    # When Lambda is configured, don't do a local fetch — just wait for
+    # S3 to be populated.  This avoids doubling Yahoo API calls.
+    if os.environ.get('S3_CACHE_BUCKET'):
+        logger.info('Prewarm skipped — Lambda is configured but S3 cache not yet available')
         return
 
     with _fetch_lock:
@@ -336,13 +392,13 @@ def prewarm_cache():
             return
         _fetching = True
 
-    logger.info('Prewarm started')
+    logger.info('Prewarm started (local fetch)')
     t0 = time.time()
     try:
         stocks, failed, total = _fetch_all_data()
         result = {
             'stocks': stocks,
-            'lastUpdated': datetime.utcnow().isoformat() + 'Z',
+            'lastUpdated': datetime.now(timezone.utc).isoformat(),
             'count': len(stocks),
             'failedCount': failed,
             'totalTickers': total,
@@ -359,13 +415,28 @@ def prewarm_cache():
 def get_recommendations():
     global _fetching
 
-    # Check cache first
+    # 1. Check in-memory cache
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
     if cached:
         logger.info('Cache hit — returning %d stocks', cached.get('count', 0))
         return jsonify(cached)
 
-    # Prevent multiple simultaneous fetches
+    # 2. Check S3 (Lambda pre-compute)
+    s3_data = _read_s3_cache()
+    if s3_data:
+        _cache.set(_CACHE_KEY, s3_data)
+        return jsonify(s3_data)
+
+    # 3. When Lambda is configured, don't start a heavy local fetch —
+    #    return loading status and let the frontend poll until Lambda populates S3.
+    if os.environ.get('S3_CACHE_BUCKET'):
+        logger.info('Lambda configured but S3 not ready — returning 202')
+        return jsonify({
+            'status': 'loading',
+            'message': 'Recommendations are being computed. Please try again shortly.',
+        }), 202
+
+    # 4. Prevent multiple simultaneous local fetches
     if _fetching:
         logger.info('Fetch in progress — returning 202')
         return jsonify({
@@ -373,10 +444,10 @@ def get_recommendations():
             'message': 'S&P 500 data is currently being fetched. Please try again in a moment.',
         }), 202
 
+    # 5. Fall back to local computation (no Lambda configured)
     logger.info('Cache miss — starting on-demand fetch')
     try:
         with _fetch_lock:
-            # Double-check cache after acquiring lock
             cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
             if cached:
                 logger.info('Cache hit after lock — returning %d stocks', cached.get('count', 0))
@@ -388,7 +459,7 @@ def get_recommendations():
 
         result = {
             'stocks': stocks,
-            'lastUpdated': datetime.utcnow().isoformat() + 'Z',
+            'lastUpdated': datetime.now(timezone.utc).isoformat(),
             'count': len(stocks),
             'failedCount': failed,
             'totalTickers': total,
