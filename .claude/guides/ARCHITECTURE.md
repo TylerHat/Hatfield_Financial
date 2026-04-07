@@ -31,7 +31,7 @@ Hatfield_Financial/
 │       ├── backtest.py                 GET /api/backtest/<ticker>
 │       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
-│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (4-hour cache)
+│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (20-min cache)
 │       ├── analyst_data.py             GET /api/analyst-data/<ticker> — price targets, recommendations, earnings estimates
 │       └── strategies/
 │           ├── bollinger_bands.py

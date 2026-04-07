@@ -428,7 +428,7 @@ export default function Recommendations({ onNavigateToStock }) {
           <div className="rec-loading-banner__subtitle">
             {stocks.length > 0
               ? `${stocks.length} stocks loaded so far \u2014 showing partial results below.`
-              : 'This may take a couple of minutes on first load. Data is cached for 4 hours.'}
+              : 'This may take a couple of minutes on first load. Data is cached for 20 minutes.'}
           </div>
         </div>
       )}

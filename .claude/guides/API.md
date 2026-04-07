@@ -189,7 +189,7 @@ Returns BUY/SELL signals for the given strategy. See `FIN_STRATEGIES.md` for sig
 
 ## GET `/api/recommendations`
 
-Batch S&P 500 stock recommendations with technical + fundamental signals. Data is cached in-memory for 4 hours.
+Batch S&P 500 stock recommendations with technical + fundamental signals. Data is cached in-memory for 20 minutes. Frontend also caches in localStorage for instant repeat loads.
 
 **Query params**: None
 
