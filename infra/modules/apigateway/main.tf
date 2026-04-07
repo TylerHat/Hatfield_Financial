@@ -48,14 +48,10 @@ resource "aws_apigatewayv2_api" "main" {
   name          = "${var.app_name}-api"
   protocol_type = "HTTP"
 
-  cors_configuration {
-    allow_origins     = ["https://${var.domain_name}", "https://www.${var.domain_name}"]
-    allow_methods     = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allow_headers     = ["Content-Type", "Authorization", "X-Requested-With"]
-    expose_headers    = ["Content-Type", "Authorization"]
-    allow_credentials = true
-    max_age           = 86400
-  }
+  # CORS is handled by Flask — do NOT add cors_configuration here.
+  # The $default route forwards all requests (including OPTIONS preflight)
+  # to the backend, so API Gateway CORS config would never fire and only
+  # risk conflicts with Flask's CORS headers.
 
   tags = { Name = "${var.app_name}-api" }
 }
