@@ -1,7 +1,11 @@
 FROM public.ecr.aws/lambda/python:3.11
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Use only pre-built binary wheels — the Lambda base image lacks a modern
+# C toolchain, so we cannot compile packages from source.
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 
 COPY . ${LAMBDA_TASK_ROOT}
 
