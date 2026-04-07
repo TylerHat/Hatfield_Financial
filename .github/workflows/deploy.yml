@@ -128,3 +128,43 @@ jobs:
             --task-definition "$NEW_TASK_ARN" \
             --query 'service.serviceName' \
             --output text
+
+  # ── Lambda: build Docker image → ECR → update Lambda function ────────────
+  deploy-lambda:
+    name: Deploy Lambda (Recommendations)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Lambda image to ECR
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t ${{ secrets.LAMBDA_ECR_REPOSITORY }}:$IMAGE_TAG \
+            -f ./Backend/Dockerfile.lambda ./Backend
+          docker push ${{ secrets.LAMBDA_ECR_REPOSITORY }}:$IMAGE_TAG
+          docker tag ${{ secrets.LAMBDA_ECR_REPOSITORY }}:$IMAGE_TAG \
+            ${{ secrets.LAMBDA_ECR_REPOSITORY }}:latest
+          docker push ${{ secrets.LAMBDA_ECR_REPOSITORY }}:latest
+
+      - name: Update Lambda function code
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} \
+            --image-uri ${{ secrets.LAMBDA_ECR_REPOSITORY }}:$IMAGE_TAG \
+            --query 'FunctionName' \
+            --output text

@@ -37,7 +37,8 @@ resource "aws_ecs_task_definition" "backend" {
       environment = [
         { name = "DATABASE_URL", value = "sqlite:////mnt/efs/hatfield.db" },
         { name = "SECRET_KEY", value = var.secret_key },
-        { name = "ALLOWED_ORIGIN", value = var.allowed_origin }
+        { name = "ALLOWED_ORIGIN", value = var.allowed_origin },
+        { name = "S3_CACHE_BUCKET", value = var.s3_cache_bucket_name }
       ]
 
       mountPoints = [

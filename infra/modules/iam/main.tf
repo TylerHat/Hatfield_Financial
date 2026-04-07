@@ -26,6 +26,25 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Allow ECS tasks to read pre-computed recommendations from S3
+resource "aws_iam_role_policy" "ecs_s3_cache_read" {
+  name = "${var.app_name}-ecs-s3-cache-read"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = "arn:aws:s3:::${var.app_name}-sp500-cache-*/*"
+      }
+    ]
+  })
+}
+
 # ── GitHub Actions Deploy User ────────────────────────────────────────────────
 # Least-privilege IAM user for CI/CD: ECR push, ECS deploy, S3 sync, CF invalidate
 
@@ -64,7 +83,19 @@ resource "aws_iam_user_policy" "github_actions" {
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload"
         ]
-        Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${var.app_name}-backend"
+        Resource = [
+          "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${var.app_name}-backend",
+          "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/${var.app_name}-lambda-recommendations"
+        ]
+      },
+      # Lambda — update function code after pushing new image
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunction"
+        ]
+        Resource = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:${var.app_name}-recommendations-precompute"
       },
       # ECS — trigger rolling deploys
       {

@@ -49,3 +49,9 @@ variable "service_discovery_service_arn" {
   description = "Cloud Map service ARN for API Gateway integration"
   type        = string
 }
+
+variable "s3_cache_bucket_name" {
+  description = "S3 bucket name for pre-computed recommendations cache"
+  type        = string
+  default     = ""
+}
