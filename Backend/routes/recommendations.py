@@ -1,7 +1,7 @@
 """
 GET /api/recommendations
 Batch-fetches S&P 500 stock data with analyst recommendations and technical indicators.
-Results are cached in-memory for 4 hours.
+Results are cached in-memory for 20 minutes.
 """
 
 import logging
@@ -11,7 +11,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 import yfinance as yf
 from flask import Blueprint, jsonify
@@ -26,7 +25,7 @@ recommendations_bp = Blueprint('recommendations', __name__)
 
 _cache = SimpleCache()
 _CACHE_KEY = 'sp500_recommendations'
-_CACHE_TTL = 14400  # 4 hours
+_CACHE_TTL = 1200  # 20 minutes
 
 # Lock to prevent multiple simultaneous fetches
 _fetch_lock = threading.Lock()
@@ -41,7 +40,7 @@ _partial_results = []
 # Chunked fetching config
 _CHUNK_SIZE = 50
 _CHUNK_DELAY = 0.5  # seconds between chunks
-_MAX_WORKERS = 5
+_MAX_WORKERS = 8
 
 
 def _safe_float(val, decimals=2):
@@ -96,31 +95,40 @@ def _compute_price_action(rsi_val, consol_range):
 
 
 def _build_stock_data(ticker, info, hist_df, spy_1m_return):
-    """Build a single stock record from info dict and history DataFrame."""
+    """Build a single stock record from info dict and history DataFrame.
+
+    ``info`` may be None — price data is extracted from ``hist_df`` in that
+    case, and analyst recommendation / company name default to N/A / ticker.
+    """
     try:
         close = hist_df['Close']
         if len(close) < 50:
             return None
 
-        current_price = _safe_float(info.get('currentPrice') or info.get('regularMarketPrice'))
-        if current_price is None:
+        if info:
+            current_price = _safe_float(info.get('currentPrice') or info.get('regularMarketPrice'))
+            if current_price is None:
+                current_price = _safe_float(close.iloc[-1])
+            prev_close = _safe_float(info.get('previousClose') or info.get('regularMarketPreviousClose'))
+            if prev_close is None and len(close) >= 2:
+                prev_close = _safe_float(close.iloc[-2])
+            rec_key = info.get('recommendationKey', '')
+            if rec_key:
+                rec_key = rec_key.lower().replace(' ', '_')
+            rec_display = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
+            name = info.get('longName') or info.get('shortName') or ticker
+        else:
             current_price = _safe_float(close.iloc[-1])
+            prev_close = _safe_float(close.iloc[-2]) if len(close) >= 2 else None
+            rec_key = 'n/a'
+            rec_display = 'N/A'
+            name = ticker
 
         # Day change
-        prev_close = _safe_float(info.get('previousClose') or info.get('regularMarketPreviousClose'))
         if current_price and prev_close and prev_close > 0:
             day_change = round((current_price - prev_close) / prev_close * 100, 2)
         else:
             day_change = None
-
-        # Analyst recommendation
-        rec_key = info.get('recommendationKey', '')
-        if rec_key:
-            rec_key = rec_key.lower().replace(' ', '_')
-        rec_display = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
-
-        # Name
-        name = info.get('longName') or info.get('shortName') or ticker
 
         # ── MACD ──────────────────────────────────────────────────────────
         ema12 = close.ewm(span=12, adjust=False).mean()
@@ -271,19 +279,14 @@ def _fetch_all_data():
             futures = {executor.submit(_get_ticker_info, t): t for t in chunk}
             for future in as_completed(futures):
                 try:
-                    t, info = future.result(timeout=10)
+                    t, info = future.result(timeout=5)
                     if info:
                         info_map[t] = info
                 except Exception as e:
                     logger.debug('Future result error: %s', e)
 
-        # Build stock records for this chunk
+        # Build stock records for this chunk (info may be None — that's OK)
         for t in chunk:
-            info = info_map.get(t)
-            if not info:
-                failed += 1
-                continue
-
             try:
                 hist_df = raw[t].dropna(how='all')
                 if hist_df.empty or len(hist_df) < 50:
@@ -295,7 +298,7 @@ def _fetch_all_data():
                 failed += 1
                 continue
 
-            record = _build_stock_data(t, info, hist_df, spy_1m_return)
+            record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return)
             if record:
                 stocks.append(record)
             else:

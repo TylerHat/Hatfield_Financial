@@ -1,8 +1,44 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
 import './Recommendations.css';
+
+const LS_KEY = 'hf_recommendations_cache';
+const LS_TTL = 20 * 60 * 1000; // 20 minutes in ms
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed.stocks || !parsed.timestamp) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(stocks, lastUpdated) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      stocks,
+      lastUpdated,
+      timestamp: Date.now(),
+    }));
+  } catch { /* storage full or unavailable — ignore */ }
+}
+
+function formatTimeAgo(isoOrTimestamp) {
+  const ts = typeof isoOrTimestamp === 'number' ? isoOrTimestamp : new Date(isoOrTimestamp).getTime();
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 min ago';
+  if (mins < 60) return `${mins} mins ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs === 1) return '1 hour ago';
+  return `${hrs} hours ago`;
+}
 
 const STRATEGIES = [
   { value: 'none', label: 'None' },
@@ -161,15 +197,55 @@ export default function Recommendations({ onNavigateToStock }) {
   const [expandedTicker, setExpandedTicker] = useState(null);
   const [strategySignals, setStrategySignals] = useState({});
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const tickRef = useRef(null);
 
-  // Fetch recommendations on mount with progressive loading
+  // Re-render the "X mins ago" label every 30s
+  useEffect(() => {
+    tickRef.current = setInterval(() => setLastUpdated((v) => v), 30000);
+    return () => clearInterval(tickRef.current);
+  }, []);
+
+  // Fetch recommendations on mount with localStorage cache
   useEffect(() => {
     let cancelled = false;
     let retryCount = 0;
-    const MAX_RETRIES = 60; // up to ~5 minutes at 5s intervals
+    const MAX_RETRIES = 60;
 
-    setLoading(true);
+    // Check localStorage first
+    const cached = loadCache();
+    if (cached && (Date.now() - cached.timestamp) < LS_TTL) {
+      // Fresh cache — show it and skip backend fetch
+      console.log('[Recommendations] fresh localStorage cache — %d stocks', cached.stocks.length);
+      setStocks(cached.stocks);
+      setLastUpdated(cached.timestamp);
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    if (cached) {
+      // Stale cache — show it immediately, refresh in background
+      console.log('[Recommendations] stale localStorage cache — showing while refreshing');
+      setStocks(cached.stocks);
+      setLastUpdated(cached.timestamp);
+      setLoading(false);
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
+
+    function handleFreshData(newStocks, serverLastUpdated) {
+      if (cancelled) return;
+      setStocks(newStocks);
+      setLastUpdated(Date.now());
+      setLoading(false);
+      setRefreshing(false);
+      setProgress({ current: 0, total: 0 });
+      saveCache(newStocks, serverLastUpdated);
+    }
 
     function doFetch() {
       console.log('[Recommendations] fetching (attempt', retryCount + 1, ')');
@@ -179,24 +255,23 @@ export default function Recommendations({ onNavigateToStock }) {
           if (cancelled) return;
           if (data.error) {
             console.error('[Recommendations] server error:', data.error);
-            setError(data.error);
+            if (!cached) setError(data.error);
             setLoading(false);
+            setRefreshing(false);
           } else if (data.status === 'loading') {
-            // Backend is still prewarming — switch to progress polling
             console.warn('[Recommendations] backend prewarming — polling progress');
             pollProgress();
           } else {
-            console.log('[Recommendations] loaded', (data.stocks || []).length, 'stocks', `(${data.failedCount} failed, updated ${data.lastUpdated})`);
-            setStocks(data.stocks || []);
-            setProgress({ current: 0, total: 0 });
-            setLoading(false);
+            console.log('[Recommendations] loaded', (data.stocks || []).length, 'stocks');
+            handleFreshData(data.stocks || [], data.lastUpdated);
           }
         })
         .catch((err) => {
           if (!cancelled) {
             console.error('[Recommendations] fetch error:', err);
-            setError('Failed to connect to server.');
+            if (!cached) setError('Failed to connect to server.');
             setLoading(false);
+            setRefreshing(false);
           }
         });
     }
@@ -206,8 +281,9 @@ export default function Recommendations({ onNavigateToStock }) {
       retryCount++;
       if (retryCount >= MAX_RETRIES) {
         console.error('[Recommendations] max retries reached — giving up');
-        setError('Data is taking too long to load. Please refresh and try again.');
+        if (!cached) setError('Data is taking too long to load. Please refresh and try again.');
         setLoading(false);
+        setRefreshing(false);
         return;
       }
 
@@ -217,25 +293,20 @@ export default function Recommendations({ onNavigateToStock }) {
           if (cancelled) return;
 
           if (data.status === 'complete') {
-            // Fetch finished — get the full cached result
-            setStocks(data.stocks || []);
-            setProgress({ current: 0, total: 0 });
-            setLoading(false);
+            handleFreshData(data.stocks || [], null);
             return;
           }
 
-          // Show partial results as they arrive
-          if (data.stocks && data.stocks.length > 0) {
+          // Show partial results as they arrive (only if no stale cache shown)
+          if (!cached && data.stocks && data.stocks.length > 0) {
             setStocks(data.stocks);
           }
           setProgress({ current: data.progress || 0, total: data.total || 0 });
 
-          // Continue polling
           setTimeout(pollProgress, 5000);
         })
         .catch(() => {
           if (!cancelled) {
-            // Retry on transient errors
             setTimeout(pollProgress, 5000);
           }
         });
@@ -327,6 +398,12 @@ export default function Recommendations({ onNavigateToStock }) {
         {!loading && !error && (
           <span className="rec-header__meta">
             {stocks.length} stocks loaded
+            {lastUpdated && (
+              <span style={{ marginLeft: 8, color: '#8b949e' }}>
+                · Updated {formatTimeAgo(lastUpdated)}
+                {refreshing && <span className="rec-loading-spinner" style={{ marginLeft: 6, width: 12, height: 12 }} />}
+              </span>
+            )}
           </span>
         )}
       </div>
