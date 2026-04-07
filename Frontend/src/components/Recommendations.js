@@ -244,7 +244,10 @@ export default function Recommendations({ onNavigateToStock }) {
       setLoading(false);
       setRefreshing(false);
       setProgress({ current: 0, total: 0 });
-      saveCache(newStocks, serverLastUpdated);
+      // Only cache non-empty results to avoid blocking retries
+      if (newStocks.length > 0) {
+        saveCache(newStocks, serverLastUpdated);
+      }
     }
 
     function doFetch() {
