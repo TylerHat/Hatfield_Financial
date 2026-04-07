@@ -23,17 +23,16 @@ Hatfield_Financial/
 │   ├── requirements.txt
 │   ├── sp500.py                        Static S&P 500 ticker list
 │   ├── cache.py                        Thread-safe in-memory cache with TTL (used by recommendations)
-│   ├── data_fetcher.py                 Shared data-fetching layer with caching (OHLCV, info, SPY, earnings)
+│   ├── data_fetcher.py                 Shared data-fetching layer with caching (OHLCV, info, SPY, earnings, analyst)
 │   ├── instance/                       SQLite database (hatfield.db, gitignored)
-│   ├── data/
-│   │   └── sp500_tickers.py            SP500_TICKERS, CRYPTO_TICKERS universe constants
 │   └── routes/
 │       ├── stock_data.py               GET /api/stock/<ticker>
 │       ├── stock_info.py               GET /api/stock-info/<ticker> (also fetches SPY for relative strength)
 │       ├── backtest.py                 GET /api/backtest/<ticker>
 │       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
-│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (30-min cache)
+│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (20-min cache)
+│       ├── analyst_data.py             GET /api/analyst-data/<ticker> — price targets, recommendations, earnings estimates
 │       └── strategies/
 │           ├── bollinger_bands.py
 │           ├── mean_reversion.py
@@ -55,6 +54,8 @@ Hatfield_Financial/
             ├── AuthPage.js / AuthPage.css   Login / register form with toggle
             ├── StockChart.js           Price + Volume + MACD + ATR + Stochastic + OBV + RSI charts; expand/info UI; signal overlays
             ├── StockInfo.js            Three-row analysis cards: (Valuation, Momentum, 52-Week) + (Price Action, MACD, Volatility, Volume) + (Trend Alignment, Earnings Proximity, Rel Strength vs SPY, Dividend Health)
+            ├── AnalystPanel.js / AnalystPanel.css   Analyst coverage: price targets, recommendation trends, upgrades/downgrades, earnings estimates
+            ├── Backtester.js / Backtester.css       Strategy backtesting: equity curve charts, trade tables, performance metrics
             ├── StrategyGuide.js        Static strategy documentation tab
             ├── Recommendations.js / Recommendations.css   Recommendations tab (filter bar, DataTable, on-demand strategy signals)
             ├── Badge.js / Badge.css
@@ -71,9 +72,10 @@ User → React Tab → apiFetch(/api/*) → Flask route → data_fetcher (cached
                         ↓                           ↓
                   Bearer token injected        In-memory cache layer:
                   from localStorage            - OHLCV: 5-min TTL (280-day warmup)
-                  401 → clears token           - Ticker info: 15-min TTL
+                  401 → clears token           - Ticker info: 30-min TTL
                                                - SPY: 10-min TTL (shared globally)
                                                - Earnings: 1-hour TTL
+                                               - Analyst data: 30-min TTL
                   apiFetch client-side cache:
                   - GET responses: 2-min TTL (max 50 entries)
 ```
@@ -91,7 +93,7 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 
 | Layer | Technologies |
 |-------|-------------|
-| Backend | Flask, flask-cors, flask-sqlalchemy, flask-limiter, PyJWT, yfinance, pandas, numpy (Python) |
+| Backend | Flask, flask-cors, flask-sqlalchemy, flask-migrate, flask-limiter, PyJWT, yfinance, pandas, numpy, werkzeug (Python) |
 | Frontend | React 18, Chart.js v4, react-chartjs-2 v5, plain CSS |
 | Database | SQLite via SQLAlchemy (swappable to Postgres) |
 | Auth | JWT tokens (24h expiry), werkzeug password hashing |
@@ -114,14 +116,14 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - Client-side response cache: GET requests cached for 2 minutes (max 50 entries)
 
 ### Tab Structure
-- **Stock Analysis** — StockChart + StockInfo
+- **Stock Analysis** — StockChart + StockInfo + AnalystPanel
 - **Recommendations** — Recommendations (S&P 500 batch screener with filter bar, strategy signals)
 - **Components** — Badge, StatCard, DataTable showcase
 - **Strategy Guide** — StrategyGuide (static docs)
 
 ### Stock Info Flow
 - `App.js` fetches `/api/stock-info/<ticker>` once per ticker change
-- Result shared to `StockSnapshot` (price/change cards) and `StockInfo` (analysis cards) via props
+- Result shared to `StockSnapshot` (internal App.js function for price/change cards) and `StockInfo` (analysis cards) via props
 - Eliminates the prior duplicate fetch from both components
 
 ### Signal Flow
@@ -144,7 +146,7 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - All errors return `{ "error": "message" }` with appropriate HTTP status code
 
 ### Data Fetcher (`Backend/data_fetcher.py`)
-- Centralized caching layer; all routes use `get_ohlcv()`, `get_ticker_info()`, `get_spy_history()`, `get_earnings_dates()`
+- Centralized caching layer; all routes use `get_ohlcv()`, `get_ticker_info()`, `get_spy_history()`, `get_spy_period()`, `get_earnings_dates()`, `get_analyst_data()`
 - `get_ohlcv()` always fetches with 280-day warmup (max any strategy needs), cached 5 min
 - SPY data cached globally (10-min TTL), shared across stock_info, relative_strength, backtest
 - Recommendations cache pre-warmed on server start via background thread
@@ -159,13 +161,13 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - `Backend/auth.py`: `create_token()`, `decode_token()`, `@login_required` decorator
 - `@login_required` extracts Bearer token, sets `g.current_user_id`, returns 401 on failure
 - Registration validation: username 3-30 chars, email format, password 8+ with upper/lower/digit
-- Rate limits: login 5/min/IP, register 3/hour/IP (via flask-limiter)
+- Rate limits: login 5/min/IP, register 30/hour/IP (via flask-limiter)
 - CORS restricted to `http://localhost:3000`
 
 ### Backtest Engine (`routes/backtest.py`)
 - `_simulate_trades()` — runs signal list through capital simulation
 - `_build_equity_curve()` — builds time-series equity from trades
-- `_compute_summary()` — win rate, max drawdown, Sharpe ratio, unrealized P&L
+- `_compute_summary()` — win rate, max drawdown, profit factor, unrealized P&L
 
 ---
 

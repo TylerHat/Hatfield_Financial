@@ -8,11 +8,14 @@ AWS-hosted. Terraform-managed. CI/CD via GitHub Actions.
 
 ```
 User → CloudFront (CDN) → S3 (React build)
-                        ↘ ALB → ECS Fargate (Flask API) → RDS PostgreSQL
+                        ↘ API Gateway → ECS Fargate (Flask API) → RDS PostgreSQL
+                                                    ↕
+                                                   EFS
 ```
 
 - **Frontend:** S3 static site behind CloudFront, domain via Route 53
-- **Backend:** Docker container on ECS Fargate, behind ALB with HTTPS
+- **Backend:** Docker container on ECS Fargate, behind API Gateway with HTTPS
+- **Storage:** EFS for persistent file storage across containers
 - **Database:** RDS PostgreSQL (prod), SQLite (local dev)
 - **Domain:** hatfield-financial.com, ACM certs for both frontend and API
 
@@ -24,16 +27,18 @@ State: S3 bucket `hatfield-financial-tfstate` + DynamoDB lock table. Region: us-
 
 | Module | Purpose | Key Resources |
 |--------|---------|---------------|
-| `networking` | VPC, subnets, security groups | VPC, public/private subnets, SGs for ECS/ALB/RDS |
+| `networking` | VPC, subnets, security groups | VPC, public/private subnets, SGs for ECS/API GW/RDS |
 | `ecr` | Container registry | ECR repository |
-| `ecs` | Compute | ECS cluster, service, task def, ALB, target group |
+| `ecs` | Compute | ECS cluster, service, task def, target group |
 | `rds` | Database | PostgreSQL instance in private subnets |
 | `iam` | Permissions | ECS task execution role |
 | `certs` | TLS | ACM certificates for frontend + API domains |
 | `cdn` | Frontend hosting | CloudFront distribution + S3 origin |
-| `dns` | Routing | Route 53 records for domain → CloudFront/ALB |
+| `dns` | Routing | Route 53 records for domain → CloudFront/API GW |
+| `apigateway` | API routing | API Gateway for backend HTTPS routing |
+| `efs` | Storage | Elastic File System for persistent container storage |
 
-**Dependency chain:** certs → cdn → dns; networking + ecr + iam + rds + certs → ecs → dns
+**Dependency chain:** certs → cdn → dns; networking + ecr + iam + rds + efs + certs → ecs → apigateway → dns
 
 ### Variables (`variables.tf`)
 - `aws_region` (default: us-east-1)
@@ -71,7 +76,7 @@ Local dev uses SQLite automatically when `DATABASE_URL` is unset. See `.env.exam
 
 ## Docker (`Backend/Dockerfile`)
 
-Single-stage build for the Flask API. Runs on port 5000 inside the container.
+Single-stage build for the Flask API. Runs gunicorn on port 8000 inside the container (`--workers 1 --timeout 120 --preload`).
 
 ---
 

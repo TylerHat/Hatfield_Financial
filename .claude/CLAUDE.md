@@ -8,7 +8,7 @@
 - `ARCHITECTURE.md` — project structure, data flow, tech stack, component map
 - `API.md` — all endpoint contracts, query params, response shapes
 - `FIN_STRATEGIES.md` — signal logic, indicators, scoring for all 9 strategies
-- `COMPONENTS.md` — full prop API for Badge, StatCard, DataTable, StockChart
+- `COMPONENTS.md` — full prop API for Badge, StatCard, DataTable, StockChart, AnalystPanel, Backtester
 - `DESIGN_SYSTEM.md` — colors, typography, spacing, CSS class naming
 - `DATA.md` — yfinance behaviors, known quirks, timezone handling, rate limits
 - `INFRASTRUCTURE.md` — Terraform, Docker, CI/CD, AWS deployment

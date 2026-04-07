@@ -169,7 +169,7 @@ Sortable, scannable data table for signals, screener results, and any tabular fi
 | `error` | string \| null | `null` | Shows red error state when set |
 | `caption` | string \| null | `null` | Accessible `<caption>` for screen readers |
 | `rowKey` | string \| function \| null | `null` | React key: field name, `(row, i) => key` function, or falls back to index |
-| `onRowClick` | `(row) => void` \| null | `null` | Called when a row is clicked. Adds `dt-tr--clickable` cursor style to rows. |
+| `onRowClick` | `(row, index) => void` \| null | `null` | Called when a row is clicked. Adds pointer cursor style to rows via inline style. |
 
 ### ColumnDef Shape
 
@@ -275,6 +275,7 @@ Renders company overview, analysis cards, key metrics, and fundamentals. Data is
 | `stockInfoData` | object \| null | Pre-fetched stock-info response from App.js |
 | `stockInfoLoading` | boolean | Whether stock-info is currently loading |
 | `stockInfoError` | string \| null | Error message if stock-info fetch failed |
+| `hideOverview` | boolean | `false` | Hides the company overview section when true |
 
 ### Analysis Cards Layout (3 rows)
 
@@ -412,6 +413,42 @@ recommendations__detail-signals
 recommendations__loading
 recommendations__nav-btn
 ```
+
+---
+
+## AnalystPanel
+
+**File**: `components/AnalystPanel.js` + `AnalystPanel.css`
+**Import**: `import AnalystPanel from './components/AnalystPanel'`
+
+Displays analyst coverage data: price targets, recommendation trends, upgrades/downgrades, and earnings/revenue estimates. Uses Badge and DataTable internally.
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `data` | object \| null | Analyst data response from `/api/analyst-data/<ticker>` |
+| `ticker` | string | Active ticker symbol |
+| `currentPrice` | number | Current stock price (for price target comparison) |
+| `loading` | boolean | Whether analyst data is currently loading |
+
+---
+
+## Backtester
+
+**File**: `components/Backtester.js` + `Backtester.css`
+**Import**: `import Backtester from './components/Backtester'`
+
+Strategy backtesting panel with equity curve chart, trade history table, and performance summary metrics. Fetches backtest data via `/api/backtest/<ticker>` internally.
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `ticker` | string | Active ticker symbol |
+| `strategy` | string | Strategy key (e.g. `bollinger-bands`) |
+| `startDate` | string | `YYYY-MM-DD` backtest start |
+| `endDate` | string | `YYYY-MM-DD` backtest end |
 
 ---
 

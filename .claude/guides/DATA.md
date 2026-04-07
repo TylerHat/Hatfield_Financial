@@ -7,7 +7,7 @@ Documents yfinance behavior, known quirks, and defensive patterns already establ
 ## Data Source
 
 All market data comes from **Yahoo Finance via the `yfinance` Python library**. No API key required.
-Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 15-min, SPY 10-min, earnings 1-hr). User data is stored in SQLite (local) or PostgreSQL (prod).
+Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 30-min, SPY 10-min, earnings 1-hr, analyst 30-min). User data is stored in SQLite (local) or PostgreSQL (prod).
 
 ---
 
@@ -170,7 +170,7 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 ## Known Limitations
 
 - **No real-time data**: yfinance returns delayed/end-of-day prices for most tickers
-- **Crypto tickers**: supported (see `CRYPTO_TICKERS` in `data/sp500_tickers.py`), but earnings data is unavailable
+- **Crypto tickers**: supported (see `CRYPTO_TICKERS` in `sp500.py`), but earnings data is unavailable
 - **International tickers**: may work with exchange suffixes (e.g. `ASML.AS`) but timezone handling becomes more complex
 - **Earnings dates**: only reliable for ~2 years of history; far-future dates may be estimates
 - **`info` dict instability**: yfinance occasionally changes field names across library versions — if a field goes missing, `safe_float()` returns `None` gracefully
