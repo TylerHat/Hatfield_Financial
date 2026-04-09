@@ -151,6 +151,54 @@ def get_watchlist_data(watchlist_id):
     return jsonify({'stocks': stocks, 'count': len(stocks)})
 
 
+@user_data_bp.route('/watchlists/<int:watchlist_id>/data/<string:ticker>', methods=['GET'])
+@login_required
+def get_watchlist_ticker_data(watchlist_id, ticker):
+    """Fetch enriched data for a single ticker in a watchlist."""
+    ticker = ticker.upper()
+    watchlist = Watchlist.query.filter_by(id=watchlist_id, user_id=g.current_user_id).first()
+    if not watchlist:
+        return jsonify({'error': 'Watchlist not found'}), 404
+
+    item_tickers = [item.ticker for item in watchlist.items]
+    if ticker not in item_tickers:
+        return jsonify({'error': 'Ticker not in watchlist'}), 404
+
+    # SPY 1M return for relative momentum
+    spy_1m_return = None
+    try:
+        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
+        spy_close = spy_raw['Close'].dropna()
+        if len(spy_close) >= 22:
+            spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
+        del spy_raw
+    except Exception as e:
+        logger.warning('Could not fetch SPY return: %s', e)
+
+    # Download OHLCV for the single ticker
+    try:
+        raw = yf.download([ticker], period='10mo', progress=False)
+    except Exception as e:
+        logger.error('yf.download failed for %s: %s', ticker, e)
+        return jsonify({'error': 'Failed to fetch stock data'}), 502
+
+    # Fetch .info
+    _, info = _get_ticker_info(ticker)
+
+    try:
+        hist_df = raw.dropna(how='all')
+        if hist_df.empty or len(hist_df) < 50:
+            return jsonify({'error': f'Insufficient data for {ticker}'}), 422
+    except Exception:
+        return jsonify({'error': f'Failed to process data for {ticker}'}), 422
+
+    record = _build_stock_data(ticker, info, hist_df, spy_1m_return)
+    if not record:
+        return jsonify({'error': f'Could not build data for {ticker}'}), 422
+
+    return jsonify({'stock': record})
+
+
 # ── Portfolio ───────────────────────────────────────────────────────────────
 
 @user_data_bp.route('/portfolio', methods=['GET'])

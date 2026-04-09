@@ -247,17 +247,32 @@ export default function Watchlist({ onNavigateToStock }) {
       .then(({ ok, data }) => {
         if (!ok) {
           setAddMsg({ type: 'error', text: data.error || 'Failed to add ticker.' });
+          setAdding(false);
         } else {
           setAddInput('');
-          // Update local watchlist items and re-fetch data
           const updatedWl = {
             ...watchlist,
             items: [...(watchlist.items || []), data.item],
           };
           setWatchlist(updatedWl);
-          fetchData(updatedWl);
+          // Fetch only the new ticker's data instead of re-fetching all
+          const ticker = data.item.ticker;
+          setDataLoading(true);
+          apiFetch(`/api/user/watchlists/${watchlist.id}/data/${ticker}`)
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.stock) {
+                setStocks((prev) => [...prev, d.stock]);
+              }
+              setDataLoading(false);
+              setAdding(false);
+            })
+            .catch(() => {
+              // Fallback: re-fetch all if single fetch fails
+              fetchData(updatedWl);
+              setAdding(false);
+            });
         }
-        setAdding(false);
       })
       .catch(() => {
         setAddMsg({ type: 'error', text: 'Network error.' });
