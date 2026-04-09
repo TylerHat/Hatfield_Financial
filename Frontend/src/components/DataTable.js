@@ -36,6 +36,8 @@ import './DataTable.css';
  *                    to row index if not set.
  * onRowClick       : (row, index) => void
  *                    Optional callback fired when a body row is clicked.
+ * onRowDoubleClick  : (row, index) => void
+ *                    Optional callback fired when a body row is double-clicked.
  */
 export default function DataTable({
   columns = [],
@@ -49,6 +51,7 @@ export default function DataTable({
   caption = null,
   rowKey = null,
   onRowClick = null,
+  onRowDoubleClick = null,
 }) {
   const [sortKey, setSortKey] = useState(defaultSortKey);
   const [sortDir, setSortDir] = useState(defaultSortDir);
@@ -200,7 +203,8 @@ export default function DataTable({
                 key={getRowKey(row, i)}
                 className={['dt-tr', row._rowClass].filter(Boolean).join(' ')}
                 onClick={onRowClick ? () => onRowClick(row, i) : undefined}
-                style={onRowClick ? { cursor: 'pointer' } : undefined}
+                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row, i) : undefined}
+                style={onRowClick || onRowDoubleClick ? { cursor: 'pointer' } : undefined}
               >
                 {columns.map((col) => {
                   const raw = row[col.key];
