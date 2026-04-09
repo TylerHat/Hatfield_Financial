@@ -295,7 +295,7 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
       // Rollback on error — re-fetch
       fetchData(watchlist);
     });
-  }, [watchlist, fetchData]);
+  }, [watchlist, fetchData, onWatchlistChange]);
 
   const columns = buildColumns(handleRemove);
 
