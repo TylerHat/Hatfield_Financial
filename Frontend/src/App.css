@@ -664,6 +664,40 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   ANALYSIS SUBTAB NAVIGATION
+   ══════════════════════════════════════════════════════════════════════════════ */
+.subtab-nav {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #30363d;
+  margin-bottom: 20px;
+  padding: 0;
+}
+
+.subtab-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8b949e;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.subtab-btn:hover {
+  color: #e6edf3;
+}
+
+.subtab-btn.active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
    STOCK INFO PANEL
    ══════════════════════════════════════════════════════════════════════════════ */
 .info-loading,
