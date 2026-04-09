@@ -76,6 +76,7 @@ function StockSnapshot({ info, loading, error }) {
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('analysis');
+  const [analysisSubTab, setAnalysisSubTab] = useState('overview');
   const [inputValue, setInputValue] = useState('');
   const [submittedTicker, setSubmittedTicker] = useState('');
   const [strategy, setStrategy] = useState('none');
@@ -306,7 +307,30 @@ function App() {
               <StockSnapshot info={stockInfo} loading={stockInfoLoading} error={stockInfoError} />
             )}
 
-            {submittedTicker && (
+            {submittedTicker && stockInfo && (
+              <nav className="subtab-nav">
+                <button
+                  className={`subtab-btn ${analysisSubTab === 'overview' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('overview')}
+                >
+                  Overview
+                </button>
+                <button
+                  className={`subtab-btn ${analysisSubTab === 'analyst' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('analyst')}
+                >
+                  Analyst Coverage
+                </button>
+                <button
+                  className={`subtab-btn ${analysisSubTab === 'charts' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('charts')}
+                >
+                  Technical Charts
+                </button>
+              </nav>
+            )}
+
+            {submittedTicker && analysisSubTab === 'overview' && (
               <StockInfo
                 ticker={submittedTicker}
                 stockInfoData={stockInfo}
@@ -316,7 +340,7 @@ function App() {
               />
             )}
 
-            {submittedTicker && (
+            {submittedTicker && analysisSubTab === 'analyst' && (
               <AnalystPanel
                 data={analystData}
                 ticker={submittedTicker}
@@ -325,34 +349,33 @@ function App() {
               />
             )}
 
-            {submittedTicker && dateRangeValid && stockInfo && (
-              <div className="chart-controls-bar">
-                <span className="chart-controls-title">Technical Charts</span>
-                <div className="strategy-group">
-                  <label htmlFor="strategy-select">Strategy:</label>
-                  <select
-                    id="strategy-select"
-                    value={strategy}
-                    onChange={(e) => setStrategy(e.target.value)}
-                    className="strategy-select"
-                  >
-                    {STRATEGIES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+            {submittedTicker && analysisSubTab === 'charts' && dateRangeValid && stockInfo && (
+              <>
+                <div className="chart-controls-bar">
+                  <span className="chart-controls-title">Technical Charts</span>
+                  <div className="strategy-group">
+                    <label htmlFor="strategy-select">Strategy:</label>
+                    <select
+                      id="strategy-select"
+                      value={strategy}
+                      onChange={(e) => setStrategy(e.target.value)}
+                      className="strategy-select"
+                    >
+                      {STRATEGIES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
-            )}
-
-            {submittedTicker && dateRangeValid && stockInfo && (
-              <StockChart
-                ticker={submittedTicker}
-                strategy={strategy}
-                startDate={startDate}
-                endDate={endDate}
-              />
+                <StockChart
+                  ticker={submittedTicker}
+                  strategy={strategy}
+                  startDate={startDate}
+                  endDate={endDate}
+                />
+              </>
             )}
           </>
         )}

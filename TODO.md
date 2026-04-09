@@ -1,7 +1,3 @@
-1) Look up companies via their company name, 
-***2) fix issue from the watch list
-***3) add ability to add to watchlist from the front
-4) add a minimize ability for certain stuff 
 5) add stock splits and divedends to font
 6) Adding other yfinance
     - major_holders
