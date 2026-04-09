@@ -151,7 +151,7 @@ function buildColumns(onRemove) {
 
 /* ── Component ────────────────────────────────────────────────────────────── */
 
-export default function Watchlist({ onNavigateToStock }) {
+export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
   const [watchlist, setWatchlist] = useState(null);
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -250,11 +250,10 @@ export default function Watchlist({ onNavigateToStock }) {
           setAdding(false);
         } else {
           setAddInput('');
-          const updatedWl = {
-            ...watchlist,
-            items: [...(watchlist.items || []), data.item],
-          };
+          const updatedItems = [...(watchlist.items || []), data.item];
+          const updatedWl = { ...watchlist, items: updatedItems };
           setWatchlist(updatedWl);
+          if (onWatchlistChange) onWatchlistChange(updatedItems);
           // Fetch only the new ticker's data instead of re-fetching all
           const ticker = data.item.ticker;
           setDataLoading(true);
@@ -288,6 +287,7 @@ export default function Watchlist({ onNavigateToStock }) {
     setStocks((prev) => prev.filter((s) => s.ticker !== ticker));
     const updatedItems = (watchlist.items || []).filter((i) => i.ticker !== ticker);
     setWatchlist((prev) => ({ ...prev, items: updatedItems }));
+    if (onWatchlistChange) onWatchlistChange(updatedItems);
 
     apiFetch(`/api/user/watchlists/${watchlist.id}/items/${ticker}`, {
       method: 'DELETE',
