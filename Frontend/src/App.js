@@ -9,6 +9,7 @@ import StrategyGuide from './components/StrategyGuide';
 import StatCard, { StatCardGrid } from './components/StatCard';
 import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
+import Watchlist from './components/Watchlist';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -91,6 +92,46 @@ function App() {
   const [analystData, setAnalystData] = useState(null);
   const [analystLoading, setAnalystLoading] = useState(false);
 
+  // Watchlist state — for "Add to Watchlist" button on analysis tab
+  const [defaultWatchlist, setDefaultWatchlist] = useState(null);
+  const [watchlistTickers, setWatchlistTickers] = useState(new Set());
+  const [watchlistAdding, setWatchlistAdding] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/api/user/watchlists')
+      .then((r) => r.json())
+      .then((data) => {
+        const lists = data.watchlists || [];
+        if (lists.length > 0) {
+          setDefaultWatchlist(lists[0]);
+          setWatchlistTickers(new Set((lists[0].items || []).map((i) => i.ticker)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleAddToWatchlist = (ticker) => {
+    if (!defaultWatchlist || watchlistTickers.has(ticker)) return;
+    setWatchlistAdding(true);
+    apiFetch(`/api/user/watchlists/${defaultWatchlist.id}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker }),
+    })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok && data.item) {
+          setWatchlistTickers((prev) => new Set([...prev, data.item.ticker]));
+          setDefaultWatchlist((prev) => ({
+            ...prev,
+            items: [...(prev.items || []), data.item],
+          }));
+        }
+        setWatchlistAdding(false);
+      })
+      .catch(() => setWatchlistAdding(false));
+  };
+
   useEffect(() => {
     if (!submittedTicker) return;
     setStockInfoLoading(true);
@@ -172,6 +213,12 @@ function App() {
           Recommendations
         </button>
         <button
+          className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
+          onClick={() => setActiveTab('watchlist')}
+        >
+          Watchlist
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -232,10 +279,25 @@ function App() {
                   <span className="overview-ticker">{stockInfo.ticker}</span>
                   <span className="overview-company">{stockInfo.name}</span>
                 </div>
-                <div className="overview-meta">
-                  {stockInfo.sector !== 'N/A' && <span className="overview-pill">{stockInfo.sector}</span>}
-                  {stockInfo.industry !== 'N/A' && <span className="overview-pill">{stockInfo.industry}</span>}
-                  {stockInfo.marketCap && <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>}
+                <div className="overview-actions">
+                  <div className="overview-meta">
+                    {stockInfo.sector !== 'N/A' && <span className="overview-pill">{stockInfo.sector}</span>}
+                    {stockInfo.industry !== 'N/A' && <span className="overview-pill">{stockInfo.industry}</span>}
+                    {stockInfo.marketCap && <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>}
+                  </div>
+                  {defaultWatchlist && (
+                    <button
+                      className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
+                      disabled={watchlistAdding || watchlistTickers.has(submittedTicker)}
+                      onClick={() => handleAddToWatchlist(submittedTicker)}
+                    >
+                      {watchlistTickers.has(submittedTicker)
+                        ? 'In Watchlist'
+                        : watchlistAdding
+                          ? 'Adding...'
+                          : '+ Watchlist'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -301,6 +363,19 @@ function App() {
               setInputValue(ticker);
               setSubmittedTicker(ticker);
               setActiveTab('analysis');
+            }}
+          />
+        )}
+
+        {activeTab === 'watchlist' && (
+          <Watchlist
+            onNavigateToStock={(ticker) => {
+              setInputValue(ticker);
+              setSubmittedTicker(ticker);
+              setActiveTab('analysis');
+            }}
+            onWatchlistChange={(items) => {
+              setWatchlistTickers(new Set(items.map((i) => i.ticker)));
             }}
           />
         )}

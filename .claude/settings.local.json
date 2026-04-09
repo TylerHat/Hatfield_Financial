@@ -4,7 +4,11 @@
       "Bash(find . -type f -name \"*.py\" -o -name \"*.js\" -o -name \"*.json\" | grep -E \"\\\\.\\(py|js|json\\)$\" | head -40)",
       "Bash(curl:*)",
       "Bash(cd:*)",
-      "Bash(aws:*)"
+      "Bash(aws:*)",
+      "mcp__ide__executeCode"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "aws"
+  ]
 }

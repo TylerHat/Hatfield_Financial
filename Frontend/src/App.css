@@ -728,6 +728,37 @@
   color: #8b949e;
 }
 
+.overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wl-add-stock-btn {
+  padding: 5px 14px;
+  background: #238636;
+  color: #fff;
+  border: 1px solid #2ea043;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.wl-add-stock-btn:hover:not(:disabled) {
+  background: #2ea043;
+}
+.wl-add-stock-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.wl-add-stock-btn--added {
+  background: #21262d;
+  border-color: #30363d;
+  color: #8b949e;
+}
+
 /* Analysis cards grid — two fixed rows */
 .info-cards-row {
   display: grid;
