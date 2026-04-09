@@ -1,8 +1,16 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+
+import pandas as pd
+import yfinance as yf
 from flask import Blueprint, request, jsonify, g
 
 from models import db, Watchlist, WatchlistItem, PortfolioHolding, UserSettings
 from auth import login_required
+from routes.recommendations import _build_stock_data, _get_ticker_info
+
+logger = logging.getLogger(__name__)
 
 user_data_bp = Blueprint('user_data', __name__, url_prefix='/api/user')
 
@@ -75,6 +83,72 @@ def remove_watchlist_item(watchlist_id, ticker):
     db.session.delete(item)
     db.session.commit()
     return jsonify({'message': f'{ticker.upper()} removed from watchlist'}), 200
+
+
+@user_data_bp.route('/watchlists/<int:watchlist_id>/data', methods=['GET'])
+@login_required
+def get_watchlist_data(watchlist_id):
+    """Fetch enriched stock data for all tickers in a watchlist."""
+    watchlist = Watchlist.query.filter_by(id=watchlist_id, user_id=g.current_user_id).first()
+    if not watchlist:
+        return jsonify({'error': 'Watchlist not found'}), 404
+
+    tickers = [item.ticker for item in watchlist.items]
+    if not tickers:
+        return jsonify({'stocks': [], 'count': 0})
+
+    if len(tickers) > 50:
+        return jsonify({'error': 'Watchlist exceeds 50 ticker limit'}), 400
+
+    # SPY 1M return for relative momentum
+    spy_1m_return = None
+    try:
+        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
+        spy_close = spy_raw['Close'].dropna()
+        if len(spy_close) >= 22:
+            spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
+        del spy_raw
+    except Exception as e:
+        logger.warning('Could not fetch SPY return: %s', e)
+
+    # Download OHLCV for all watchlist tickers
+    try:
+        raw = yf.download(tickers, period='10mo', group_by='ticker',
+                          threads=True, progress=False)
+    except Exception as e:
+        logger.error('yf.download failed for watchlist: %s', e)
+        return jsonify({'error': 'Failed to fetch stock data'}), 502
+
+    # Fetch .info concurrently
+    info_map = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_get_ticker_info, t): t for t in tickers}
+        for future in as_completed(futures):
+            try:
+                t, info = future.result(timeout=5)
+                if info:
+                    info_map[t] = info
+            except Exception:
+                pass
+
+    # Build enriched records
+    stocks = []
+    for t in tickers:
+        try:
+            if len(tickers) == 1:
+                hist_df = raw.dropna(how='all')
+            else:
+                hist_df = raw[t].dropna(how='all')
+            if hist_df.empty or len(hist_df) < 50:
+                continue
+        except Exception:
+            continue
+
+        record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return)
+        if record:
+            stocks.append(record)
+
+    return jsonify({'stocks': stocks, 'count': len(stocks)})
 
 
 # ── Portfolio ───────────────────────────────────────────────────────────────

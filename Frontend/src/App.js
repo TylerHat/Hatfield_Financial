@@ -9,6 +9,7 @@ import StrategyGuide from './components/StrategyGuide';
 import StatCard, { StatCardGrid } from './components/StatCard';
 import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
+import Watchlist from './components/Watchlist';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -172,6 +173,12 @@ function App() {
           Recommendations
         </button>
         <button
+          className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
+          onClick={() => setActiveTab('watchlist')}
+        >
+          Watchlist
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
           onClick={() => setActiveTab('guide')}
         >
@@ -297,6 +304,16 @@ function App() {
 
         {activeTab === 'recommendations' && (
           <Recommendations
+            onNavigateToStock={(ticker) => {
+              setInputValue(ticker);
+              setSubmittedTicker(ticker);
+              setActiveTab('analysis');
+            }}
+          />
+        )}
+
+        {activeTab === 'watchlist' && (
+          <Watchlist
             onNavigateToStock={(ticker) => {
               setInputValue(ticker);
               setSubmittedTicker(ticker);

@@ -104,6 +104,7 @@ app.register_blueprint(analyst_data_bp)
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])
 limiter.limit('30/hour')(app.view_functions['auth.register'])
+limiter.limit('10/minute', methods=['GET'])(app.view_functions['user_data.get_watchlist_data'])
 
 with app.app_context():
     db.create_all()

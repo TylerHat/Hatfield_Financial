@@ -1,6 +1,6 @@
 # Unused yfinance Data Sources
 
-14 yfinance attributes available but not currently used in Hatfield Financial.
+13 yfinance attributes available but not currently used in Hatfield Financial.
 Your existing `data_fetcher.py` throttle (`_MIN_CALL_INTERVAL = 0.25s`) and `_fetch_with_retry` pattern apply to all of these.
 
 ---
@@ -297,37 +297,7 @@ Same column structure as balance_sheet (fiscal period datetime columns).
 
 ---
 
-## 11. `stock.sustainability`
-
-**What it returns:** DataFrame (or Series) with ESG scores.
-
-| Key/Row Label | Type | Description |
-|---------------|------|-------------|
-| totalEsg | float | Overall ESG risk score |
-| environmentScore | float | Environmental risk score |
-| socialScore | float | Social risk score |
-| governanceScore | float | Governance risk score |
-| esgPerformance | str | "OUT_PERF", "AVG_PERF", "UNDER_PERF" |
-| peerCount | int | Number of peers in comparison group |
-| percentile | float | Percentile rank within peer group |
-| peerGroup | str | Industry peer group name |
-| controversyLevel | int | 0-5 scale (5 = most controversial) |
-
-**Rate limit risk:** Low. Single endpoint, rarely changes.
-
-**Concerns:**
-- **Coverage is sparse** — only available for large-cap US stocks and some international large-caps. Most small/mid-caps return `None`
-- Data is often **6+ months stale** — no refresh frequency guarantee from Yahoo
-- Scoring methodology is opaque and proprietary — not comparable to MSCI, S&P Global, or Bloomberg ESG ratings
-- Missing entirely for SPACs, recent IPOs, and most ADRs
-- The DataFrame structure is unusual — index labels are the metric names, not columns. Access via `df.loc['totalEsg'].values[0]`
-- Consider whether this data is trustworthy enough to surface — stale ESG scores could mislead investors
-
-**Recommended TTL:** 24 hours (scores change very slowly when present)
-
----
-
-## 12. `stock.news`
+## 11. `stock.news`
 
 **What it returns:** List of dictionaries (not a DataFrame).
 
@@ -363,7 +333,7 @@ Same column structure as balance_sheet (fiscal period datetime columns).
 
 ---
 
-## 13. `stock.dividends`
+## 12. `stock.dividends`
 
 **What it returns:** Pandas Series with DatetimeIndex.
 
@@ -392,7 +362,7 @@ Name: Dividends, dtype: float64
 
 ---
 
-## 14. `stock.splits`
+## 13. `stock.splits`
 
 **What it returns:** Pandas Series with DatetimeIndex.
 
@@ -432,7 +402,6 @@ Name: Stock Splits, dtype: float64
 | earnings_history | Low-Moderate | Low | 1-2 days | Yes |
 | options (expiry list) | Very Low | Low | N/A | Yes |
 | option_chain(expiry) | **HIGH** | Moderate | Minutes-days | Yes, limit to 1-3 expiries |
-| sustainability | Low | **HIGH** | 6+ months | Maybe |
 | news | Moderate-High | Moderate | 1-6 hours | Yes, but unreliable |
 | dividends | Very Low | None (empty = no divs) | N/A | Yes (already in OHLCV) |
 | splits | Very Low | None (empty = no splits) | N/A | Yes (already in OHLCV) |
@@ -457,4 +426,3 @@ Name: Stock Splits, dtype: float64
 
 ### Probably skip
 - **insider_roster_holders** — low incremental value over `insider_transactions`.
-- **sustainability** — data too stale and sparse to be reliable. If you want ESG, consider a dedicated provider.
