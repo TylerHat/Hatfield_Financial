@@ -353,7 +353,7 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
           rowKey="ticker"
           defaultSortKey="ticker"
           defaultSortDir="asc"
-          onRowClick={(row) => onNavigateToStock && onNavigateToStock(row.ticker)}
+          onRowDoubleClick={(row) => onNavigateToStock && onNavigateToStock(row.ticker)}
         />
       )}
     </div>

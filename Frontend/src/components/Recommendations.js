@@ -364,6 +364,13 @@ export default function Recommendations({ onNavigateToStock }) {
     }
   }, [expandedTicker, selectedStrategy, fetchSignals]);
 
+  // Handle row double-click — navigate to Stock Analysis
+  const handleRowDoubleClick = useCallback((row) => {
+    if (onNavigateToStock) {
+      onNavigateToStock(row.ticker);
+    }
+  }, [onNavigateToStock]);
+
   // Re-fetch signals when strategy changes and a ticker is expanded
   useEffect(() => {
     if (expandedTicker && selectedStrategy !== 'none') {
@@ -479,6 +486,7 @@ export default function Recommendations({ onNavigateToStock }) {
         emptyMessage="No stocks match the selected filter."
         rowKey="ticker"
         onRowClick={handleRowClick}
+        onRowDoubleClick={handleRowDoubleClick}
       />
 
       {/* Detail panel */}
