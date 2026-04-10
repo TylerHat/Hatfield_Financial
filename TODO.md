@@ -9,8 +9,12 @@
     * institutional_holders
 - Potentially add a noteworthy tab that displays stock-splits and their dates. also potentially add nearest earnings reports?
 ## QoL Features
-- Adding yfinance queries/screens (see YFINANCE_SCREENER.md) to potentially help with some data gathering.
-    * Make sure to be mindful of 2 api requests every 6 seconds limits
+### This is huge but everything states I must be careful not to have the same processer do the same command. This will cause issues 
+- Increase the Gunicorn threads from 1 -4 to help backend
+    * Right now your entire backend can only handle one request at a time  if two users click "run backtest" simultaneously, the second user waits in line until the first finishes, which can mean 5–10+ second delays for no good reason.
+    * Most of your endpoints spend their time waiting on yfinance API calls and EFS reads, not actually using the CPU, so adding threads lets the server handle other users during that idle waiting time instead of sitting blocked.
+    * The change costs $0/month and takes one line in Backend/Dockerfile:14, but effectively triples to quadruples the number of users the site can serve concurrently — turning a 3-user ceiling into a 10-user ceiling on the exact same Fargate task.
+
 
 
 # Minor Improvments
