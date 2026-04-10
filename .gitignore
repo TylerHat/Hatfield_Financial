@@ -56,3 +56,6 @@ infra/.terraform.lock.hcl
 infra/*.tfstate
 infra/*.tfstate.backup
 infra/plan_output.txt
+
+# Misc
+sandbox.py
