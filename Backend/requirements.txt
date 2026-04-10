@@ -5,6 +5,9 @@ flask-migrate
 PyJWT
 flask-limiter
 yfinance
+requests-cache
+requests-ratelimiter
+pyrate-limiter<3.0
 pandas
 numpy
 gunicorn

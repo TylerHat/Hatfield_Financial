@@ -2,12 +2,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 
-import pandas as pd
-import yfinance as yf
 from flask import Blueprint, request, jsonify, g
 
 from models import db, Watchlist, WatchlistItem, PortfolioHolding, UserSettings
 from auth import login_required
+from data_fetcher import get_many_ohlcv, get_spy_1m_return
 from routes.recommendations import _build_stock_data, _get_ticker_info
 
 logger = logging.getLogger(__name__)
@@ -100,23 +99,18 @@ def get_watchlist_data(watchlist_id):
     if len(tickers) > 50:
         return jsonify({'error': 'Watchlist exceeds 50 ticker limit'}), 400
 
-    # SPY 1M return for relative momentum
-    spy_1m_return = None
+    # SPY 1M return for relative momentum (shared, cached)
     try:
-        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
-        spy_close = spy_raw['Close'].dropna()
-        if len(spy_close) >= 22:
-            spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
-        del spy_raw
+        spy_1m_return = get_spy_1m_return()
     except Exception as e:
         logger.warning('Could not fetch SPY return: %s', e)
+        spy_1m_return = None
 
-    # Download OHLCV for all watchlist tickers
+    # Download OHLCV for all watchlist tickers via the throttled/cached helper
     try:
-        raw = yf.download(tickers, period='10mo', group_by='ticker',
-                          threads=True, progress=False)
+        ohlcv_map = get_many_ohlcv(tickers, period='10mo')
     except Exception as e:
-        logger.error('yf.download failed for watchlist: %s', e)
+        logger.error('get_many_ohlcv failed for watchlist: %s', e)
         return jsonify({'error': 'Failed to fetch stock data'}), 502
 
     # Fetch .info concurrently
@@ -134,14 +128,8 @@ def get_watchlist_data(watchlist_id):
     # Build enriched records
     stocks = []
     for t in tickers:
-        try:
-            if len(tickers) == 1:
-                hist_df = raw.dropna(how='all')
-            else:
-                hist_df = raw[t].dropna(how='all')
-            if hist_df.empty or len(hist_df) < 50:
-                continue
-        except Exception:
+        hist_df = ohlcv_map.get(t)
+        if hist_df is None or hist_df.empty or len(hist_df) < 50:
             continue
 
         record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return)
@@ -164,33 +152,26 @@ def get_watchlist_ticker_data(watchlist_id, ticker):
     if ticker not in item_tickers:
         return jsonify({'error': 'Ticker not in watchlist'}), 404
 
-    # SPY 1M return for relative momentum
-    spy_1m_return = None
+    # SPY 1M return for relative momentum (shared, cached)
     try:
-        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
-        spy_close = spy_raw['Close'].dropna()
-        if len(spy_close) >= 22:
-            spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
-        del spy_raw
+        spy_1m_return = get_spy_1m_return()
     except Exception as e:
         logger.warning('Could not fetch SPY return: %s', e)
+        spy_1m_return = None
 
-    # Download OHLCV for the single ticker
+    # Download OHLCV for the single ticker via the throttled/cached helper
     try:
-        raw = yf.download([ticker], period='10mo', progress=False)
+        ohlcv_map = get_many_ohlcv([ticker], period='10mo')
     except Exception as e:
-        logger.error('yf.download failed for %s: %s', ticker, e)
+        logger.error('get_many_ohlcv failed for %s: %s', ticker, e)
         return jsonify({'error': 'Failed to fetch stock data'}), 502
 
     # Fetch .info
     _, info = _get_ticker_info(ticker)
 
-    try:
-        hist_df = raw.dropna(how='all')
-        if hist_df.empty or len(hist_df) < 50:
-            return jsonify({'error': f'Insufficient data for {ticker}'}), 422
-    except Exception:
-        return jsonify({'error': f'Failed to process data for {ticker}'}), 422
+    hist_df = ohlcv_map.get(ticker)
+    if hist_df is None or hist_df.empty or len(hist_df) < 50:
+        return jsonify({'error': f'Insufficient data for {ticker}'}), 422
 
     record = _build_stock_data(ticker, info, hist_df, spy_1m_return)
     if not record:

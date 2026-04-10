@@ -16,11 +16,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import pandas as pd
-import yfinance as yf
 from flask import Blueprint, jsonify
 
 from cache import SimpleCache
-from data_fetcher import get_ticker_info as cached_get_ticker_info
+from data_fetcher import (
+    get_ticker_info as cached_get_ticker_info,
+    get_many_ohlcv,
+    get_spy_1m_return,
+)
 from sp500 import get_sp500_tickers
 
 logger = logging.getLogger(__name__)
@@ -249,17 +252,14 @@ def _fetch_all_data():
     logger.info('Starting S&P 500 fetch for %d tickers', len(tickers))
     t0 = time.time()
 
-    # ── Step 1: Download SPY separately (small, kept in memory) ───────
-    spy_1m_return = None
+    # ── Step 1: SPY 1M return (shared, cached) ────────────────────────
     try:
-        spy_raw = yf.download(['SPY'], period='10mo', progress=False)
-        spy_close = spy_raw['Close'].dropna()
-        if len(spy_close) >= 22:
-            spy_1m_return = (float(spy_close.iloc[-1]) / float(spy_close.iloc[-22]) - 1) * 100
+        spy_1m_return = get_spy_1m_return()
+        if spy_1m_return is not None:
             logger.info('SPY 1M return: %.2f%%', spy_1m_return)
-        del spy_raw
     except Exception as e:
         logger.warning('Could not fetch/compute SPY return: %s', e)
+        spy_1m_return = None
 
     # ── Step 2: Process tickers in batched download + build cycles ─────
     global _progress_current, _progress_total, _partial_results
@@ -274,12 +274,13 @@ def _fetch_all_data():
     for chunk_start in range(0, len(tickers), _CHUNK_SIZE):
         chunk = tickers[chunk_start:chunk_start + _CHUNK_SIZE]
 
-        # 2a: Download OHLCV for this chunk only
+        # 2a: Download OHLCV for this chunk via the throttled/cached helper.
+        # chunk_delay=0 because the outer loop handles pacing at the bottom.
         try:
-            chunk_raw = yf.download(chunk, period='10mo', group_by='ticker',
-                                    threads=True, progress=False)
+            chunk_map = get_many_ohlcv(chunk, period='10mo',
+                                       chunk_size=_CHUNK_SIZE, chunk_delay=0)
         except Exception as e:
-            logger.error('yf.download failed for chunk %d: %s', chunk_start, e)
+            logger.error('get_many_ohlcv failed for chunk %d: %s', chunk_start, e)
             failed += len(chunk)
             continue
 
@@ -297,19 +298,9 @@ def _fetch_all_data():
 
         # 2c: Build stock records (info may be None — that's OK)
         for t in chunk:
-            try:
-                # Single-ticker download returns flat columns, not nested by ticker
-                if len(chunk) == 1:
-                    hist_df = chunk_raw.dropna(how='all')
-                else:
-                    hist_df = chunk_raw[t].dropna(how='all')
-                if hist_df.empty or len(hist_df) < 50:
-                    logger.debug('%s: insufficient history (%d rows) — skipping',
-                                 t, len(hist_df) if not hist_df.empty else 0)
-                    failed += 1
-                    continue
-            except Exception as e:
-                logger.debug('%s: history extraction error: %s', t, e)
+            hist_df = chunk_map.get(t)
+            if hist_df is None or hist_df.empty or len(hist_df) < 50:
+                logger.debug('%s: insufficient history — skipping', t)
                 failed += 1
                 continue
 
@@ -320,7 +311,7 @@ def _fetch_all_data():
                 failed += 1
 
         # 2d: Free batch memory before next iteration
-        del chunk_raw
+        del chunk_map
         gc.collect()
 
         # 2e: Update progress for progressive loading
