@@ -10,6 +10,7 @@ import StatCard, { StatCardGrid } from './components/StatCard';
 import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
 import Watchlist from './components/Watchlist';
+import AdminPanel from './components/AdminPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -225,6 +226,14 @@ function App() {
         >
           Strategy Guide
         </button>
+        {user?.is_admin && (
+          <button
+            className={`tab-btn tab-btn--admin ${activeTab === 'administration' ? 'active' : ''}`}
+            onClick={() => setActiveTab('administration')}
+          >
+            Administration
+          </button>
+        )}
       </nav>
 
       <main className="app-main">
@@ -404,6 +413,8 @@ function App() {
         )}
 
         {activeTab === 'guide' && <StrategyGuide />}
+
+        {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
       </main>
     </div>
   );

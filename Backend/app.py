@@ -3,11 +3,17 @@ import os
 import threading
 from time import time
 
+from dotenv import load_dotenv, find_dotenv
+
+# Load .env from repo root or Backend/ (walks upward from CWD).
+# Must run before os.environ is read below.
+load_dotenv(find_dotenv(usecwd=True))
+
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from sqlalchemy import event as sa_event
+from sqlalchemy import event as sa_event, inspect as sa_inspect, text as sa_text
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from models import db
+from models import db, User
 from routes.stock_data import stock_data_bp
 from routes.stock_info import stock_info_bp
 from routes.strategies.bollinger_bands import bb_bp
@@ -30,6 +36,7 @@ from routes.strategies.volatility_squeeze import vs_bp
 from routes.strategies.breakout_52week import bk_bp
 from routes.strategies.ma_confluence import mac_bp
 from routes.auth_routes import auth_bp
+from routes.admin import admin_bp
 from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp, prewarm_cache
 from routes.analyst_data import analyst_data_bp
@@ -97,6 +104,7 @@ app.register_blueprint(vs_bp)
 app.register_blueprint(bk_bp)
 app.register_blueprint(mac_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(admin_bp)
 app.register_blueprint(user_data_bp)
 app.register_blueprint(recommendations_bp)
 app.register_blueprint(analyst_data_bp)
@@ -105,9 +113,42 @@ app.register_blueprint(analyst_data_bp)
 limiter.limit('5/minute')(app.view_functions['auth.login'])
 limiter.limit('30/hour')(app.view_functions['auth.register'])
 limiter.limit('10/minute', methods=['GET'])(app.view_functions['user_data.get_watchlist_data'])
+limiter.limit('10/minute')(app.view_functions['admin.delete_user'])
 
 with app.app_context():
     db.create_all()
+
+    # Idempotent migration: add is_admin / last_login_at columns to existing
+    # users tables. db.create_all() does not ALTER existing tables.
+    inspector = sa_inspect(db.engine)
+    if inspector.has_table('users'):
+        existing_cols = {col['name'] for col in inspector.get_columns('users')}
+        is_sqlite = 'sqlite' in app.config['SQLALCHEMY_DATABASE_URI']
+        with db.engine.begin() as conn:
+            if 'is_admin' not in existing_cols:
+                default_clause = '0' if is_sqlite else 'FALSE'
+                conn.execute(sa_text(
+                    f'ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT {default_clause}'
+                ))
+                logger.info('Migration: added users.is_admin column')
+            if 'last_login_at' not in existing_cols:
+                conn.execute(sa_text(
+                    'ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL'
+                ))
+                logger.info('Migration: added users.last_login_at column')
+
+    # Seed admin from ADMIN_USERNAME env var, if set.
+    admin_username = os.environ.get('ADMIN_USERNAME', '').strip()
+    if admin_username:
+        admin_user = User.query.filter_by(username=admin_username).first()
+        if admin_user and not admin_user.is_admin:
+            admin_user.is_admin = True
+            db.session.commit()
+            logger.info('Admin seeded: %s is now an admin', admin_username)
+        elif admin_user:
+            logger.info('Admin already flagged: %s', admin_username)
+        else:
+            logger.warning('ADMIN_USERNAME=%s not found in users table (register first)', admin_username)
 
 # Pre-warm the recommendations cache in the background so the first user
 # request doesn't block the server while fetching 500 tickers.

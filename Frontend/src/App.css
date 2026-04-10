@@ -663,6 +663,27 @@
   font-weight: 600;
 }
 
+/* Admin tab — red styling, positioned to the right of Strategy Guide */
+.tab-btn--admin {
+  background: #8b1a1a;
+  color: #ffffff;
+  border-radius: 6px 6px 0 0;
+  margin-left: auto;
+  border-bottom-color: #8b1a1a;
+}
+
+.tab-btn--admin:hover {
+  background: #a32121;
+  color: #ffffff;
+}
+
+.tab-btn--admin.active {
+  background: #da3633;
+  color: #ffffff;
+  border-bottom-color: #f85149;
+  font-weight: 600;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    ANALYSIS SUBTAB NAVIGATION
    ══════════════════════════════════════════════════════════════════════════════ */

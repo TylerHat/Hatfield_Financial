@@ -44,6 +44,34 @@ def login_required(f):
     return decorated
 
 
+def admin_required(f):
+    """Decorator that requires a valid Bearer token from an admin user.
+    Sets g.current_user_id and g.current_user."""
+    from models import User  # local import to avoid circular dependency
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid authorization header'}), 401
+
+        token = auth_header[7:]
+        payload = decode_token(token)
+        if payload is None:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+
+        user = User.query.get(payload['user_id'])
+        if user is None:
+            return jsonify({'error': 'User not found'}), 401
+        if not user.is_admin:
+            return jsonify({'error': 'Admin privileges required'}), 403
+
+        g.current_user_id = user.id
+        g.current_user = user
+        return f(*args, **kwargs)
+    return decorated
+
+
 def validate_registration(username, password):
     """Validate registration fields. Returns error string or None."""
     if not username or len(username) < 3 or len(username) > 30:

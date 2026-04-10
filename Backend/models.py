@@ -13,6 +13,8 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    last_login_at = db.Column(db.DateTime, nullable=True)
 
     watchlists = db.relationship('Watchlist', backref='user', lazy=True, cascade='all, delete-orphan')
     holdings = db.relationship('PortfolioHolding', backref='user', lazy=True, cascade='all, delete-orphan')
@@ -23,6 +25,8 @@ class User(db.Model):
             'id': self.id,
             'username': self.username,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'is_admin': bool(self.is_admin),
+            'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
         }
 
 
