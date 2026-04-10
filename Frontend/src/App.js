@@ -100,20 +100,31 @@ function App() {
   const [watchlistAdding, setWatchlistAdding] = useState(false);
 
   useEffect(() => {
+    console.log('[App] Fetching default watchlist on mount');
     apiFetch('/api/user/watchlists')
       .then((r) => r.json())
       .then((data) => {
         const lists = data.watchlists || [];
+        console.log(`[App] Loaded ${lists.length} watchlist(s)`);
         if (lists.length > 0) {
           setDefaultWatchlist(lists[0]);
           setWatchlistTickers(new Set((lists[0].items || []).map((i) => i.ticker)));
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('[App] Failed to load default watchlist:', err);
+      });
   }, []);
 
   const handleAddToWatchlist = (ticker) => {
-    if (!defaultWatchlist || watchlistTickers.has(ticker)) return;
+    if (!defaultWatchlist || watchlistTickers.has(ticker)) {
+      console.log('[App] handleAddToWatchlist skipped:', ticker, {
+        hasWatchlist: !!defaultWatchlist,
+        alreadyIn: watchlistTickers.has(ticker),
+      });
+      return;
+    }
+    console.log('[App] Adding to watchlist:', ticker);
     setWatchlistAdding(true);
     apiFetch(`/api/user/watchlists/${defaultWatchlist.id}/items`, {
       method: 'POST',
@@ -123,19 +134,26 @@ function App() {
       .then((r) => r.json().then((d) => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (ok && data.item) {
+          console.log('[App] Added to watchlist:', data.item.ticker);
           setWatchlistTickers((prev) => new Set([...prev, data.item.ticker]));
           setDefaultWatchlist((prev) => ({
             ...prev,
             items: [...(prev.items || []), data.item],
           }));
+        } else {
+          console.warn('[App] Add to watchlist failed:', data);
         }
         setWatchlistAdding(false);
       })
-      .catch(() => setWatchlistAdding(false));
+      .catch((err) => {
+        console.error('[App] Add to watchlist error:', err);
+        setWatchlistAdding(false);
+      });
   };
 
   useEffect(() => {
     if (!submittedTicker) return;
+    console.log('[App] Ticker submitted:', submittedTicker, '— fetching stock-info + analyst-data');
     setStockInfoLoading(true);
     setStockInfoError(null);
     setStockInfo(null);
@@ -143,11 +161,20 @@ function App() {
     apiFetch(`/api/stock-info/${submittedTicker}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) setStockInfoError(data.error);
-        else setStockInfo(data);
+        if (data.error) {
+          console.warn('[App] stock-info returned error:', data.error);
+          setStockInfoError(data.error);
+        } else {
+          console.log('[App] stock-info loaded for', submittedTicker, {
+            price: data.currentPrice,
+            sector: data.sector,
+          });
+          setStockInfo(data);
+        }
         setStockInfoLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[App] stock-info fetch failed:', err);
         setStockInfoError('Could not load stock info.');
         setStockInfoLoading(false);
       });
@@ -158,10 +185,18 @@ function App() {
     apiFetch(`/api/analyst-data/${submittedTicker}`)
       .then((r) => r.json())
       .then((data) => {
-        if (!data.error) setAnalystData(data);
+        if (data.error) {
+          console.warn('[App] analyst-data returned error:', data.error);
+        } else {
+          console.log('[App] analyst-data loaded for', submittedTicker);
+          setAnalystData(data);
+        }
         setAnalystLoading(false);
       })
-      .catch(() => setAnalystLoading(false));
+      .catch((err) => {
+        console.error('[App] analyst-data fetch failed:', err);
+        setAnalystLoading(false);
+      });
   }, [submittedTicker]);
 
   const handleSubmit = (e) => {

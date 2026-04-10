@@ -117,17 +117,25 @@ export default function Backtester({ ticker, strategy, startDate, endDate }) {
     if (endDate) params.set('end', endDate);
     params.set('capital', cap);
 
+    console.log('[Backtester] run:', { ticker, strategy, startDate, endDate, capital: cap });
     apiFetch(`/api/backtest/${ticker}?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
+          console.warn('[Backtester] server error:', data.error);
           setError(data.error);
         } else {
+          console.log('[Backtester] result:', {
+            trades: data.trades?.length,
+            equityPoints: data.equityCurve?.length,
+            finalValue: data.summary?.finalValue,
+          });
           setResult(data);
         }
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[Backtester] network error:', err);
         setError('Could not connect to the backend. Make sure the server is running.');
         setLoading(false);
       });

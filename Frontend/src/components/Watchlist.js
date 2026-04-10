@@ -164,22 +164,27 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
   // Fetch enriched stock data for the watchlist
   const fetchData = useCallback((wl) => {
     if (!wl || !wl.items || wl.items.length === 0) {
+      console.log('[Watchlist] fetchData: no items, skipping');
       setStocks([]);
       setDataLoading(false);
       return;
     }
+    console.log(`[Watchlist] fetchData: loading enriched data for ${wl.items.length} ticker(s) in wl#${wl.id}`);
     setDataLoading(true);
     apiFetch(`/api/user/watchlists/${wl.id}/data`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
+          console.warn('[Watchlist] fetchData error from API:', data.error);
           setError(data.error);
         } else {
+          console.log(`[Watchlist] fetchData loaded ${data.stocks?.length || 0} stock row(s)`);
           setStocks(data.stocks || []);
         }
         setDataLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[Watchlist] fetchData network error:', err);
         setError('Failed to fetch watchlist data.');
         setDataLoading(false);
       });
@@ -188,18 +193,21 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
   // On mount: load or create the default watchlist
   useEffect(() => {
     let cancelled = false;
+    console.log('[Watchlist] mount: loading watchlists');
 
     apiFetch('/api/user/watchlists')
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
         const lists = data.watchlists || [];
+        console.log(`[Watchlist] found ${lists.length} watchlist(s)`);
         if (lists.length > 0) {
           setWatchlist(lists[0]);
           setLoading(false);
           fetchData(lists[0]);
         } else {
           // Auto-create default watchlist
+          console.log('[Watchlist] no watchlists found — auto-creating default');
           apiFetch('/api/user/watchlists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -208,19 +216,22 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
             .then((r) => r.json())
             .then((d) => {
               if (cancelled) return;
+              console.log('[Watchlist] default watchlist created, id=', d.watchlist?.id);
               setWatchlist(d.watchlist);
               setLoading(false);
             })
-            .catch(() => {
+            .catch((err) => {
               if (!cancelled) {
+                console.error('[Watchlist] failed to create default watchlist:', err);
                 setError('Failed to create watchlist.');
                 setLoading(false);
               }
             });
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
+          console.error('[Watchlist] failed to load watchlists:', err);
           setError('Failed to load watchlists.');
           setLoading(false);
         }
@@ -235,6 +246,7 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
     const ticker = addInput.trim().toUpperCase();
     if (!ticker || !watchlist) return;
 
+    console.log('[Watchlist] handleAdd:', ticker);
     setAdding(true);
     setAddMsg(null);
 
@@ -246,9 +258,11 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
       .then((r) => r.json().then((d) => ({ ok: r.ok, data: d })))
       .then(({ ok, data }) => {
         if (!ok) {
+          console.warn('[Watchlist] handleAdd failed:', data.error);
           setAddMsg({ type: 'error', text: data.error || 'Failed to add ticker.' });
           setAdding(false);
         } else {
+          console.log('[Watchlist] handleAdd success, fetching enriched data for', data.item.ticker);
           setAddInput('');
           const updatedItems = [...(watchlist.items || []), data.item];
           const updatedWl = { ...watchlist, items: updatedItems };
@@ -262,18 +276,22 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
             .then((d) => {
               if (d.stock) {
                 setStocks((prev) => [...prev, d.stock]);
+              } else {
+                console.warn('[Watchlist] single-ticker data fetch returned no stock:', d);
               }
               setDataLoading(false);
               setAdding(false);
             })
-            .catch(() => {
+            .catch((err) => {
+              console.warn('[Watchlist] single-ticker fetch failed, falling back to full refetch:', err);
               // Fallback: re-fetch all if single fetch fails
               fetchData(updatedWl);
               setAdding(false);
             });
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[Watchlist] handleAdd network error:', err);
         setAddMsg({ type: 'error', text: 'Network error.' });
         setAdding(false);
       });
@@ -282,6 +300,7 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
   // Remove ticker (optimistic)
   const handleRemove = useCallback((ticker) => {
     if (!watchlist) return;
+    console.log('[Watchlist] handleRemove (optimistic):', ticker);
 
     // Optimistic removal
     setStocks((prev) => prev.filter((s) => s.ticker !== ticker));
@@ -291,7 +310,8 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
 
     apiFetch(`/api/user/watchlists/${watchlist.id}/items/${ticker}`, {
       method: 'DELETE',
-    }).catch(() => {
+    }).catch((err) => {
+      console.error('[Watchlist] remove DELETE failed — rolling back via refetch:', err);
       // Rollback on error — re-fetch
       fetchData(watchlist);
     });

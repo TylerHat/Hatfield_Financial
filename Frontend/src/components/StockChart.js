@@ -53,6 +53,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   // Fetch price data whenever ticker or date range changes
   useEffect(() => {
     if (!ticker) return;
+    console.log('[StockChart] fetching price data', { ticker, startDate, endDate });
     setLoading(true);
     setError(null);
     setStockData(null);
@@ -63,13 +64,16 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
+          console.warn('[StockChart] price data error:', data.error);
           setError(data.error);
         } else {
+          console.log(`[StockChart] loaded ${data.dates?.length || 0} price points for ${ticker}`);
           setStockData(data);
         }
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[StockChart] price fetch failed:', err);
         setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
         setLoading(false);
       });
@@ -85,6 +89,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       return;
     }
 
+    console.log('[StockChart] fetching signals', { ticker, strategy, startDate, endDate });
     setStrategyLoading(true);
     setStrategyError(null);
 
@@ -93,11 +98,13 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
+          console.warn('[StockChart] strategy error:', data.error);
           setStrategyError(data.error);
           setSignals([]);
           if (onSignals) onSignals([]);
         } else {
           const sigs = data.signals || [];
+          console.log(`[StockChart] loaded ${sigs.length} signal(s) for ${strategy}/${ticker}`);
           setSignals(sigs);
 
           // Lift signals to parent (App.js) so other tabs can consume them.
@@ -112,7 +119,8 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         }
         setStrategyLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[StockChart] strategy fetch failed:', err);
         setStrategyError('Could not load strategy signals. Make sure the Flask server is running on port 5000.');
         setSignals([]);
         setStrategyLoading(false);

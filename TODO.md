@@ -8,6 +8,7 @@
     * splits
     * institutional_holders
 - Potentially add a noteworthy tab that displays stock-splits and their dates. also potentially add nearest earnings reports?
+- In the recommendations tab, I want 2 more columns stating analysis target/percent change of analysis target. Can get rid of the day change if needed
 ## QoL Features
 ### This is huge but everything states I must be careful not to have the same processer do the same command. This will cause issues 
 - Increase the Gunicorn threads from 1 -4 to help backend
@@ -24,3 +25,4 @@
 - Need to review strategies to usefulness. Maybe delete or add new ones
 - Verify that Key Metrics and Fundimental data are accurate. % might not be calulated correctly
 - Potentially Add Texas Stock Exchange if not already included
+- Add plenty of console logging statments so that users can see what is going on (I can see what is going on)

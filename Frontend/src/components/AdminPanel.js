@@ -93,6 +93,7 @@ export default function AdminPanel() {
   const [flash, setFlash] = useState(null);
 
   const loadUsers = useCallback(async () => {
+    console.log('[AdminPanel] loadUsers');
     setLoading(true);
     setError(null);
     try {
@@ -101,8 +102,10 @@ export default function AdminPanel() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to load users');
       }
+      console.log(`[AdminPanel] loaded ${data.users?.length || 0} user(s)`);
       setUsers(data.users || []);
     } catch (err) {
+      console.error('[AdminPanel] loadUsers failed:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -115,6 +118,7 @@ export default function AdminPanel() {
 
   async function handleConfirmDelete() {
     if (!targetUser) return;
+    console.warn('[AdminPanel] DELETE user', targetUser.id, targetUser.username);
     setDeleteBusy(true);
     setDeleteError(null);
     try {
@@ -125,11 +129,13 @@ export default function AdminPanel() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to delete user');
       }
+      console.log('[AdminPanel] user deleted successfully:', targetUser.username);
       setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
       setFlash(data.message || `User ${targetUser.username} deleted`);
       setTargetUser(null);
       setTimeout(() => setFlash(null), 4000);
     } catch (err) {
+      console.error('[AdminPanel] delete failed:', err);
       setDeleteError(err.message);
     } finally {
       setDeleteBusy(false);

@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const logout = useCallback(() => {
+    console.log('[Auth] logout() — clearing token and user');
     localStorage.removeItem('hf_token');
     localStorage.removeItem('hf_user');
     setToken(null);
@@ -26,19 +27,23 @@ export function AuthProvider({ children }) {
   // Validate token on mount
   useEffect(() => {
     if (!token) {
+      console.log('[Auth] No token in localStorage — skipping /me validation');
       setLoading(false);
       return;
     }
 
+    console.log('[Auth] Token found — validating via /api/auth/me');
     apiFetch('/api/auth/me')
       .then((res) => {
         if (res.ok) return res.json();
-        throw new Error('Invalid token');
+        throw new Error(`Invalid token (status=${res.status})`);
       })
       .then((data) => {
+        console.log('[Auth] Token validated. user=', data.user && data.user.username);
         setUser(data.user);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[Auth] Token validation failed — logging out:', err.message);
         logout();
       })
       .finally(() => {
@@ -49,6 +54,7 @@ export function AuthProvider({ children }) {
   // Listen for 401 events from apiFetch
   useEffect(() => {
     const handleExpired = () => {
+      console.warn('[Auth] hf_auth_expired event received — clearing session state');
       setToken(null);
       setUser(null);
     };
@@ -57,35 +63,51 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (username, password) => {
-    const res = await apiFetch('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Login failed');
+    console.log('[Auth] login() attempt for user=', username);
+    try {
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.warn('[Auth] login() failed:', res.status, data.error);
+        throw new Error(data.error || 'Login failed');
+      }
+      console.log('[Auth] login() success — user=', data.user && data.user.username);
+      localStorage.setItem('hf_token', data.token);
+      localStorage.setItem('hf_user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      return data;
+    } catch (err) {
+      console.error('[Auth] login() threw:', err.message);
+      throw err;
     }
-    localStorage.setItem('hf_token', data.token);
-    localStorage.setItem('hf_user', JSON.stringify(data.user));
-    setToken(data.token);
-    setUser(data.user);
-    return data;
   };
 
   const register = async (username, password) => {
-    const res = await apiFetch('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Registration failed');
+    console.log('[Auth] register() attempt for user=', username);
+    try {
+      const res = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.warn('[Auth] register() failed:', res.status, data.error);
+        throw new Error(data.error || 'Registration failed');
+      }
+      console.log('[Auth] register() success — user=', data.user && data.user.username);
+      localStorage.setItem('hf_token', data.token);
+      localStorage.setItem('hf_user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      return data;
+    } catch (err) {
+      console.error('[Auth] register() threw:', err.message);
+      throw err;
     }
-    localStorage.setItem('hf_token', data.token);
-    localStorage.setItem('hf_user', JSON.stringify(data.user));
-    setToken(data.token);
-    setUser(data.user);
-    return data;
   };
 
   const value = { user, token, loading, login, register, logout };
