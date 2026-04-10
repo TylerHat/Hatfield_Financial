@@ -88,6 +88,7 @@ jobs:
           ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
           ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
           DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
         run: |
           # Strip any trailing whitespace/newlines from secret values
           ECS_TASK_FAMILY=$(echo "$ECS_TASK_FAMILY" | tr -d '[:space:]')
@@ -95,6 +96,7 @@ jobs:
           ECS_SERVICE=$(echo "$ECS_SERVICE" | tr -d '[:space:]')
           ECR_REPOSITORY=$(echo "$ECR_REPOSITORY" | tr -d '[:space:]')
           DOMAIN_NAME=$(echo "$DOMAIN_NAME" | tr -d '[:space:]')
+          ADMIN_USERNAME=$(echo "$ADMIN_USERNAME" | tr -d '[:space:]')
 
           # Fetch the current task definition and strip read-only fields
           TASK_DEF=$(aws ecs describe-task-definition \
@@ -102,18 +104,22 @@ jobs:
             --query 'taskDefinition' \
             --output json | jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)')
 
-          # Update the container image and ensure ALLOWED_ORIGIN is set (upsert)
+          # Update the container image and upsert ALLOWED_ORIGIN + ADMIN_USERNAME
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
             --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" \
             --arg ORIGIN "https://$DOMAIN_NAME" \
+            --arg ADMIN "$ADMIN_USERNAME" \
             '.containerDefinitions[0].image = $IMAGE |
              .containerDefinitions[0].environment =
-               ([.containerDefinitions[0].environment[] | select(.name != "ALLOWED_ORIGIN")] +
-                [{"name": "ALLOWED_ORIGIN", "value": $ORIGIN}])')
+               ([.containerDefinitions[0].environment[]
+                 | select(.name != "ALLOWED_ORIGIN" and .name != "ADMIN_USERNAME")] +
+                [{"name": "ALLOWED_ORIGIN", "value": $ORIGIN},
+                 {"name": "ADMIN_USERNAME", "value": $ADMIN}])')
 
-          # Validate ALLOWED_ORIGIN is present before registering
+          # Validate ALLOWED_ORIGIN and ADMIN_USERNAME are present before registering
           echo "ALLOWED_ORIGIN will be set to: https://$DOMAIN_NAME"
-          echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment[] | select(.name == "ALLOWED_ORIGIN")'
+          echo "ADMIN_USERNAME will be set to: $ADMIN_USERNAME"
+          echo "$NEW_TASK_DEF" | jq '.containerDefinitions[0].environment[] | select(.name == "ALLOWED_ORIGIN" or .name == "ADMIN_USERNAME")'
 
           # Register the updated task definition and capture its ARN
           NEW_TASK_ARN=$(aws ecs register-task-definition \
