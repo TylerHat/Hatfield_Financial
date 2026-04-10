@@ -10,6 +10,7 @@ import StatCard, { StatCardGrid } from './components/StatCard';
 import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
 import Watchlist from './components/Watchlist';
+import UpcomingEvents from './components/UpcomingEvents';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -214,6 +215,12 @@ function App() {
           Recommendations
         </button>
         <button
+          className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
+          onClick={() => setActiveTab('events')}
+        >
+          Upcoming Events
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
           onClick={() => setActiveTab('watchlist')}
         >
@@ -387,6 +394,17 @@ function App() {
               setSubmittedTicker(ticker);
               setActiveTab('analysis');
             }}
+          />
+        )}
+
+        {activeTab === 'events' && (
+          <UpcomingEvents
+            onNavigateToStock={(ticker) => {
+              setInputValue(ticker);
+              setSubmittedTicker(ticker);
+              setActiveTab('analysis');
+            }}
+            watchlistTickers={watchlistTickers}
           />
         )}
 

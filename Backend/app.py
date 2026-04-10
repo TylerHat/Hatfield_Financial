@@ -33,6 +33,7 @@ from routes.auth_routes import auth_bp
 from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp, prewarm_cache
 from routes.analyst_data import analyst_data_bp
+from routes.upcoming_events import upcoming_events_bp, prewarm_events_cache
 
 app = Flask(__name__)
 _raw_origin = os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')
@@ -100,6 +101,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(user_data_bp)
 app.register_blueprint(recommendations_bp)
 app.register_blueprint(analyst_data_bp)
+app.register_blueprint(upcoming_events_bp)
 
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])
@@ -114,6 +116,7 @@ with app.app_context():
 # gunicorn --preload loads this module once before forking workers,
 # so this thread starts exactly once regardless of worker count.
 threading.Thread(target=prewarm_cache, daemon=True).start()
+threading.Thread(target=prewarm_events_cache, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', 5000)), debug=False)
