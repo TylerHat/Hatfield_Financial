@@ -7,13 +7,41 @@ same ticker, and keeps SPY data cached globally.
 """
 
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timedelta
 
 import yfinance as yf
+from requests import Session
+from requests_cache import CacheMixin, SQLiteCache
+from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
+from pyrate_limiter import Duration, RequestRate, Limiter
 
 logger = logging.getLogger(__name__)
+
+# ── Shared HTTP session (cache + rate limit) ────────────────────────────────
+# Every yfinance call — single-ticker via yf.Ticker, or bulk via yf.download —
+# reuses this session so that:
+#   1. Repeated requests within the cache TTL skip the network entirely.
+#   2. New requests are paced by pyrate_limiter regardless of which thread
+#      yfinance spawns internally (threads=True on yf.download bypasses our
+#      app-level _throttle() but not this session-level limiter).
+
+class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
+    pass
+
+
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), '.cache')
+os.makedirs(_CACHE_DIR, exist_ok=True)
+
+# 4 requests / second — matches the existing _MIN_CALL_INTERVAL budget.
+_YF_SESSION = CachedLimiterSession(
+    limiter=Limiter(RequestRate(4, Duration.SECOND * 1)),
+    bucket_class=MemoryQueueBucket,
+    backend=SQLiteCache(os.path.join(_CACHE_DIR, 'yfinance.cache'),
+                        expire_after=300),
+)
 
 # ── Cache storage ────────────────────────────────────────────────────────────
 
@@ -107,11 +135,11 @@ _ticker_lock = threading.Lock()
 
 
 def _get_ticker(symbol):
-    """Get or create a cached yf.Ticker object."""
+    """Get or create a cached yf.Ticker object bound to the shared session."""
     symbol = symbol.upper()
     with _ticker_lock:
         if symbol not in _ticker_objects:
-            _ticker_objects[symbol] = yf.Ticker(symbol)
+            _ticker_objects[symbol] = yf.Ticker(symbol, session=_YF_SESSION)
         return _ticker_objects[symbol]
 
 
@@ -292,6 +320,81 @@ def get_analyst_data(ticker):
     if data:
         _cache_set(key, data)
     return data if data else None
+
+
+def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5):
+    """Bulk OHLCV download for many tickers, routed through the shared session.
+
+    Returns ``{ticker: DataFrame}``.  Populates the per-ticker ``ohlcv:`` cache
+    entries used by ``get_ohlcv`` so later single-ticker reads hit the cache.
+
+    Parameters
+    ----------
+    tickers : list[str]
+    period : str              – yfinance period string (e.g. ``'10mo'``)
+    chunk_size : int          – tickers per yf.download call
+    chunk_delay : float       – seconds to sleep between chunks
+    """
+    tickers = [t.upper() for t in tickers]
+    result = {}
+
+    for chunk_start in range(0, len(tickers), chunk_size):
+        chunk = tickers[chunk_start:chunk_start + chunk_size]
+        _throttle()
+        try:
+            raw = yf.download(
+                chunk,
+                period=period,
+                group_by='ticker',
+                threads=True,
+                progress=False,
+                session=_YF_SESSION,
+            )
+        except Exception as exc:
+            logger.error('get_many_ohlcv chunk %d-%d failed: %s',
+                         chunk_start, chunk_start + len(chunk), exc)
+            if chunk_start + chunk_size < len(tickers):
+                time.sleep(chunk_delay)
+            continue
+
+        # Single-ticker downloads return flat columns; multi returns MultiIndex.
+        for t in chunk:
+            try:
+                if len(chunk) == 1:
+                    df = raw.dropna(how='all')
+                else:
+                    df = raw[t].dropna(how='all')
+            except Exception:
+                continue
+            if df is None or df.empty:
+                continue
+            result[t] = df
+
+            # Seed per-ticker OHLCV cache so get_ohlcv() hits it later.
+            # Use a period-scoped key to avoid colliding with date-ranged keys.
+            cache_key = f'ohlcv_period:{t}:{period}'
+            _cache_set(cache_key, df)
+
+        if chunk_start + chunk_size < len(tickers):
+            time.sleep(chunk_delay)
+
+    return result
+
+
+def get_spy_1m_return():
+    """Cached SPY trailing ~1-month % return (last close vs 22 trading days ago).
+
+    Reused by recommendations + user_data routes to avoid three independent
+    SPY fetches per page load.  Backed by ``get_spy_period('10mo')`` which has
+    its own 10-minute TTL cache.
+    """
+    hist = get_spy_period('10mo')
+    if hist is None:
+        return None
+    close = hist['Close'].dropna()
+    if len(close) < 22:
+        return None
+    return (float(close.iloc[-1]) / float(close.iloc[-22]) - 1) * 100
 
 
 def clear_cache(prefix=None):
