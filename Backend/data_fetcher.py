@@ -7,41 +7,20 @@ same ticker, and keeps SPY data cached globally.
 """
 
 import logging
-import os
 import threading
 import time
 from datetime import datetime, timedelta
 
 import yfinance as yf
-from requests import Session
-from requests_cache import CacheMixin, SQLiteCache
-from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
-from pyrate_limiter import Duration, RequestRate, Limiter
 
 logger = logging.getLogger(__name__)
 
-# ── Shared HTTP session (cache + rate limit) ────────────────────────────────
-# Every yfinance call — single-ticker via yf.Ticker, or bulk via yf.download —
-# reuses this session so that:
-#   1. Repeated requests within the cache TTL skip the network entirely.
-#   2. New requests are paced by pyrate_limiter regardless of which thread
-#      yfinance spawns internally (threads=True on yf.download bypasses our
-#      app-level _throttle() but not this session-level limiter).
-
-class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
-    pass
-
-
-_CACHE_DIR = os.path.join(os.path.dirname(__file__), '.cache')
-os.makedirs(_CACHE_DIR, exist_ok=True)
-
-# 4 requests / second — matches the existing _MIN_CALL_INTERVAL budget.
-_YF_SESSION = CachedLimiterSession(
-    limiter=Limiter(RequestRate(4, Duration.SECOND * 1)),
-    bucket_class=MemoryQueueBucket,
-    backend=SQLiteCache(os.path.join(_CACHE_DIR, 'yfinance.cache'),
-                        expire_after=300),
-)
+# ── yfinance session note ───────────────────────────────────────────────────
+# yfinance now uses curl_cffi internally, which is incompatible with
+# requests_cache / requests_ratelimiter Session objects.  Do NOT pass a
+# custom `session=` to yf.Ticker or yf.download — let yfinance manage its
+# own HTTP client.  Rate limiting is handled by the app-level _throttle()
+# below, and response caching is handled by the in-process `_cache` dict.
 
 # ── Cache storage ────────────────────────────────────────────────────────────
 
@@ -135,11 +114,11 @@ _ticker_lock = threading.Lock()
 
 
 def _get_ticker(symbol):
-    """Get or create a cached yf.Ticker object bound to the shared session."""
+    """Get or create a cached yf.Ticker object (yfinance manages its own session)."""
     symbol = symbol.upper()
     with _ticker_lock:
         if symbol not in _ticker_objects:
-            _ticker_objects[symbol] = yf.Ticker(symbol, session=_YF_SESSION)
+            _ticker_objects[symbol] = yf.Ticker(symbol)
         return _ticker_objects[symbol]
 
 
@@ -323,7 +302,7 @@ def get_analyst_data(ticker):
 
 
 def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5):
-    """Bulk OHLCV download for many tickers, routed through the shared session.
+    """Bulk OHLCV download for many tickers.
 
     Returns ``{ticker: DataFrame}``.  Populates the per-ticker ``ohlcv:`` cache
     entries used by ``get_ohlcv`` so later single-ticker reads hit the cache.
@@ -348,7 +327,6 @@ def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5):
                 group_by='ticker',
                 threads=True,
                 progress=False,
-                session=_YF_SESSION,
             )
         except Exception as exc:
             logger.error('get_many_ohlcv chunk %d-%d failed: %s',
