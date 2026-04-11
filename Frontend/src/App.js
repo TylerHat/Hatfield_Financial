@@ -81,9 +81,13 @@ function App() {
   const [inputValue, setInputValue] = useState('');
   const [submittedTicker, setSubmittedTicker] = useState('');
   const [strategy, setStrategy] = useState('none');
-  const { start: defaultStart, end: defaultEnd } = defaultDates();
-  const [startDate, setStartDate] = useState(defaultStart);
-  const [endDate, setEndDate] = useState(defaultEnd);
+  // Backend always fetches a trailing 1-year window; filters below slice it in memory.
+  const [fetchRange] = useState(defaultDates);
+  const [startDate, setStartDate] = useState(fetchRange.start);
+  const [endDate, setEndDate] = useState(fetchRange.end);
+  const [pendingStart, setPendingStart] = useState(fetchRange.start);
+  const [pendingEnd, setPendingEnd] = useState(fetchRange.end);
+  const [activePreset, setActivePreset] = useState('1Y');
 
   // Shared stock-info data — one fetch feeds both StockSnapshot and StockInfo.
   const [stockInfo, setStockInfo] = useState(null);
@@ -173,7 +177,48 @@ function App() {
     }
   };
 
-  const dateRangeValid = startDate && endDate && startDate < endDate;
+  const dateRangeValid = startDate && endDate && startDate <= endDate;
+
+  // ── Chart-range presets (slice already-fetched 1-year window) ───────────────
+  function commitFilter(s, e, presetKey) {
+    setStartDate(s);
+    setEndDate(e);
+    setPendingStart(s);
+    setPendingEnd(e);
+    setActivePreset(presetKey);
+  }
+
+  function applyPreset(key) {
+    const today = new Date();
+    const fetchStartDate = new Date(fetchRange.start);
+    let start;
+    let end = today;
+    if (key === '1W') {
+      start = new Date(today);
+      start.setDate(start.getDate() - 7);
+    } else if (key === '1M') {
+      start = new Date(today);
+      start.setMonth(start.getMonth() - 1);
+    } else if (key === '6M') {
+      start = new Date(today);
+      start.setMonth(start.getMonth() - 6);
+    } else if (key === '1Y') {
+      start = new Date(fetchRange.start);
+      end = new Date(fetchRange.end);
+    } else {
+      return;
+    }
+    // Clamp to fetch window
+    if (start < fetchStartDate) start = fetchStartDate;
+    if (end > today) end = today;
+    if (start > end) return;
+    commitFilter(toISODate(start), toISODate(end), key);
+  }
+
+  function handleLoadCustomRange() {
+    if (!pendingStart || !pendingEnd || pendingStart > pendingEnd) return;
+    commitFilter(pendingStart, pendingEnd, null);
+  }
 
   if (authLoading) {
     return (
@@ -253,35 +298,6 @@ function App() {
                 Load
               </button>
             </form>
-
-            <div className="date-range-row">
-              <div className="date-group">
-                <label htmlFor="start-date">From:</label>
-                <input
-                  id="start-date"
-                  type="date"
-                  value={startDate}
-                  max={endDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-              <div className="date-group">
-                <label htmlFor="end-date">To:</label>
-                <input
-                  id="end-date"
-                  type="date"
-                  value={endDate}
-                  min={startDate}
-                  max={toISODate(new Date())}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="date-input"
-                />
-              </div>
-              {!dateRangeValid && startDate && endDate && (
-                <span className="date-error">Start date must be before end date</span>
-              )}
-            </div>
 
             {submittedTicker && (
               <div className="info-overview">
@@ -370,6 +386,52 @@ function App() {
               <>
                 <div className="chart-controls-bar">
                   <span className="chart-controls-title">Technical Charts</span>
+                  <div className="chart-range-controls">
+                    <div className="range-presets">
+                      {[
+                        { key: '1W', label: '1W' },
+                        { key: '1M', label: '1M' },
+                        { key: '6M', label: '6M' },
+                        { key: '1Y', label: '1Y' },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`range-btn ${activePreset === key ? 'active' : ''}`}
+                          onClick={() => applyPreset(key)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="range-custom">
+                      <input
+                        type="date"
+                        className="date-input"
+                        value={pendingStart}
+                        min={fetchRange.start}
+                        max={fetchRange.end}
+                        onChange={(e) => setPendingStart(e.target.value)}
+                      />
+                      <span className="range-sep">–</span>
+                      <input
+                        type="date"
+                        className="date-input"
+                        value={pendingEnd}
+                        min={fetchRange.start}
+                        max={fetchRange.end}
+                        onChange={(e) => setPendingEnd(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="range-load-btn"
+                        onClick={handleLoadCustomRange}
+                        disabled={!pendingStart || !pendingEnd || pendingStart > pendingEnd}
+                      >
+                        Load
+                      </button>
+                    </div>
+                  </div>
                   <div className="strategy-group">
                     <label htmlFor="strategy-select">Strategy:</label>
                     <select
@@ -389,6 +451,8 @@ function App() {
                 <StockChart
                   ticker={submittedTicker}
                   strategy={strategy}
+                  fetchStart={fetchRange.start}
+                  fetchEnd={fetchRange.end}
                   startDate={startDate}
                   endDate={endDate}
                 />

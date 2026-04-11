@@ -34,7 +34,7 @@ function buildSignalArray(dates, signals, type) {
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
 
-export default function StockChart({ ticker, strategy, startDate, endDate, onSignals }) {
+export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,7 +50,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   // Keep signal reasons accessible inside Chart.js tooltip callbacks
   const signalReasonRef = useRef({});
 
-  // Fetch price data whenever ticker or date range changes
+  // Fetch full 1-year window once per ticker; all filtering happens in memory below.
   useEffect(() => {
     if (!ticker) return;
     setLoading(true);
@@ -58,7 +58,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     setStockData(null);
     setSignals([]);
 
-    const params = new URLSearchParams({ start: startDate, end: endDate });
+    const params = new URLSearchParams({ start: fetchStart, end: fetchEnd });
     apiFetch(`/api/stock/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -73,7 +73,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
         setLoading(false);
       });
-  }, [ticker, startDate, endDate]);
+  }, [ticker, fetchStart, fetchEnd]);
 
   // Fetch strategy signals whenever ticker, strategy, or date range changes
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     setStrategyLoading(true);
     setStrategyError(null);
 
-    const params = new URLSearchParams({ start: startDate, end: endDate });
+    const params = new URLSearchParams({ start: fetchStart, end: fetchEnd });
     apiFetch(`/api/strategy/${strategy}/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -118,7 +118,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         setStrategyLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, strategy, startDate, endDate, stockData]);
+  }, [ticker, strategy, fetchStart, fetchEnd, stockData]);
 
   if (loading) {
     return <div className="chart-status">Loading {ticker}…</div>;
@@ -128,14 +128,66 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
   }
   if (!stockData) return null;
 
-  const { dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi, bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d, obv, obv_signal, fifty_two_week_high, fifty_two_week_low, earnings_dates } = stockData;
+  const {
+    dates: _dates,
+    close: _close,
+    volume: _volume,
+    ma20: _ma20,
+    ma50: _ma50,
+    macd: _macd,
+    macd_signal: _macd_signal,
+    macd_hist: _macd_hist,
+    rsi: _rsi,
+    bb_upper: _bb_upper,
+    bb_lower: _bb_lower,
+    vol_ma20: _vol_ma20,
+    atr: _atr,
+    stoch_k: _stoch_k,
+    stoch_d: _stoch_d,
+    obv: _obv,
+    obv_signal: _obv_signal,
+    fifty_two_week_high,
+    fifty_two_week_low,
+    earnings_dates: _earnings_dates,
+  } = stockData;
+
+  // Slice the fetched 1-year series down to the visible filter range (in memory).
+  let _startIdx = _dates.findIndex((d) => d >= startDate);
+  if (_startIdx === -1) _startIdx = _dates.length;
+  let _endIdx = _dates.findIndex((d) => d > endDate);
+  if (_endIdx === -1) _endIdx = _dates.length;
+  const _slice = (a) => (Array.isArray(a) ? a.slice(_startIdx, _endIdx) : a);
+
+  const dates = _slice(_dates);
+  const close = _slice(_close);
+  const volume = _slice(_volume);
+  const ma20 = _slice(_ma20);
+  const ma50 = _slice(_ma50);
+  const macd = _slice(_macd);
+  const macd_signal = _slice(_macd_signal);
+  const macd_hist = _slice(_macd_hist);
+  const rsi = _slice(_rsi);
+  const bb_upper = _slice(_bb_upper);
+  const bb_lower = _slice(_bb_lower);
+  const vol_ma20 = _slice(_vol_ma20);
+  const atr = _slice(_atr);
+  const stoch_k = _slice(_stoch_k);
+  const stoch_d = _slice(_stoch_d);
+  const obv = _slice(_obv);
+  const obv_signal = _slice(_obv_signal);
+  const earnings_dates = Array.isArray(_earnings_dates)
+    ? _earnings_dates.filter((d) => d >= startDate && d <= endDate)
+    : _earnings_dates;
+
+  // Only show signals whose date falls inside the visible range.
+  const visibleSignals = signals.filter((s) => s.date >= startDate && s.date <= endDate);
 
   // Strategies where RSI context panel adds value
   const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
   const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
 
-  const buyData = buildSignalArray(dates, signals, 'BUY');
-  const sellData = buildSignalArray(dates, signals, 'SELL');
+  const buyData = buildSignalArray(dates, visibleSignals, 'BUY');
+  const sellData = buildSignalArray(dates, visibleSignals, 'SELL');
 
   // ── Price chart ──────────────────────────────────────────────────────────────
   const priceData = {
@@ -1083,8 +1135,8 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
     },
   };
 
-  const buySignals = signals.filter((s) => s.type === 'BUY');
-  const sellSignals = signals.filter((s) => s.type === 'SELL');
+  const buySignals = visibleSignals.filter((s) => s.type === 'BUY');
+  const sellSignals = visibleSignals.filter((s) => s.type === 'SELL');
 
   // Helper to render a colored legend line in info popovers
   function L({ color, dashed, children }) {
@@ -1305,10 +1357,10 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         </div>
       )}
 
-      {signals.length > 0 && (
+      {visibleSignals.length > 0 && (
         <div className="signals-summary">
           <h3>
-            Strategy Signals — {signals.length} total &nbsp;
+            Strategy Signals — {visibleSignals.length} total &nbsp;
             <span className="badge buy">{buySignals.length} BUY</span>
             <span className="badge sell">{sellSignals.length} SELL</span>
           </h3>
@@ -1324,7 +1376,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
                 </tr>
               </thead>
               <tbody>
-                {[...signals].reverse().map((s, i) => (
+                {[...visibleSignals].reverse().map((s, i) => (
                   <tr key={i} className={s.type === 'BUY' ? 'buy-row' : 'sell-row'}>
                     <td>{s.date}</td>
                     <td>${s.price.toFixed(2)}</td>
@@ -1347,7 +1399,7 @@ export default function StockChart({ ticker, strategy, startDate, endDate, onSig
         </div>
       )}
 
-      {strategy !== 'none' && !strategyLoading && !strategyError && signals.length === 0 && (
+      {strategy !== 'none' && !strategyLoading && !strategyError && visibleSignals.length === 0 && (
         <div className="no-signals">
           No signals generated for {ticker} with this strategy from {startDate} to {endDate}.
         </div>
