@@ -137,6 +137,33 @@ with app.app_context():
                 ))
                 logger.info('Migration: added users.last_login_at column')
 
+    # Idempotent migration: widen ticker columns from VARCHAR(10) → VARCHAR(20)
+    # so crypto pairs (e.g. "MATIC-USD") and longer ETF tickers fit.
+    # No-op on SQLite (length is advisory, ALTER COLUMN TYPE not supported).
+    # Runs on Postgres only — safe to keep across deploys.
+    if not is_sqlite:
+        with db.engine.begin() as conn:
+            for table in ('watchlist_items', 'portfolio_holdings'):
+                if inspector.has_table(table):
+                    cols = {c['name']: c for c in inspector.get_columns(table)}
+                    ticker_col = cols.get('ticker')
+                    # Postgres reports type as e.g. VARCHAR(10); widen if < 20
+                    needs_widen = False
+                    if ticker_col is not None:
+                        col_type = str(ticker_col.get('type', '')).upper()
+                        if 'VARCHAR' in col_type:
+                            try:
+                                length = int(col_type.split('(')[1].rstrip(')'))
+                                if length < 20:
+                                    needs_widen = True
+                            except (IndexError, ValueError):
+                                pass
+                    if needs_widen:
+                        conn.execute(sa_text(
+                            f'ALTER TABLE {table} ALTER COLUMN ticker TYPE VARCHAR(20)'
+                        ))
+                        logger.info('Migration: widened %s.ticker to VARCHAR(20)', table)
+
     # Seed admin from ADMIN_USERNAME env var, if set.
     admin_username = os.environ.get('ADMIN_USERNAME', '').strip()
     if admin_username:

@@ -54,7 +54,8 @@ class WatchlistItem(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     watchlist_id = db.Column(db.Integer, db.ForeignKey('watchlists.id'), nullable=False)
-    ticker = db.Column(db.String(10), nullable=False)
+    # 20 chars to accommodate crypto pairs (e.g. "MATIC-USD") and ETF tickers
+    ticker = db.Column(db.String(20), nullable=False)
     added_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (db.UniqueConstraint('watchlist_id', 'ticker', name='uq_watchlist_ticker'),)
@@ -72,7 +73,8 @@ class PortfolioHolding(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    ticker = db.Column(db.String(10), nullable=False)
+    # 20 chars to accommodate crypto pairs (e.g. "MATIC-USD") and ETF tickers
+    ticker = db.Column(db.String(20), nullable=False)
     shares = db.Column(db.Float, nullable=False)
     cost_basis = db.Column(db.Float, nullable=False)
     acquired_at = db.Column(db.Date, nullable=True)

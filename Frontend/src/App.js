@@ -283,17 +283,25 @@ function App() {
               )}
             </div>
 
-            {submittedTicker && stockInfo && (
+            {submittedTicker && (
               <div className="info-overview">
                 <div className="overview-name">
-                  <span className="overview-ticker">{stockInfo.ticker}</span>
-                  <span className="overview-company">{stockInfo.name}</span>
+                  <span className="overview-ticker">{stockInfo?.ticker || submittedTicker}</span>
+                  {stockInfo?.name && (
+                    <span className="overview-company">{stockInfo.name}</span>
+                  )}
                 </div>
                 <div className="overview-actions">
                   <div className="overview-meta">
-                    {stockInfo.sector !== 'N/A' && <span className="overview-pill">{stockInfo.sector}</span>}
-                    {stockInfo.industry !== 'N/A' && <span className="overview-pill">{stockInfo.industry}</span>}
-                    {stockInfo.marketCap && <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>}
+                    {stockInfo?.sector && stockInfo.sector !== 'N/A' && (
+                      <span className="overview-pill">{stockInfo.sector}</span>
+                    )}
+                    {stockInfo?.industry && stockInfo.industry !== 'N/A' && (
+                      <span className="overview-pill">{stockInfo.industry}</span>
+                    )}
+                    {stockInfo?.marketCap && (
+                      <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>
+                    )}
                   </div>
                   {defaultWatchlist && (
                     <button
