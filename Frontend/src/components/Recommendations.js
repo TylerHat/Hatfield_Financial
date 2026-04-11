@@ -6,6 +6,8 @@ import './Recommendations.css';
 
 const LS_KEY = 'hf_recommendations_cache';
 const LS_TTL = 20 * 60 * 1000; // 20 minutes in ms
+// Bump when the row shape changes so stale caches don't hide new columns.
+const LS_SCHEMA_VERSION = 2;
 
 function loadCache() {
   try {
@@ -13,6 +15,10 @@ function loadCache() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed.stocks || !parsed.timestamp) return null;
+    if (parsed.schemaVersion !== LS_SCHEMA_VERSION) {
+      localStorage.removeItem(LS_KEY);
+      return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -25,6 +31,7 @@ function saveCache(stocks, lastUpdated) {
       stocks,
       lastUpdated,
       timestamp: Date.now(),
+      schemaVersion: LS_SCHEMA_VERSION,
     }));
   } catch { /* storage full or unavailable — ignore */ }
 }
@@ -145,6 +152,23 @@ const REC_COLUMNS = [
     render: (val, row) => (
       <Badge variant={recVariant(row.recommendationKey)} size="sm">{val || 'N/A'}</Badge>
     ),
+  },
+  {
+    key: 'targetUpsidePct',
+    label: 'Analyst Target',
+    numeric: true,
+    sortable: true,
+    width: '150px',
+    render: (val, row) => {
+      if (val == null || row.targetMeanPrice == null) return '—';
+      const cls = val > 0 ? 'rec-positive' : val < 0 ? 'rec-negative' : 'rec-neutral';
+      const sign = val > 0 ? '+' : '';
+      return (
+        <span className={cls}>
+          {sign}{val.toFixed(2)}% (${row.targetMeanPrice.toFixed(2)})
+        </span>
+      );
+    },
   },
   {
     key: 'priceAction',

@@ -8,6 +8,8 @@
     * splits
     * institutional_holders
 - Potentially add a noteworthy tab that displays stock-splits and their dates. also potentially add nearest earnings reports?
+
+
 ## QoL Features
 ### This is huge but everything states I must be careful not to have the same processer do the same command. This will cause issues 
 - Increase the Gunicorn threads from 1 -4 to help backend
@@ -18,9 +20,11 @@
 
 
 # Minor Improvments
-- The date below the Ticker text box needs to be able to only be seen via the graphs subtab. This must be something that they can change period frequiently. I would also like to be able to zoom if possible
 - Add emails from users
     * potentially notify users of certain things
 - Need to review strategies to usefulness. Maybe delete or add new ones
 - Verify that Key Metrics and Fundimental data are accurate. % might not be calulated correctly
 - Potentially Add Texas Stock Exchange if not already included
+    * Not currently included — all market data comes from Yahoo Finance via yfinance (Backend/data_fetcher.py)
+    * TXSE is pre-launch (targeting 2026); no public feed exists yet
+    * Revisit once TXSE lists securities — if Yahoo ingests the TXSE feed, tickers may work through the existing pipeline (possibly with an exchange suffix like `.TX`); otherwise a separate provider integration would be needed

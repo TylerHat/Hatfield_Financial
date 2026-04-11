@@ -244,6 +244,91 @@
   white-space: nowrap;
 }
 
+/* ── Chart range controls (presets + custom range) ──────────────────────────── */
+.chart-range-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.range-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.range-btn {
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.range-btn:hover:not(:disabled) {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.range-btn.active {
+  background: #238636;
+  color: #ffffff;
+}
+
+.range-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.range-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-custom .date-input {
+  padding: 5px 8px;
+  font-size: 0.82rem;
+}
+
+.range-sep {
+  color: #8b949e;
+  font-size: 0.9rem;
+}
+
+.range-load-btn {
+  padding: 6px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.range-load-btn:hover:not(:disabled) {
+  background: #30363d;
+  border-color: #58a6ff;
+}
+
+.range-load-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Chart container ─────────────────────────────────────────────────────────── */
 .chart-container {
   display: flex;
