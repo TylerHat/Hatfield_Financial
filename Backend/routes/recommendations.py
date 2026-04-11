@@ -124,12 +124,14 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
                 rec_key = rec_key.lower().replace(' ', '_')
             rec_display = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
             name = info.get('longName') or info.get('shortName') or ticker
+            target_mean = _safe_float(info.get('targetMeanPrice'))
         else:
             current_price = _safe_float(close.iloc[-1])
             prev_close = _safe_float(close.iloc[-2]) if len(close) >= 2 else None
             rec_key = 'n/a'
             rec_display = 'N/A'
             name = ticker
+            target_mean = None
 
         # Day change
         if current_price and prev_close and prev_close > 0:
@@ -222,6 +224,12 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
 
         price_action = _compute_price_action(rsi_val, consol_range)
 
+        # Analyst target upside vs current price
+        if target_mean and current_price and current_price > 0:
+            target_upside_pct = round((target_mean - current_price) / current_price * 100, 2)
+        else:
+            target_upside_pct = None
+
         return {
             'ticker': ticker,
             'name': name,
@@ -229,6 +237,8 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'dayChangePct': day_change,
             'analystRecommendation': rec_display,
             'recommendationKey': rec_key or 'n/a',
+            'targetMeanPrice': target_mean,
+            'targetUpsidePct': target_upside_pct,
             'priceAction': price_action,
             'macdStatus': macd_status,
             'volatilityStatus': volatility_status,

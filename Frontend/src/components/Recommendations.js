@@ -147,6 +147,23 @@ const REC_COLUMNS = [
     ),
   },
   {
+    key: 'targetUpsidePct',
+    label: 'Analyst Target',
+    numeric: true,
+    sortable: true,
+    width: '150px',
+    render: (val, row) => {
+      if (val == null || row.targetMeanPrice == null) return '—';
+      const cls = val > 0 ? 'rec-positive' : val < 0 ? 'rec-negative' : 'rec-neutral';
+      const sign = val > 0 ? '+' : '';
+      return (
+        <span className={cls}>
+          {sign}{val.toFixed(2)}% (${row.targetMeanPrice.toFixed(2)})
+        </span>
+      );
+    },
+  },
+  {
     key: 'priceAction',
     label: 'Price Action',
     sortable: true,
