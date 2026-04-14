@@ -68,14 +68,26 @@ function buildColumns(onRemove) {
       label: 'Stock',
       sortable: true,
       width: '180px',
-      render: (val, row) => (
-        <span>
-          <strong style={{ color: '#e6edf3' }}>{val}</strong>
-          <span style={{ color: '#8b949e', marginLeft: 6, fontSize: '0.8rem' }}>
-            {row.name && row.name.length > 25 ? row.name.slice(0, 25) + '…' : row.name}
+      render: (val, row) => {
+        if (row.__skeleton) {
+          return (
+            <span>
+              <strong style={{ color: '#e6edf3' }}>{val}</strong>
+              <span style={{ display: 'block', marginTop: 4 }}>
+                <span className="wl-skeleton-cell wl-skeleton-cell--sm" />
+              </span>
+            </span>
+          );
+        }
+        return (
+          <span>
+            <strong style={{ color: '#e6edf3' }}>{val}</strong>
+            <span style={{ color: '#8b949e', marginLeft: 6, fontSize: '0.8rem' }}>
+              {row.name && row.name.length > 25 ? row.name.slice(0, 25) + '…' : row.name}
+            </span>
           </span>
-        </span>
-      ),
+        );
+      },
     },
     {
       key: 'currentPrice',
@@ -83,7 +95,10 @@ function buildColumns(onRemove) {
       numeric: true,
       sortable: true,
       width: '100px',
-      render: (val) => val != null ? `$${val.toFixed(2)}` : '—',
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--narrow" />;
+        return val != null ? `$${val.toFixed(2)}` : '—';
+      },
     },
     {
       key: 'dayChangePct',
@@ -91,7 +106,8 @@ function buildColumns(onRemove) {
       numeric: true,
       sortable: true,
       width: '110px',
-      render: (val) => {
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--narrow" />;
         if (val == null) return '—';
         const cls = val > 0 ? 'wl-positive' : val < 0 ? 'wl-negative' : 'wl-neutral';
         return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
@@ -103,7 +119,8 @@ function buildColumns(onRemove) {
       numeric: true,
       sortable: true,
       width: '115px',
-      render: (val) => {
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--narrow" />;
         if (val == null) return '—';
         const cls = val > 0 ? 'wl-positive' : val < 0 ? 'wl-negative' : 'wl-neutral';
         return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
@@ -114,37 +131,50 @@ function buildColumns(onRemove) {
       label: 'Analyst Rec',
       sortable: true,
       width: '130px',
-      render: (val, row) => (
-        <Badge variant={recVariant(row.recommendationKey)} size="sm">{val || 'N/A'}</Badge>
-      ),
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--sm" />;
+        return <Badge variant={recVariant(row.recommendationKey)} size="sm">{val || 'N/A'}</Badge>;
+      },
     },
     {
       key: 'priceAction',
       label: 'Price Action',
       sortable: true,
       width: '120px',
-      render: (val) => <Badge variant={priceActionVariant(val)} size="sm">{val || 'N/A'}</Badge>,
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--sm" />;
+        return <Badge variant={priceActionVariant(val)} size="sm">{val || 'N/A'}</Badge>;
+      },
     },
     {
       key: 'macdStatus',
       label: 'MACD',
       sortable: true,
       width: '150px',
-      render: (val) => <Badge variant={macdVariant(val)} size="sm">{val || 'N/A'}</Badge>,
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--sm" />;
+        return <Badge variant={macdVariant(val)} size="sm">{val || 'N/A'}</Badge>;
+      },
     },
     {
       key: 'volatilityStatus',
       label: 'Volatility',
       sortable: true,
       width: '130px',
-      render: (val) => <Badge variant={volVariant(val)} size="sm">{val || 'N/A'}</Badge>,
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--sm" />;
+        return <Badge variant={volVariant(val)} size="sm">{val || 'N/A'}</Badge>;
+      },
     },
     {
       key: 'trendAlignment',
       label: 'Trend',
       sortable: true,
       width: '150px',
-      render: (val) => <Badge variant={trendVariant(val)} size="sm">{val || 'N/A'}</Badge>,
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--sm" />;
+        return <Badge variant={trendVariant(val)} size="sm">{val || 'N/A'}</Badge>;
+      },
     },
     {
       key: 'momentum',
@@ -152,7 +182,8 @@ function buildColumns(onRemove) {
       numeric: true,
       sortable: true,
       width: '110px',
-      render: (val) => {
+      render: (val, row) => {
+        if (row.__skeleton) return <span className="wl-skeleton-cell wl-skeleton-cell--narrow" />;
         if (val == null) return '—';
         const cls = val > 0 ? 'wl-positive' : val < 0 ? 'wl-negative' : 'wl-neutral';
         return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
@@ -311,6 +342,11 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
 
   const columns = buildColumns(handleRemove);
 
+  // Use skeleton rows while enriched data is still loading
+  const displayRows = (dataLoading && stocks.length === 0 && watchlist?.items?.length > 0)
+    ? watchlist.items.map(item => ({ ticker: item.ticker, __skeleton: true }))
+    : stocks;
+
   if (loading) {
     return (
       <div className="wl-tab">
@@ -358,14 +394,14 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
       ) : (
         <DataTable
           columns={columns}
-          rows={stocks}
-          loading={dataLoading}
-          error={error && stocks.length === 0 ? error : null}
+          rows={displayRows}
+          loading={false}
+          error={error && stocks.length === 0 && !dataLoading ? error : null}
           emptyMessage="No data available for watchlist tickers."
           rowKey="ticker"
           defaultSortKey="ticker"
           defaultSortDir="asc"
-          onRowDoubleClick={(row) => onNavigateToStock && onNavigateToStock(row.ticker)}
+          onRowDoubleClick={(row) => !row.__skeleton && onNavigateToStock && onNavigateToStock(row.ticker)}
         />
       )}
     </div>
