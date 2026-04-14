@@ -23,6 +23,8 @@ from data_fetcher import (
     get_ticker_info as cached_get_ticker_info,
     get_many_ohlcv,
     get_spy_1m_return,
+    PRIORITY_LOW,
+    PRIORITY_MEDIUM,
 )
 from sp500 import get_sp500_tickers
 
@@ -74,11 +76,11 @@ def _compute_rsi(close_series, period=14):
     return 100 - (100 / (1 + rs))
 
 
-def _get_ticker_info(ticker):
+def _get_ticker_info(ticker, priority=PRIORITY_LOW):
     """Fetch info dict for a single ticker via the throttled/cached data_fetcher.
     Returns (ticker, info) or (ticker, None)."""
     try:
-        info = cached_get_ticker_info(ticker)
+        info = cached_get_ticker_info(ticker, priority=priority)
         if not info or (info.get('regularMarketPrice') is None and info.get('currentPrice') is None):
             logger.debug('No price data for %s — skipping', ticker)
             return (ticker, None)
@@ -264,7 +266,7 @@ def _fetch_all_data():
 
     # ── Step 1: SPY 1M return (shared, cached) ────────────────────────
     try:
-        spy_1m_return = get_spy_1m_return()
+        spy_1m_return = get_spy_1m_return(priority=PRIORITY_LOW)
         if spy_1m_return is not None:
             logger.info('SPY 1M return: %.2f%%', spy_1m_return)
     except Exception as e:
@@ -288,7 +290,7 @@ def _fetch_all_data():
         # chunk_delay=0 because the outer loop handles pacing at the bottom.
         try:
             chunk_map = get_many_ohlcv(chunk, period='10mo',
-                                       chunk_size=_CHUNK_SIZE, chunk_delay=0)
+                                       chunk_size=_CHUNK_SIZE, chunk_delay=0, priority=PRIORITY_LOW)
         except Exception as e:
             logger.error('get_many_ohlcv failed for chunk %d: %s', chunk_start, e)
             failed += len(chunk)

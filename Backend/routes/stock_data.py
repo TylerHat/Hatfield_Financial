@@ -2,7 +2,7 @@ import pandas as pd
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
-from data_fetcher import get_ohlcv, get_ticker_info, get_earnings_dates
+from data_fetcher import get_ohlcv, get_ticker_info, get_earnings_dates, PRIORITY_HIGH
 
 stock_data_bp = Blueprint('stock_data', __name__)
 
@@ -16,19 +16,19 @@ def get_stock_data(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        hist = get_ohlcv(ticker, start, end)
+        hist = get_ohlcv(ticker, start, end, priority=PRIORITY_HIGH)
 
         if hist is None or hist.empty:
             return jsonify({'error': f'No data found for ticker "{ticker.upper()}". Check the symbol and try again.'}), 404
 
         # 52-week high/low from ticker info (cached)
-        info = get_ticker_info(ticker) or {}
+        info = get_ticker_info(ticker, priority=PRIORITY_HIGH) or {}
         fifty_two_week_high = info.get('fiftyTwoWeekHigh')
         fifty_two_week_low = info.get('fiftyTwoWeekLow')
 
         # Earnings dates — past and upcoming (cached)
         earnings_dates_list = []
-        cal = get_earnings_dates(ticker)
+        cal = get_earnings_dates(ticker, priority=PRIORITY_HIGH)
         if cal is not None and not cal.empty:
             earnings_dates_list = [d.strftime('%Y-%m-%d') for d in cal.index]
 

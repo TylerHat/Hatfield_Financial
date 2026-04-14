@@ -1,11 +1,15 @@
 import math
+import logging
 import pandas as pd
 from datetime import datetime, date, timedelta
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
-from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates
+from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, PRIORITY_HIGH
+
+logger = logging.getLogger(__name__)
 
 stock_info_bp = Blueprint('stock_info', __name__)
+logger.info(f'stock_info blueprint created: {stock_info_bp}')
 
 
 def compute_rsi(prices, period=14):
@@ -44,17 +48,36 @@ def compute_consolidation(hist, window=20):
     return round(recent_range * 100, 2), status, detail
 
 
+@stock_info_bp.route('/api/stock-info/<ticker>', methods=['POST'])
+def refresh_stock_info_post(ticker):
+    """Handle POST requests to refresh stock data."""
+    try:
+        ticker = ticker.upper()
+        logger.info(f'Refreshing stock data for {ticker}')
+        # Clear cached data for this specific ticker
+        clear_cache(f'info:{ticker}')
+        clear_cache(f'ohlcv:{ticker}')
+        clear_cache(f'ohlcv_period:{ticker}')
+        clear_cache(f'analyst:{ticker}')
+        clear_cache(f'earnings:{ticker}')
+        logger.info(f'Cache cleared for {ticker}')
+        return jsonify({'message': f'Successfully refreshed {ticker}', 'ticker': ticker}), 200
+    except Exception as e:
+        logger.error(f'Error refreshing {ticker}: {type(e).__name__}: {str(e)}', exc_info=True)
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
+
+
 @stock_info_bp.route('/api/stock-info/<ticker>')
 def get_stock_info(ticker):
     try:
-        info = get_ticker_info(ticker)
+        info = get_ticker_info(ticker, priority=PRIORITY_HIGH)
         if not info:
             return jsonify({'error': f'No data for {ticker.upper()}'}), 404
 
         # Use 1 year of daily data for computed indicators regardless of chart date range
         end_dt = datetime.today()
         start_dt = end_dt - timedelta(days=365)
-        hist = get_ohlcv(ticker, start_dt, end_dt)
+        hist = get_ohlcv(ticker, start_dt, end_dt, priority=PRIORITY_HIGH)
 
         if hist is None or hist.empty:
             return jsonify({'error': f'No data for {ticker.upper()}'}), 404
@@ -159,7 +182,7 @@ def get_stock_info(ticker):
         # ── Earnings Proximity ───────────────────────────────────────────────
         earnings_date_str = None
         try:
-            ed_df = cached_get_earnings_dates(ticker, limit=4)
+            ed_df = cached_get_earnings_dates(ticker, limit=4, priority=PRIORITY_HIGH)
             if ed_df is not None and not ed_df.empty:
                 today_ts = pd.Timestamp(date.today())
                 if ed_df.index.tz is not None:
@@ -197,7 +220,7 @@ def get_stock_info(ticker):
         # ── Relative Strength vs SPY ─────────────────────────────────────────
         rel_strength_data = {}
         try:
-            spy_hist = get_spy_period('3mo')
+            spy_hist = get_spy_period('3mo', priority=PRIORITY_HIGH)
             if spy_hist is not None and not spy_hist.empty and len(hist) >= 63 and len(spy_hist) >= 63:
                 stock_1m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-22]) - 1) * 100
                 spy_1m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-22]) - 1) * 100
@@ -493,7 +516,14 @@ def get_stock_info(ticker):
         if v is not None:
             response['institutionalPctHeld'] = v
 
+        logger.info(f'Successfully returned stock data for {ticker}')
         return jsonify(response)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_msg = str(e).lower()
+        # Check for rate limit errors
+        if '429' in error_msg or 'rate' in error_msg or 'too many' in error_msg:
+            logger.warning(f'Rate limited for {ticker}: {str(e)}')
+            return jsonify({'error': 'Rate limited by data provider. Please try again in a moment.'}), 429
+        logger.error(f'Error with {ticker}: {type(e).__name__}: {str(e)}', exc_info=True)
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500

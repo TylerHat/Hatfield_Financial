@@ -89,6 +89,7 @@ function App() {
   const [pendingStart, setPendingStart] = useState(fetchRange.start);
   const [pendingEnd, setPendingEnd] = useState(fetchRange.end);
   const [activePreset, setActivePreset] = useState('1Y');
+  const [rangePerf, setRangePerf] = useState(null);
 
   // Shared stock-info data — one fetch feeds both StockSnapshot and StockInfo.
   const [stockInfo, setStockInfo] = useState(null);
@@ -103,6 +104,9 @@ function App() {
   const [defaultWatchlist, setDefaultWatchlist] = useState(null);
   const [watchlistTickers, setWatchlistTickers] = useState(new Set());
   const [watchlistAdding, setWatchlistAdding] = useState(false);
+
+  // Refresh data state
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/user/watchlists')
@@ -137,6 +141,28 @@ function App() {
         setWatchlistAdding(false);
       })
       .catch(() => setWatchlistAdding(false));
+  };
+
+  const handleRefreshData = () => {
+    if (!submittedTicker) return;
+    setRefreshing(true);
+    apiFetch(`/api/stock-info/${submittedTicker}`, {
+      method: 'POST',
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          setStockInfoError(data.error);
+        } else {
+          setStockInfo(data);
+          setStockInfoError(null);
+        }
+        setRefreshing(false);
+      })
+      .catch(() => {
+        setStockInfoError('Could not refresh stock data.');
+        setRefreshing(false);
+      });
   };
 
   useEffect(() => {
@@ -326,19 +352,29 @@ function App() {
                       <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>
                     )}
                   </div>
-                  {defaultWatchlist && (
+                  <div className="overview-buttons">
                     <button
-                      className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
-                      disabled={watchlistAdding || watchlistTickers.has(submittedTicker)}
-                      onClick={() => handleAddToWatchlist(submittedTicker)}
+                      className="refresh-data-btn"
+                      disabled={refreshing || !submittedTicker}
+                      onClick={handleRefreshData}
+                      title="Clear cache and fetch fresh data"
                     >
-                      {watchlistTickers.has(submittedTicker)
-                        ? 'In Watchlist'
-                        : watchlistAdding
-                          ? 'Adding...'
-                          : '+ Watchlist'}
+                      {refreshing ? 'Refreshing...' : '↻ Refresh'}
                     </button>
-                  )}
+                    {defaultWatchlist && (
+                      <button
+                        className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
+                        disabled={watchlistAdding || watchlistTickers.has(submittedTicker)}
+                        onClick={() => handleAddToWatchlist(submittedTicker)}
+                      >
+                        {watchlistTickers.has(submittedTicker)
+                          ? 'In Watchlist'
+                          : watchlistAdding
+                            ? 'Adding...'
+                            : '+ Watchlist'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -437,6 +473,11 @@ function App() {
                       >
                         Load
                       </button>
+                      {rangePerf !== null && (
+                        <span className={`range-perf range-perf--${rangePerf.up ? 'up' : 'down'}`}>
+                          {rangePerf.up ? '▲' : '▼'} {Math.abs(rangePerf.pct).toFixed(2)}%
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="strategy-group">
@@ -462,6 +503,7 @@ function App() {
                   fetchEnd={fetchRange.end}
                   startDate={startDate}
                   endDate={endDate}
+                  onRangePerformance={setRangePerf}
                 />
               </>
             )}

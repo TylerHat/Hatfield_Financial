@@ -139,3 +139,22 @@
 .wl-positive { color: #3fb950; }
 .wl-negative { color: #f85149; }
 .wl-neutral  { color: #8b949e; }
+
+/* ── Skeleton cells for progressive data loading ──────────────────────────── */
+
+.wl-skeleton-cell {
+  display: inline-block;
+  height: 16px;
+  width: 70%;
+  background: #21262d;
+  border-radius: 4px;
+  animation: wl-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.wl-skeleton-cell--sm { width: 40%; }
+.wl-skeleton-cell--narrow { width: 25%; }
+
+@keyframes wl-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}

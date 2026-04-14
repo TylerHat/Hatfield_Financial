@@ -9,11 +9,11 @@
     * institutional_holders
 - Potentially add a noteworthy tab that displays stock-splits and their dates. also potentially add nearest earnings reports?
 
+MAIN QUEUE API CALLER. Each time I want to make a fetch to the API, it adds to the queue, makes sure that nothing will break the api rate limit. Has a hierarchy system where things in the frontend get higher priority. 
 
+If a stock is delisted dont ask for its info anymore.
 
 # Minor Improvments
-- Add emails from users
-    * potentially notify users of certain things
 - Need to review strategies to usefulness. Maybe delete or add new ones
 - Verify that Key Metrics and Fundimental data are accurate. % might not be calulated correctly
 - Potentially Add Texas Stock Exchange if not already included
@@ -54,25 +54,6 @@ Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / S
 **Reward**: 8 | **Effort**: 4 | **Score**: 2.00
 **Implementation notes**: Add `get_institutional_holders(ticker)` and `get_major_holders(ticker)` to `data_fetcher.py` (1-hour TTL). Expose top 10 holders + total count via `/api/stock-info`. Frontend adds a "Institutional Holders" section to StockInfo showing a sortable table of top holders and a StatCard for institutions count.
 
----
-
-### 4. Backtest Strategy Comparator (Run All on One Ticker)
-**Description**: Add a "Compare All" mode to the Backtester that runs all 5 supported strategies on the same ticker/date range simultaneously and renders a side-by-side summary table (total return, win rate, max drawdown, # trades) so users can instantly see which strategy would have worked best.
-**Why it matters**: Today users must run each strategy one at a time and mentally compare. This collapses 5 interactions into 1 and directly answers "what strategy fits this stock."
-**yfinance data**: No new data — reuses `get_ohlcv()` already cached.
-**Reward**: 8 | **Effort**: 4 | **Score**: 2.00
-**Implementation notes**: Backend adds `GET /api/backtest-compare/<ticker>?start=&end=&capital=` that calls `_simulate_trades()` for each of the 5 supported strategies in ThreadPoolExecutor and returns a dict keyed by strategy. Frontend adds a "Compare Strategies" button in Backtester that renders a DataTable with one row per strategy, sortable by total return.
-
----
-
-### 5. Options-Derived Implied Volatility (IV) Display
-**Description**: Fetch the nearest-expiry options chain and calculate the at-the-money implied volatility, displaying it on the stock info page alongside historical volatility for comparison (IV/HV ratio is a classic vol regime signal).
-**Why it matters**: IV vs HV tells you whether options market is pricing in a major event (earnings, FDA ruling, etc.) or whether vol is cheap. This is actionable information not available from any current indicator in the app.
-**yfinance data**: `stock.options` (list of expiration dates); `stock.option_chain(date)` (calls/puts DataFrames with `impliedVolatility` column)
-**Reward**: 8 | **Effort**: 5 | **Score**: 1.60
-**Implementation notes**: Add `get_atm_iv(ticker)` to `data_fetcher.py` — fetch `stock.options[0]` (nearest expiry), then `option_chain`, find ATM strike closest to current price, average call/put IV. Return `{ ivPercent, hvPercent, ivhvRatio, expiryDate }`. Add to `/api/stock-info` response. Frontend adds an IV StatCard in the Volatility row of StockInfo. TTL: 15 minutes.
-
----
 
 ### 6. Earnings Estimate Beat/Miss History
 **Description**: Show a sparkline-style earnings surprise history (last 4-8 quarters): actual EPS vs estimate, beat/miss magnitude, and a streak indicator (e.g. "Beat 6 consecutive quarters").
@@ -100,7 +81,7 @@ Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / S
 **Implementation notes**: Pure frontend change. Add a "Short Interest" StatCard to the StockInfo component (last row or Price Action row). Read `props.shortPercentOfFloat`, format as %, label as "High" (>15%), "Elevated" (8-15%), or "Normal" (<8%) with matching badge color. No backend work required — field is already returned.
 
 ---
-
+# Priority!!!
 ### 9. Watchlist Portfolio-Level Summary (Batch Quotes)
 **Description**: When viewing a watchlist, show a summary row per ticker: current price, day change %, analyst recommendation, and RSI — fetched in a single batch call rather than ticker-by-ticker.
 **Why it matters**: Today watchlists only show ticker symbols. A user with 10 stocks in a watchlist has no way to triage which ones need attention without clicking into each one individually.
@@ -118,7 +99,7 @@ Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / S
 **Implementation notes**: In `backtest.py` `_compute_summary()`, derive daily returns from the equity curve, compute annualized Sharpe (risk-free = 0 is acceptable for retail use), and Calmar = `totalReturn / abs(maxDrawdown)`. Add `sharpeRatio` and `calmarRatio` fields to the summary response. Frontend adds two new StatCards in the Backtester summary panel.
 
 ---
-
+# Could be Cool to add Priority #2
 ### 11. Sector / Industry Relative Strength Heatmap
 **Description**: On the Recommendations tab, add a sector-level heatmap showing average 1-month momentum by sector (already computed per stock as `momentum` field), helping users identify which sectors are leading vs lagging the market.
 **Why it matters**: Sector rotation is a core portfolio strategy. The data is already computed for every stock — grouping by `sector` from `stock.info` and averaging momentum is a near-zero-cost aggregation that surfaces macro-level insights.
