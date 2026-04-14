@@ -105,6 +105,9 @@ function App() {
   const [watchlistTickers, setWatchlistTickers] = useState(new Set());
   const [watchlistAdding, setWatchlistAdding] = useState(false);
 
+  // Refresh data state
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     apiFetch('/api/user/watchlists')
       .then((r) => r.json())
@@ -138,6 +141,28 @@ function App() {
         setWatchlistAdding(false);
       })
       .catch(() => setWatchlistAdding(false));
+  };
+
+  const handleRefreshData = () => {
+    if (!submittedTicker) return;
+    setRefreshing(true);
+    apiFetch(`/api/stock-info/${submittedTicker}/refresh`, {
+      method: 'POST',
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          setStockInfoError(data.error);
+        } else {
+          setStockInfo(data);
+          setStockInfoError(null);
+        }
+        setRefreshing(false);
+      })
+      .catch(() => {
+        setStockInfoError('Could not refresh stock data.');
+        setRefreshing(false);
+      });
   };
 
   useEffect(() => {
@@ -327,19 +352,29 @@ function App() {
                       <span className="overview-pill">Mkt Cap: {stockInfo.marketCap}</span>
                     )}
                   </div>
-                  {defaultWatchlist && (
+                  <div className="overview-buttons">
                     <button
-                      className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
-                      disabled={watchlistAdding || watchlistTickers.has(submittedTicker)}
-                      onClick={() => handleAddToWatchlist(submittedTicker)}
+                      className="refresh-data-btn"
+                      disabled={refreshing || !submittedTicker}
+                      onClick={handleRefreshData}
+                      title="Clear cache and fetch fresh data"
                     >
-                      {watchlistTickers.has(submittedTicker)
-                        ? 'In Watchlist'
-                        : watchlistAdding
-                          ? 'Adding...'
-                          : '+ Watchlist'}
+                      {refreshing ? 'Refreshing...' : '↻ Refresh'}
                     </button>
-                  )}
+                    {defaultWatchlist && (
+                      <button
+                        className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
+                        disabled={watchlistAdding || watchlistTickers.has(submittedTicker)}
+                        onClick={() => handleAddToWatchlist(submittedTicker)}
+                      >
+                        {watchlistTickers.has(submittedTicker)
+                          ? 'In Watchlist'
+                          : watchlistAdding
+                            ? 'Adding...'
+                            : '+ Watchlist'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -9,7 +9,7 @@
     * institutional_holders
 - Potentially add a noteworthy tab that displays stock-splits and their dates. also potentially add nearest earnings reports?
 
-
+MAIN QUEUE API CALLER. Each time I want to make a fetch to the API, it adds to the queue, makes sure that nothing will break the api rate limit. Has a hierarchy system where things in the frontend get higher priority. 
 
 # Minor Improvments
 - Need to review strategies to usefulness. Maybe delete or add new ones
