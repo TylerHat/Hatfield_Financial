@@ -146,7 +146,7 @@ function App() {
   const handleRefreshData = () => {
     if (!submittedTicker) return;
     setRefreshing(true);
-    apiFetch(`/api/stock-info/${submittedTicker}/refresh`, {
+    apiFetch(`/api/stock-info/${submittedTicker}`, {
       method: 'POST',
     })
       .then((r) => r.json())

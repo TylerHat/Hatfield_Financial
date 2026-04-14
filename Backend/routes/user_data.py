@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, g
 
 from models import db, Watchlist, WatchlistItem, PortfolioHolding, UserSettings
 from auth import login_required
-from data_fetcher import get_many_ohlcv, get_spy_1m_return
+from data_fetcher import get_many_ohlcv, get_spy_1m_return, PRIORITY_MEDIUM
 from routes.recommendations import _build_stock_data, _get_ticker_info
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def add_watchlist_item(watchlist_id):
     # fetch fails we still add the item; price_at_add remains None.
     price_at_add = None
     try:
-        _, info = _get_ticker_info(ticker)
+        _, info = _get_ticker_info(ticker, priority=PRIORITY_MEDIUM)
         if info:
             raw = info.get('currentPrice') or info.get('regularMarketPrice')
             if raw is not None:
@@ -113,14 +113,14 @@ def get_watchlist_data(watchlist_id):
 
     # SPY 1M return for relative momentum (shared, cached)
     try:
-        spy_1m_return = get_spy_1m_return()
+        spy_1m_return = get_spy_1m_return(priority=PRIORITY_MEDIUM)
     except Exception as e:
         logger.warning('Could not fetch SPY return: %s', e)
         spy_1m_return = None
 
     # Download OHLCV for all watchlist tickers via the throttled/cached helper
     try:
-        ohlcv_map = get_many_ohlcv(tickers, period='10mo')
+        ohlcv_map = get_many_ohlcv(tickers, period='10mo', priority=PRIORITY_MEDIUM)
     except Exception as e:
         logger.error('get_many_ohlcv failed for watchlist: %s', e)
         return jsonify({'error': 'Failed to fetch stock data'}), 502
@@ -128,7 +128,7 @@ def get_watchlist_data(watchlist_id):
     # Fetch .info concurrently
     info_map = {}
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(_get_ticker_info, t): t for t in tickers}
+        futures = {executor.submit(_get_ticker_info, t, PRIORITY_MEDIUM): t for t in tickers}
         for future in as_completed(futures):
             try:
                 t, info = future.result(timeout=5)
@@ -176,7 +176,7 @@ def get_watchlist_ticker_data(watchlist_id, ticker):
 
     # SPY 1M return for relative momentum (shared, cached)
     try:
-        spy_1m_return = get_spy_1m_return()
+        spy_1m_return = get_spy_1m_return(priority=PRIORITY_MEDIUM)
     except Exception as e:
         logger.warning('Could not fetch SPY return: %s', e)
         spy_1m_return = None

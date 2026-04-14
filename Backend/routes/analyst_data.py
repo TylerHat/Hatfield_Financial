@@ -10,7 +10,7 @@ import math
 import pandas as pd
 from flask import Blueprint, jsonify
 
-from data_fetcher import get_analyst_data, get_ticker_info
+from data_fetcher import get_analyst_data, get_ticker_info, PRIORITY_HIGH
 
 analyst_data_bp = Blueprint('analyst_data', __name__)
 
@@ -64,8 +64,8 @@ def _estimates_to_dict(df):
 @analyst_data_bp.route('/api/analyst-data/<ticker>')
 def analyst_data(ticker):
     try:
-        raw = get_analyst_data(ticker)
-        info = get_ticker_info(ticker) or {}
+        raw = get_analyst_data(ticker, priority=PRIORITY_HIGH)
+        info = get_ticker_info(ticker, priority=PRIORITY_HIGH) or {}
 
         response = {'ticker': ticker.upper()}
 
