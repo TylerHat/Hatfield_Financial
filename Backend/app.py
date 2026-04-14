@@ -178,6 +178,16 @@ with app.app_context():
                         ))
                         logger.info('Migration: widened %s.ticker to VARCHAR(20)', table)
 
+    # Add price_at_add column to watchlist_items (idempotent on both SQLite and Postgres)
+    if inspector.has_table('watchlist_items'):
+        wl_cols = {col['name'] for col in inspector.get_columns('watchlist_items')}
+        if 'price_at_add' not in wl_cols:
+            with db.engine.begin() as conn:
+                conn.execute(sa_text(
+                    'ALTER TABLE watchlist_items ADD COLUMN price_at_add FLOAT NULL'
+                ))
+                logger.info('Migration: added watchlist_items.price_at_add column')
+
     # Seed admin from ADMIN_USERNAME env var, if set.
     admin_username = os.environ.get('ADMIN_USERNAME', '').strip()
     if admin_username:

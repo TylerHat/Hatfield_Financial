@@ -62,7 +62,19 @@ def add_watchlist_item(watchlist_id):
     if existing:
         return jsonify({'error': f'{ticker} is already in this watchlist'}), 409
 
-    item = WatchlistItem(watchlist_id=watchlist_id, ticker=ticker)
+    # Attempt to capture current price at add time. Non-blocking: if the
+    # fetch fails we still add the item; price_at_add remains None.
+    price_at_add = None
+    try:
+        _, info = _get_ticker_info(ticker)
+        if info:
+            raw = info.get('currentPrice') or info.get('regularMarketPrice')
+            if raw is not None:
+                price_at_add = round(float(raw), 4)
+    except Exception:
+        logger.warning('Could not fetch price_at_add for %s', ticker)
+
+    item = WatchlistItem(watchlist_id=watchlist_id, ticker=ticker, price_at_add=price_at_add)
     db.session.add(item)
     db.session.commit()
     return jsonify({'item': item.to_dict()}), 201
@@ -125,6 +137,9 @@ def get_watchlist_data(watchlist_id):
             except Exception:
                 pass
 
+    # Build lookup map for price_at_add from DB items
+    price_at_add_map = {item.ticker: item.price_at_add for item in watchlist.items}
+
     # Build enriched records
     stocks = []
     for t in tickers:
@@ -134,6 +149,13 @@ def get_watchlist_data(watchlist_id):
 
         record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return)
         if record:
+            # Compute sinceAddedPct if we have price_at_add and currentPrice
+            paa = price_at_add_map.get(t)
+            cp  = record.get('currentPrice')
+            if paa and cp and paa > 0:
+                record['sinceAddedPct'] = round((cp - paa) / paa * 100, 2)
+            else:
+                record['sinceAddedPct'] = None
             stocks.append(record)
 
     return jsonify({'stocks': stocks, 'count': len(stocks)})
@@ -176,6 +198,15 @@ def get_watchlist_ticker_data(watchlist_id, ticker):
     record = _build_stock_data(ticker, info, hist_df, spy_1m_return)
     if not record:
         return jsonify({'error': f'Could not build data for {ticker}'}), 422
+
+    # Compute sinceAddedPct if we have price_at_add and currentPrice
+    price_at_add_map = {item.ticker: item.price_at_add for item in watchlist.items}
+    paa = price_at_add_map.get(ticker)
+    cp  = record.get('currentPrice')
+    if paa and cp and paa > 0:
+        record['sinceAddedPct'] = round((cp - paa) / paa * 100, 2)
+    else:
+        record['sinceAddedPct'] = None
 
     return jsonify({'stock': record})
 

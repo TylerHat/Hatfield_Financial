@@ -98,6 +98,18 @@ function buildColumns(onRemove) {
       },
     },
     {
+      key: 'sinceAddedPct',
+      label: 'Since Added',
+      numeric: true,
+      sortable: true,
+      width: '115px',
+      render: (val) => {
+        if (val == null) return '—';
+        const cls = val > 0 ? 'wl-positive' : val < 0 ? 'wl-negative' : 'wl-neutral';
+        return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
+      },
+    },
+    {
       key: 'analystRecommendation',
       label: 'Analyst Rec',
       sortable: true,

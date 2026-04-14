@@ -59,6 +59,7 @@ class WatchlistItem(db.Model):
     # 20 chars to accommodate crypto pairs (e.g. "MATIC-USD") and ETF tickers
     ticker = db.Column(db.String(20), nullable=False)
     added_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    price_at_add = db.Column(db.Float, nullable=True)
 
     __table_args__ = (db.UniqueConstraint('watchlist_id', 'ticker', name='uq_watchlist_ticker'),)
 
@@ -67,6 +68,7 @@ class WatchlistItem(db.Model):
             'id': self.id,
             'ticker': self.ticker,
             'added_at': self.added_at.isoformat() if self.added_at else None,
+            'price_at_add': self.price_at_add,
         }
 
 
