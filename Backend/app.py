@@ -10,6 +10,7 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 from flask import Flask, jsonify, request, g
+from werkzeug.security import generate_password_hash
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -177,6 +178,19 @@ with app.app_context():
             logger.info('Admin already flagged: %s', admin_username)
         else:
             logger.warning('ADMIN_USERNAME=%s not found in users table (register first)', admin_username)
+
+    # Reset admin password from ADMIN_PASSWORD env var, if set.
+    # Requires ADMIN_USERNAME to also be set so we know which user to update.
+    # Remove ADMIN_PASSWORD from the task definition immediately after the reset.
+    admin_password = os.environ.get('ADMIN_PASSWORD', '').strip()
+    if admin_password and admin_username:
+        admin_user = User.query.filter_by(username=admin_username).first()
+        if admin_user:
+            admin_user.password_hash = generate_password_hash(admin_password)
+            db.session.commit()
+            logger.info('Password reset for admin user: %s', admin_username)
+        else:
+            logger.warning('ADMIN_PASSWORD set but ADMIN_USERNAME=%s not found', admin_username)
 
 # Pre-warm the recommendations cache in the background so the first user
 # request doesn't block the server while fetching 500 tickers.
