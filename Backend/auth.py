@@ -93,3 +93,14 @@ def validate_registration(username, password):
         return 'Password must contain at least one digit'
 
     return None
+
+
+def validate_email(email):
+    """Validate email format. Returns error string or None. None/empty is valid (optional)."""
+    if not email:
+        return None
+    if len(email) > 254:
+        return 'Email must be 254 characters or less'
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        return 'Invalid email format'
+    return None

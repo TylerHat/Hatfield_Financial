@@ -113,6 +113,7 @@ app.register_blueprint(analyst_data_bp)
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])
 limiter.limit('30/hour')(app.view_functions['auth.register'])
+limiter.limit('10/minute')(app.view_functions['auth.update_me'])
 limiter.limit('10/minute', methods=['GET'])(app.view_functions['user_data.get_watchlist_data'])
 limiter.limit('10/minute')(app.view_functions['admin.delete_user'])
 limiter.limit('10/minute')(app.view_functions['admin.update_user_role'])
@@ -138,6 +139,17 @@ with app.app_context():
                     'ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL'
                 ))
                 logger.info('Migration: added users.last_login_at column')
+            if 'email' not in existing_cols:
+                conn.execute(sa_text(
+                    'ALTER TABLE users ADD COLUMN email VARCHAR(254) NULL'
+                ))
+                logger.info('Migration: added users.email column')
+
+        # Ensure unique index on users.email
+        with db.engine.begin() as conn:
+            conn.execute(sa_text(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users (email)'
+            ))
 
     # Idempotent migration: widen ticker columns from VARCHAR(10) → VARCHAR(20)
     # so crypto pairs (e.g. "MATIC-USD") and longer ETF tickers fit.

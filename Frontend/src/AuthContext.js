@@ -72,10 +72,10 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const register = async (username, password) => {
+  const register = async (username, password, email = null) => {
     const res = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, email }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -88,7 +88,19 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const value = { user, token, loading, login, register, logout };
+  const updateProfile = async (fields) => {
+    const res = await apiFetch('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Update failed');
+    setUser(data.user);
+    localStorage.setItem('hf_user', JSON.stringify(data.user));
+    return data;
+  };
+
+  const value = { user, token, loading, login, register, logout, updateProfile };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

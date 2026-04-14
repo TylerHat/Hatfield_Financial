@@ -184,13 +184,14 @@ export default function AdminPanel() {
                 <th>Role</th>
                 <th>Member since</th>
                 <th>Last login</th>
+                <th>Email</th>
                 <th className="admin-table__actions-col">Actions</th>
               </tr>
             </thead>
             <tbody>
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="admin-table__empty">No users found.</td>
+                  <td colSpan={6} className="admin-table__empty">No users found.</td>
                 </tr>
               )}
               {users.map((u) => {
@@ -214,6 +215,7 @@ export default function AdminPanel() {
                       <div className="admin-table__age">{formatAge(u.created_at)}</div>
                     </td>
                     <td>{formatDate(u.last_login_at)}</td>
+                    <td>{u.email || '—'}</td>
                     <td className="admin-table__actions-col">
                       {!isSelf && !u.is_admin && (
                         <button

@@ -1,0 +1,120 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   ACCOUNT PANEL
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.account-panel {
+  padding: 0 24px 32px;
+  color: #e6edf3;
+}
+
+.account-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  color: #58a6ff;
+}
+
+.account-panel__username {
+  margin: 0 0 20px;
+  color: #8b949e;
+  font-size: 0.95rem;
+}
+
+.account-flash {
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.account-flash--success {
+  background: rgba(46, 160, 67, 0.15);
+  border: 1px solid #2ea043;
+  color: #7ee787;
+}
+
+.account-flash--error {
+  background: rgba(248, 81, 73, 0.15);
+  border: 1px solid #f85149;
+  color: #ffa198;
+}
+
+/* ── Form ────────────────────────────────────────────────────────────────── */
+.account-form {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+}
+
+.account-field {
+  margin-bottom: 20px;
+}
+
+.account-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+
+.account-field__optional {
+  font-size: 0.75rem;
+  color: #8b949e;
+  font-weight: 400;
+}
+
+.account-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.account-field input::placeholder {
+  color: #484f58;
+}
+
+.account-field input:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+.account-field__hint {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: #8b949e;
+}
+
+/* ── Submit button ──────────────────────────────────────────────────────── */
+.account-submit {
+  padding: 10px 18px;
+  background: #238636;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.account-submit:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.account-submit:active:not(:disabled) {
+  background: #1a7f37;
+}
+
+.account-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
