@@ -1,4 +1,3 @@
-
 ---
 name: "feature-recommender"
 description: "Generates and prioritizes high-impact features for a financial dashboard, focused on stock analysis and Yahoo Finance data."

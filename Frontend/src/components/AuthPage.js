@@ -7,6 +7,7 @@ function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,6 +33,10 @@ function AuthPage() {
         setError(pwError);
         return;
       }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setError('Invalid email format');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -40,7 +45,7 @@ function AuthPage() {
       if (isLogin) {
         await login(username, password);
       } else {
-        await register(username, password);
+        await register(username, password, email || null);
       }
     } catch (err) {
       setError(err.message);
@@ -52,6 +57,7 @@ function AuthPage() {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setError('');
+    setEmail('');
   };
 
   return (
@@ -92,6 +98,22 @@ function AuthPage() {
               required
             />
           </div>
+
+          {!isLogin && (
+            <div className="auth-field">
+              <label htmlFor="email">
+                Email <span className="auth-optional">(optional)</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+              />
+            </div>
+          )}
 
           <button type="submit" className="auth-submit" disabled={submitting}>
             {submitting

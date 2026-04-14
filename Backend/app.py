@@ -10,6 +10,7 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 from flask import Flask, jsonify, request, g
+from werkzeug.security import generate_password_hash
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -47,7 +48,7 @@ _origins = list({o.strip() for o in _raw_origin.split(',') if o.strip()} | {'htt
 logger.info('CORS allowed origins: %s', _origins)
 CORS(app, origins=_origins, supports_credentials=True,
      allow_headers=['Content-Type', 'Authorization'],
-     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///hatfield.db')
@@ -112,8 +113,10 @@ app.register_blueprint(analyst_data_bp)
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])
 limiter.limit('30/hour')(app.view_functions['auth.register'])
+limiter.limit('10/minute')(app.view_functions['auth.update_me'])
 limiter.limit('10/minute', methods=['GET'])(app.view_functions['user_data.get_watchlist_data'])
 limiter.limit('10/minute')(app.view_functions['admin.delete_user'])
+limiter.limit('10/minute')(app.view_functions['admin.update_user_role'])
 
 with app.app_context():
     db.create_all()
@@ -136,6 +139,17 @@ with app.app_context():
                     'ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP NULL'
                 ))
                 logger.info('Migration: added users.last_login_at column')
+            if 'email' not in existing_cols:
+                conn.execute(sa_text(
+                    'ALTER TABLE users ADD COLUMN email VARCHAR(254) NULL'
+                ))
+                logger.info('Migration: added users.email column')
+
+        # Ensure unique index on users.email
+        with db.engine.begin() as conn:
+            conn.execute(sa_text(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users (email)'
+            ))
 
     # Idempotent migration: widen ticker columns from VARCHAR(10) → VARCHAR(20)
     # so crypto pairs (e.g. "MATIC-USD") and longer ETF tickers fit.
@@ -176,6 +190,19 @@ with app.app_context():
             logger.info('Admin already flagged: %s', admin_username)
         else:
             logger.warning('ADMIN_USERNAME=%s not found in users table (register first)', admin_username)
+
+    # Reset admin password from ADMIN_PASSWORD env var, if set.
+    # Requires ADMIN_USERNAME to also be set so we know which user to update.
+    # Remove ADMIN_PASSWORD from the task definition immediately after the reset.
+    admin_password = os.environ.get('ADMIN_PASSWORD', '').strip()
+    if admin_password and admin_username:
+        admin_user = User.query.filter_by(username=admin_username).first()
+        if admin_user:
+            admin_user.password_hash = generate_password_hash(admin_password)
+            db.session.commit()
+            logger.info('Password reset for admin user: %s', admin_username)
+        else:
+            logger.warning('ADMIN_PASSWORD set but ADMIN_USERNAME=%s not found', admin_username)
 
 # Pre-warm the recommendations cache in the background so the first user
 # request doesn't block the server while fetching 500 tickers.

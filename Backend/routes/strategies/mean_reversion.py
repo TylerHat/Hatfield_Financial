@@ -68,11 +68,13 @@ def mean_reversion(ticker):
 
             # Recovery to within 3% of 20-day high → SELL / take profit
             elif in_drawdown and drawdown_pct > -0.03:
+                recovery_pct = abs(drawdown_pct)
+                score = min(100, int(recovery_pct * 500))
                 signals.append({
                     'date': hist.index[i].strftime('%Y-%m-%d'),
                     'price': round(float(row['Close']), 2),
                     'type': 'SELL',
-                    'score': 55,
+                    'score': score,
                     'conviction': 'MEDIUM',
                     'reason': (
                         f'Price recovered to within 3% of 20-day high '

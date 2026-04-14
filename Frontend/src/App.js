@@ -11,6 +11,7 @@ import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
 import Watchlist from './components/Watchlist';
 import AdminPanel from './components/AdminPanel';
+import AccountPanel from './components/AccountPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -271,6 +272,12 @@ function App() {
         >
           Strategy Guide
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'account' ? 'active' : ''}`}
+          onClick={() => setActiveTab('account')}
+        >
+          Account
+        </button>
         {user?.is_admin && (
           <button
             className={`tab-btn tab-btn--admin ${activeTab === 'administration' ? 'active' : ''}`}
@@ -485,6 +492,8 @@ function App() {
         )}
 
         {activeTab === 'guide' && <StrategyGuide />}
+
+        {activeTab === 'account' && <AccountPanel />}
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
       </main>

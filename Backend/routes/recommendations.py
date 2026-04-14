@@ -64,13 +64,13 @@ def _safe_float(val, decimals=2):
 
 
 def _compute_rsi(close_series, period=14):
-    """Compute RSI from a close price series."""
+    """Compute RSI from a close price series (Wilder's formula)."""
     delta = close_series.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
-    avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
-    rs = avg_gain / avg_loss
+    avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, float('nan'))
     return 100 - (100 / (1 + rs))
 
 
@@ -409,7 +409,8 @@ def prewarm_cache():
     except Exception as e:
         logger.error('Prewarm failed: %s', e, exc_info=True)
     finally:
-        _fetching = False
+        with _fetch_lock:
+            _fetching = False
 
 
 @recommendations_bp.route('/api/recommendations')
@@ -438,12 +439,13 @@ def get_recommendations():
         }), 202
 
     # 4. Prevent multiple simultaneous local fetches
-    if _fetching:
-        logger.info('Fetch in progress — returning 202')
-        return jsonify({
-            'status': 'loading',
-            'message': 'S&P 500 data is currently being fetched. Please try again in a moment.',
-        }), 202
+    with _fetch_lock:
+        if _fetching:
+            logger.info('Fetch in progress — returning 202')
+            return jsonify({
+                'status': 'loading',
+                'message': 'S&P 500 data is currently being fetched. Please try again in a moment.',
+            }), 202
 
     # 5. Fall back to local computation (no Lambda configured)
     logger.info('Cache miss — starting on-demand fetch')
@@ -477,7 +479,8 @@ def get_recommendations():
         }), 500
 
     finally:
-        _fetching = False
+        with _fetch_lock:
+            _fetching = False
 
 
 @recommendations_bp.route('/api/recommendations/progress')
@@ -494,13 +497,14 @@ def get_recommendations_progress():
         })
 
     # If not fetching, nothing to report
-    if not _fetching:
-        return jsonify({
-            'status': 'idle',
-            'stocks': [],
-            'progress': 0,
-            'total': 0,
-        })
+    with _fetch_lock:
+        if not _fetching:
+            return jsonify({
+                'status': 'idle',
+                'stocks': [],
+                'progress': 0,
+                'total': 0,
+            })
 
     # Return partial results from in-progress fetch
     with _progress_lock:
