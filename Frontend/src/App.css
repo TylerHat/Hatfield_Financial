@@ -329,6 +329,25 @@
   cursor: not-allowed;
 }
 
+/* ── Range performance badge ─────────────────────────────────────────────────── */
+.range-perf {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.range-perf--up {
+  color: #3fb950;
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.range-perf--down {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.12);
+}
+
 /* ── Chart container ─────────────────────────────────────────────────────────── */
 .chart-container {
   display: flex;

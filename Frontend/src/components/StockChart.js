@@ -34,7 +34,7 @@ function buildSignalArray(dates, signals, type) {
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
 
-export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals }) {
+export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals, onRangePerformance }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -119,6 +119,49 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, strategy, fetchStart, fetchEnd, stockData]);
+
+  // Compute range performance and lift to parent
+  useEffect(() => {
+    if (!onRangePerformance) return;
+    if (!stockData) {
+      onRangePerformance(null);
+      return;
+    }
+
+    const { dates: _dates, close: _close } = stockData;
+    // Recompute slice indices to find the visible range
+    let _startIdx = _dates.findIndex((d) => d >= startDate);
+    if (_startIdx === -1) _startIdx = _dates.length;
+    let _endIdx = _dates.findIndex((d) => d > endDate);
+    if (_endIdx === -1) _endIdx = _dates.length;
+
+    const slicedClose = _close.slice(_startIdx, _endIdx);
+
+    // Find first and last non-null close in the visible range
+    let firstClose = null;
+    let lastClose = null;
+    for (const v of slicedClose) {
+      if (v != null) {
+        firstClose = v;
+        break;
+      }
+    }
+    for (let i = slicedClose.length - 1; i >= 0; i--) {
+      if (slicedClose[i] != null) {
+        lastClose = slicedClose[i];
+        break;
+      }
+    }
+
+    // If we don't have both prices or first price is zero, hide the badge
+    if (firstClose == null || lastClose == null || firstClose === 0) {
+      onRangePerformance(null);
+      return;
+    }
+
+    const pct = ((lastClose - firstClose) / firstClose) * 100;
+    onRangePerformance({ pct: +pct.toFixed(2), up: pct >= 0 });
+  }, [stockData, startDate, endDate, onRangePerformance]);
 
   if (loading) {
     return <div className="chart-status">Loading {ticker}…</div>;

@@ -89,6 +89,7 @@ function App() {
   const [pendingStart, setPendingStart] = useState(fetchRange.start);
   const [pendingEnd, setPendingEnd] = useState(fetchRange.end);
   const [activePreset, setActivePreset] = useState('1Y');
+  const [rangePerf, setRangePerf] = useState(null);
 
   // Shared stock-info data — one fetch feeds both StockSnapshot and StockInfo.
   const [stockInfo, setStockInfo] = useState(null);
@@ -437,6 +438,11 @@ function App() {
                       >
                         Load
                       </button>
+                      {rangePerf !== null && (
+                        <span className={`range-perf range-perf--${rangePerf.up ? 'up' : 'down'}`}>
+                          {rangePerf.up ? '▲' : '▼'} {Math.abs(rangePerf.pct).toFixed(2)}%
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="strategy-group">
@@ -462,6 +468,7 @@ function App() {
                   fetchEnd={fetchRange.end}
                   startDate={startDate}
                   endDate={endDate}
+                  onRangePerformance={setRangePerf}
                 />
               </>
             )}
