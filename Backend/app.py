@@ -47,7 +47,7 @@ _origins = list({o.strip() for o in _raw_origin.split(',') if o.strip()} | {'htt
 logger.info('CORS allowed origins: %s', _origins)
 CORS(app, origins=_origins, supports_credentials=True,
      allow_headers=['Content-Type', 'Authorization'],
-     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
+     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-fallback-key-change-in-production')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///hatfield.db')
@@ -114,6 +114,7 @@ limiter.limit('5/minute')(app.view_functions['auth.login'])
 limiter.limit('30/hour')(app.view_functions['auth.register'])
 limiter.limit('10/minute', methods=['GET'])(app.view_functions['user_data.get_watchlist_data'])
 limiter.limit('10/minute')(app.view_functions['admin.delete_user'])
+limiter.limit('10/minute')(app.view_functions['admin.update_user_role'])
 
 with app.app_context():
     db.create_all()

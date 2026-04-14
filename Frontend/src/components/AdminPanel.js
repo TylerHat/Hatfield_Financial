@@ -91,6 +91,8 @@ export default function AdminPanel() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
   const [flash, setFlash] = useState(null);
+  const [roleBusy, setRoleBusy] = useState(null); // user_id while PATCH in-flight
+  const [roleError, setRoleError] = useState(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -112,6 +114,27 @@ export default function AdminPanel() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  async function handleRoleChange(targetUserId, grantAdmin) {
+    setRoleBusy(targetUserId);
+    setRoleError(null);
+    try {
+      const res = await apiFetch(`/api/admin/users/${targetUserId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_admin: grantAdmin }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update role');
+      setUsers((prev) => prev.map((u) => (u.id === targetUserId ? data.user : u)));
+      setFlash(data.message);
+      setTimeout(() => setFlash(null), 4000);
+    } catch (err) {
+      setRoleError(err.message);
+      setTimeout(() => setRoleError(null), 5000);
+    } finally {
+      setRoleBusy(null);
+    }
+  }
 
   async function handleConfirmDelete() {
     if (!targetUser) return;
@@ -148,6 +171,7 @@ export default function AdminPanel() {
 
       {flash && <div className="admin-flash admin-flash--success">{flash}</div>}
       {error && <div className="admin-flash admin-flash--error">{error}</div>}
+      {roleError && <div className="admin-flash admin-flash--error">{roleError}</div>}
 
       {loading ? (
         <div className="admin-loading">Loading users…</div>
@@ -191,6 +215,36 @@ export default function AdminPanel() {
                     </td>
                     <td>{formatDate(u.last_login_at)}</td>
                     <td className="admin-table__actions-col">
+                      {!isSelf && !u.is_admin && (
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--secondary admin-btn--small"
+                          disabled={roleBusy === u.id}
+                          title="Grant admin privileges"
+                          onClick={() => {
+                            if (window.confirm(`Grant admin privileges to ${u.username}?`)) {
+                              handleRoleChange(u.id, true);
+                            }
+                          }}
+                        >
+                          {roleBusy === u.id ? 'Saving…' : 'Grant Admin'}
+                        </button>
+                      )}
+                      {!isSelf && u.is_admin && (
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--warning admin-btn--small"
+                          disabled={roleBusy === u.id}
+                          title="Revoke admin privileges"
+                          onClick={() => {
+                            if (window.confirm(`Revoke admin privileges from ${u.username}?`)) {
+                              handleRoleChange(u.id, false);
+                            }
+                          }}
+                        >
+                          {roleBusy === u.id ? 'Saving…' : 'Revoke Admin'}
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="admin-btn admin-btn--danger admin-btn--small"
@@ -202,10 +256,7 @@ export default function AdminPanel() {
                               ? 'Cannot delete another admin'
                               : 'Delete user'
                         }
-                        onClick={() => {
-                          setDeleteError(null);
-                          setTargetUser(u);
-                        }}
+                        onClick={() => { setDeleteError(null); setTargetUser(u); }}
                       >
                         Delete
                       </button>
