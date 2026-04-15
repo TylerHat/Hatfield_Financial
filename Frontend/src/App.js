@@ -150,6 +150,7 @@ function App() {
     setRefreshing(true);
     setStockInfoLoading(true);
     setRefreshError(null);
+    setStockInfoError(null);
     apiFetch(`/api/stock-info/${submittedTicker}`, {
       method: 'POST',
     })

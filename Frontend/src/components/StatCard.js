@@ -49,28 +49,21 @@ export default function StatCard({
   }
 
   return (
-    <div className={`stat-card stat-card--accent-${accent}`}>
+    <div className={`stat-card stat-card--accent-${accent}`} style={{ position: 'relative' }}>
       <div className="stat-card__label">{label}</div>
 
-      {loading && (
-        <div className="stat-card__skeleton">
-          <div className="stat-card__skeleton-bar stat-card__skeleton-bar--wide" />
-          <div className="stat-card__skeleton-bar stat-card__skeleton-bar--narrow" />
-        </div>
-      )}
-
-      {!loading && error && (
+      {error && !loading && (
         <div className="stat-card__error">{error}</div>
       )}
 
-      {!loading && !error && (
+      {!error && (
         <>
-          <div className={`stat-card__value stat-card__value--${size}`}>
+          <div className={`stat-card__value stat-card__value--${size}`} style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
             {value ?? 'N/A'}
           </div>
 
           {delta !== null && delta !== undefined && (
-            <div className={`stat-card__delta ${getDeltaClass(delta)}`}>
+            <div className={`stat-card__delta ${getDeltaClass(delta)}`} style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>
               {delta}
               {deltaLabel && (
                 <span className="stat-card__delta-label"> {deltaLabel}</span>
@@ -79,10 +72,31 @@ export default function StatCard({
           )}
 
           {subtext && (
-            <div className="stat-card__subtext">{subtext}</div>
+            <div className="stat-card__subtext" style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s' }}>{subtext}</div>
+          )}
+
+          {loading && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '16px',
+              height: '16px',
+              border: '2px solid rgba(88, 166, 255, 0.2)',
+              borderTop: '2px solid #58a6ff',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
           )}
         </>
       )}
+
+      <style>{`
+        @keyframes spin {
+          to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
