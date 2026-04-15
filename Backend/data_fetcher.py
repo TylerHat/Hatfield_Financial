@@ -42,7 +42,7 @@ _MAX_WARMUP_DAYS = 280
 
 # ── yfinance property timeout (seconds) ────────────────────────────────────────
 # Prevents hangs when yfinance properties access Yahoo Finance slowly or infinitely
-_YFINANCE_PROPERTY_TIMEOUT = 10
+_YFINANCE_PROPERTY_TIMEOUT = 20
 
 # ── Priority queue for yfinance rate limiting ──────────────────────────────────
 PRIORITY_HIGH   = 1   # user-facing interactive (analysis tab)
@@ -98,7 +98,7 @@ class YFinanceQueue:
 
     _CALL_INTERVAL   = 0.6    # seconds between calls (~100 calls/min)
     _PROMOTE_AFTER_S = 30.0   # promote after this many seconds waiting
-    _SUBMIT_TIMEOUT  = 15.0   # max seconds a caller blocks (reduced from 60s to fail fast on hangs)
+    _SUBMIT_TIMEOUT  = 30.0   # max seconds a caller blocks (increased from 15s for constrained prod resources)
 
     def __init__(self):
         self._pq               = queue.PriorityQueue()
