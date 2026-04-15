@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify, request
 
-from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, PRIORITY_HIGH
+from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, clear_ticker_cache, PRIORITY_HIGH
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,12 @@ def refresh_stock_info_post(ticker):
         clear_cache(f'ohlcv_period:{ticker}')
         clear_cache(f'analyst:{ticker}')
         clear_cache(f'earnings:{ticker}')
+        # Clear the cached yf.Ticker object so yfinance fetches fresh data
+        # Critical for 24/7 assets like crypto where Ticker.info holds stale data
+        clear_ticker_cache(ticker)
         logger.info(f'Cache cleared for {ticker}')
-        return jsonify({'message': f'Successfully refreshed {ticker}', 'ticker': ticker}), 200
+        # Fetch and return fresh data
+        return get_stock_info(ticker)
     except Exception as e:
         logger.error(f'Error refreshing {ticker}: {type(e).__name__}: {str(e)}', exc_info=True)
         return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
@@ -127,8 +131,14 @@ def get_stock_info(ticker):
         atr = tr.rolling(14).mean()
         atr_val = float(atr.iloc[-1])
         atr_avg = float(atr.mean())
-        vol_ratio = round(atr_val / atr_avg, 2) if atr_avg > 0 else 1.0
-        if vol_ratio > 1.5:
+        # Handle NaN values (can occur with certain assets like crypto)
+        if pd.isna(atr_val) or pd.isna(atr_avg) or atr_avg <= 0:
+            vol_ratio = None
+        else:
+            vol_ratio = round(atr_val / atr_avg, 2)
+        if vol_ratio is None:
+            volatility_status = None
+        elif vol_ratio > 1.5:
             volatility_status = 'HIGH Volatility'
         elif vol_ratio < 0.7:
             volatility_status = 'LOW Volatility'
@@ -287,12 +297,21 @@ def get_stock_info(ticker):
             valuation = 'Potentially Overvalued'
             val_detail = f'P/E of {pe:.1f}x is significantly above the market average of ~20x'
 
-        # ── Day change (open → current price) ────────────────────────────────
+        # ── Day change (open → current price, or prev close → current for crypto) ───
         price = safe_float('currentPrice') or safe_float('regularMarketPrice')
-        open_price = float(hist['Open'].iloc[-1]) if not hist.empty else None
         day_change_pct = None
-        if price and open_price and open_price > 0:
-            day_change_pct = round(((price - open_price) / open_price) * 100, 2)
+
+        if price and not hist.empty:
+            # Try to use today's opening price first (for stocks with market hours)
+            open_price = float(hist['Open'].iloc[-1]) if not pd.isna(hist['Open'].iloc[-1]) else None
+
+            # For crypto or when opening price isn't available, use previous day's close
+            if not open_price or open_price == 0:
+                if len(hist) >= 2:
+                    open_price = float(hist['Close'].iloc[-2])  # Previous day's close
+
+            if open_price and open_price > 0:
+                day_change_pct = round(((price - open_price) / open_price) * 100, 2)
 
         # ── 52-week range position ────────────────────────────────────────────
         hi52 = safe_float('fiftyTwoWeekHigh')

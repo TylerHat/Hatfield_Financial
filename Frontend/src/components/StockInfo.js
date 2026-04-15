@@ -93,14 +93,30 @@ export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, sto
   const loading = stockInfoLoading;
   const error = stockInfoError;
 
-  if (loading) return <div className="info-loading">Loading analysis for {ticker}…</div>;
   if (error) return <div className="info-error">{error}</div>;
   if (!info) return null;
 
   const rsiPct = info.rsi !== null ? Math.min(Math.max(info.rsi, 0), 100) : null;
 
   return (
-    <div className="stock-info">
+    <div className="stock-info" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
+      {loading && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#238636',
+          color: '#fff',
+          padding: '8px 16px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontWeight: 500,
+          zIndex: 1000,
+        }}>
+          Refreshing data for {ticker}…
+        </div>
+      )}
       {/* ── Company overview ─────────────────────────────────────── */}
       {!hideOverview && (
         <div className="info-overview">

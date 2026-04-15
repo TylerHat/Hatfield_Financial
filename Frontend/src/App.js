@@ -12,6 +12,7 @@ import AnalystPanel from './components/AnalystPanel';
 import Watchlist from './components/Watchlist';
 import AdminPanel from './components/AdminPanel';
 import AccountPanel from './components/AccountPanel';
+import ApiMonitorPanel from './components/ApiMonitorPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -107,6 +108,8 @@ function App() {
 
   // Refresh data state
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
     apiFetch('/api/user/watchlists')
@@ -146,22 +149,32 @@ function App() {
   const handleRefreshData = () => {
     if (!submittedTicker) return;
     setRefreshing(true);
+    setStockInfoLoading(true);
+    setRefreshError(null);
+    setStockInfoError(null);
+
+    // Trigger chart refresh by incrementing refresh count
+    setRefreshCount((prev) => prev + 1);
+
     apiFetch(`/api/stock-info/${submittedTicker}`, {
       method: 'POST',
     })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          setStockInfoError(data.error);
+          setRefreshError(data.error);
         } else {
           setStockInfo(data);
+          setRefreshError(null);
           setStockInfoError(null);
         }
         setRefreshing(false);
+        setStockInfoLoading(false);
       })
       .catch(() => {
-        setStockInfoError('Could not refresh stock data.');
+        setRefreshError('Could not refresh stock data.');
         setRefreshing(false);
+        setStockInfoLoading(false);
       });
   };
 
@@ -312,6 +325,14 @@ function App() {
             Administration
           </button>
         )}
+        {user?.is_admin && (
+          <button
+            className={`tab-btn tab-btn--admin ${activeTab === 'api-monitor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('api-monitor')}
+          >
+            API Monitor
+          </button>
+        )}
       </nav>
 
       <main className="app-main">
@@ -353,14 +374,21 @@ function App() {
                     )}
                   </div>
                   <div className="overview-buttons">
-                    <button
-                      className="refresh-data-btn"
-                      disabled={refreshing || !submittedTicker}
-                      onClick={handleRefreshData}
-                      title="Clear cache and fetch fresh data"
-                    >
-                      {refreshing ? 'Refreshing...' : '↻ Refresh'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className="refresh-data-btn"
+                        disabled={refreshing || !submittedTicker}
+                        onClick={handleRefreshData}
+                        title="Clear cache and fetch fresh data"
+                      >
+                        {refreshing ? 'Refreshing...' : '↻ Refresh'}
+                      </button>
+                      {refreshError && (
+                        <span style={{ color: '#f85149', fontSize: '12px' }}>
+                          {refreshError}
+                        </span>
+                      )}
+                    </div>
                     {defaultWatchlist && (
                       <button
                         className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}
@@ -504,6 +532,7 @@ function App() {
                   startDate={startDate}
                   endDate={endDate}
                   onRangePerformance={setRangePerf}
+                  refreshKey={refreshCount}
                 />
               </>
             )}
@@ -538,6 +567,8 @@ function App() {
         {activeTab === 'account' && <AccountPanel />}
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
+
+        {activeTab === 'api-monitor' && user?.is_admin && <ApiMonitorPanel />}
       </main>
     </div>
   );

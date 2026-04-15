@@ -2,7 +2,7 @@ import pandas as pd
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
-from data_fetcher import get_ohlcv, get_ticker_info, get_earnings_dates, PRIORITY_HIGH
+from data_fetcher import get_ohlcv, get_ticker_info, get_earnings_dates, clear_cache, clear_ticker_cache, PRIORITY_HIGH
 
 stock_data_bp = Blueprint('stock_data', __name__)
 
@@ -104,5 +104,27 @@ def get_stock_data(ticker):
 
         return jsonify(data)
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@stock_data_bp.route('/api/stock/<ticker>', methods=['POST'])
+def refresh_stock_data(ticker):
+    """Handle POST requests to refresh stock chart data."""
+    try:
+        ticker = ticker.upper()
+        # Clear cached OHLCV data for this ticker
+        clear_cache(f'ohlcv:{ticker}')
+        clear_cache(f'ohlcv_period:{ticker}')
+        # Clear the cached yf.Ticker object for fresh data
+        clear_ticker_cache(ticker)
+
+        # Fetch fresh data
+        end_str = request.args.get('end')
+        start_str = request.args.get('start')
+        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
+        start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
+
+        return get_stock_data(ticker)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

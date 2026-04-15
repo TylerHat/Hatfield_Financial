@@ -34,7 +34,7 @@ function buildSignalArray(dates, signals, type) {
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
 
-export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals, onRangePerformance }) {
+export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals, onRangePerformance, refreshKey = 0 }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -59,7 +59,9 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     setSignals([]);
 
     const params = new URLSearchParams({ start: fetchStart, end: fetchEnd });
-    apiFetch(`/api/stock/${ticker}?${params}`)
+    // Use POST when refreshKey changes to bypass frontend cache and get fresh data
+    const method = refreshKey > 0 ? 'POST' : 'GET';
+    apiFetch(`/api/stock/${ticker}?${params}`, { method })
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
@@ -73,7 +75,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
         setLoading(false);
       });
-  }, [ticker, fetchStart, fetchEnd]);
+  }, [ticker, fetchStart, fetchEnd, refreshKey]);
 
   // Fetch strategy signals whenever ticker, strategy, or date range changes
   useEffect(() => {
