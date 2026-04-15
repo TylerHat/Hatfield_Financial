@@ -12,6 +12,7 @@ import queue
 import threading
 import time
 from datetime import datetime, timedelta
+from functools import wraps
 
 import yfinance as yf
 
@@ -39,10 +40,43 @@ _ANALYST_TTL = 1800     # 30 minutes — analyst data changes infrequently
 # Maximum warmup any strategy needs (mean-reversion, ma-confluence, 52-week)
 _MAX_WARMUP_DAYS = 280
 
+# ── yfinance property timeout (seconds) ────────────────────────────────────────
+# Prevents hangs when yfinance properties access Yahoo Finance slowly or infinitely
+_YFINANCE_PROPERTY_TIMEOUT = 10
+
 # ── Priority queue for yfinance rate limiting ──────────────────────────────────
 PRIORITY_HIGH   = 1   # user-facing interactive (analysis tab)
 PRIORITY_MEDIUM = 2   # user-initiated, less urgent (watchlist, charts)
 PRIORITY_LOW    = 3   # background batch (recommendations, S&P 500 bulk)
+
+
+def _get_yfinance_property(stock, prop_name, timeout=_YFINANCE_PROPERTY_TIMEOUT):
+    """
+    Safely access a yfinance Ticker property with a timeout.
+    Returns None if the property access times out or raises an exception.
+    """
+    result = [None]
+    exception = [None]
+
+    def access_property():
+        try:
+            result[0] = getattr(stock, prop_name)
+        except Exception as e:
+            exception[0] = e
+
+    thread = threading.Thread(target=access_property, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        logger.warning(f'yfinance property {prop_name} timed out after {timeout}s')
+        return None
+
+    if exception[0]:
+        logger.debug(f'yfinance property {prop_name} failed: {exception[0]}')
+        return None
+
+    return result[0]
 
 
 class YFinanceQueue:
@@ -64,7 +98,7 @@ class YFinanceQueue:
 
     _CALL_INTERVAL   = 0.6    # seconds between calls (~100 calls/min)
     _PROMOTE_AFTER_S = 30.0   # promote after this many seconds waiting
-    _SUBMIT_TIMEOUT  = 60.0   # max seconds a caller blocks
+    _SUBMIT_TIMEOUT  = 15.0   # max seconds a caller blocks (reduced from 60s to fail fast on hangs)
 
     def __init__(self):
         self._pq               = queue.PriorityQueue()
@@ -283,6 +317,10 @@ def _fetch_with_retry(fn, label, priority=PRIORITY_MEDIUM, endpoint_type=None):
             return _queue_call(fn, priority=priority, endpoint_type=endpoint_type)
         except Exception as exc:
             msg = str(exc).lower()
+            # Skip 404 "No fundamentals data found" errors — some symbols don't have analyst data on Yahoo
+            if '404' in msg or 'not found' in msg or 'no fundamentals data' in msg:
+                logger.debug('%s not available on Yahoo Finance (404): %s', label, exc)
+                return None
             if '429' in msg or 'rate' in msg or 'too many' in msg:
                 if attempt < _MAX_RETRIES:
                     logger.warning('%s rate-limited, retrying in %ds (attempt %d/%d)',
@@ -394,7 +432,8 @@ def get_ticker_info(ticker, priority=PRIORITY_MEDIUM):
         return cached
 
     stock = _get_ticker(ticker)
-    info = _queue_call(lambda: stock.info, priority=priority, endpoint_type='get_ticker_info')
+    # Use _fetch_with_retry to handle 404 "No fundamentals data" errors gracefully
+    info = _fetch_with_retry(lambda: stock.info, f'{ticker} info', priority=priority, endpoint_type='get_ticker_info')
     if info:
         _cache_set(key, info)
         return info
@@ -517,26 +556,41 @@ def get_analyst_data(ticker, priority=PRIORITY_MEDIUM):
 
     stock = _get_ticker(ticker)
     data = {}
+    timeout_count = 0
 
     pt = _fetch_with_retry(lambda: stock.analyst_price_targets, f'{ticker} price_targets', priority=priority, endpoint_type='get_analyst_data')
     if pt:
         data['price_targets'] = pt
+    elif pt is None:
+        timeout_count += 1
 
     rs = _fetch_with_retry(lambda: stock.recommendations_summary, f'{ticker} recommendations_summary', priority=priority, endpoint_type='get_analyst_data')
     if rs is not None and hasattr(rs, 'empty') and not rs.empty:
         data['recommendations_summary'] = rs
+    elif rs is None:
+        timeout_count += 1
 
     ud = _fetch_with_retry(lambda: stock.upgrades_downgrades, f'{ticker} upgrades_downgrades', priority=priority, endpoint_type='get_analyst_data')
     if ud is not None and hasattr(ud, 'empty') and not ud.empty:
         data['upgrades_downgrades'] = ud.head(50)
+    elif ud is None:
+        timeout_count += 1
 
     ee = _fetch_with_retry(lambda: stock.earnings_estimate, f'{ticker} earnings_estimate', priority=priority, endpoint_type='get_analyst_data')
     if ee is not None and hasattr(ee, 'empty') and not ee.empty:
         data['earnings_estimate'] = ee
+    elif ee is None:
+        timeout_count += 1
 
     re_ = _fetch_with_retry(lambda: stock.revenue_estimate, f'{ticker} revenue_estimate', priority=priority, endpoint_type='get_analyst_data')
     if re_ is not None and hasattr(re_, 'empty') and not re_.empty:
         data['revenue_estimate'] = re_
+    elif re_ is None:
+        timeout_count += 1
+
+    # Log if multiple analyst properties timed out (indicates yfinance service issue)
+    if timeout_count >= 3:
+        logger.error(f'get_analyst_data({ticker}): {timeout_count}/5 properties timed out — Yahoo Finance may be slow or unavailable')
 
     if data:
         _cache_set(key, data)
