@@ -128,8 +128,14 @@ def get_stock_info(ticker):
         atr = tr.rolling(14).mean()
         atr_val = float(atr.iloc[-1])
         atr_avg = float(atr.mean())
-        vol_ratio = round(atr_val / atr_avg, 2) if atr_avg > 0 else 1.0
-        if vol_ratio > 1.5:
+        # Handle NaN values (can occur with certain assets like crypto)
+        if pd.isna(atr_val) or pd.isna(atr_avg) or atr_avg <= 0:
+            vol_ratio = None
+        else:
+            vol_ratio = round(atr_val / atr_avg, 2)
+        if vol_ratio is None:
+            volatility_status = None
+        elif vol_ratio > 1.5:
             volatility_status = 'HIGH Volatility'
         elif vol_ratio < 0.7:
             volatility_status = 'LOW Volatility'
