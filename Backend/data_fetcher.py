@@ -100,7 +100,7 @@ class YFinanceQueue:
 
     _CALL_INTERVAL   = 0.3    # seconds between calls (~200 calls/min, was 0.6 to handle burst traffic)
     _PROMOTE_AFTER_S = 30.0   # promote after this many seconds waiting
-    _SUBMIT_TIMEOUT  = 15.0   # max seconds a caller blocks (property timeout is now 5s, so queue timeout can be shorter)
+    _SUBMIT_TIMEOUT  = 20.0   # max seconds a caller blocks (Yahoo Finance is slow in prod, need buffer)
 
     def __init__(self):
         self._pq               = queue.PriorityQueue()
