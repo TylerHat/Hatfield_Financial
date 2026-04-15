@@ -629,3 +629,21 @@ def clear_cache(prefix=None):
             keys = [k for k in _cache if k.startswith(prefix)]
             for k in keys:
                 del _cache[k]
+
+
+def clear_ticker_cache(symbol=None):
+    """Clear cached yf.Ticker objects for a symbol (or all if symbol is None).
+
+    This forces yfinance to create fresh Ticker instances and re-fetch data
+    from Yahoo Finance. Necessary for 24/7 assets like crypto where cached
+    Ticker objects hold stale .info data.
+    """
+    global _ticker_objects
+    with _ticker_lock:
+        if symbol is None:
+            _ticker_objects.clear()
+        else:
+            symbol = symbol.upper()
+            if symbol in _ticker_objects:
+                del _ticker_objects[symbol]
+                logger.info(f'Cleared cached Ticker object for {symbol}')

@@ -109,6 +109,7 @@ function App() {
   // Refresh data state
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
     apiFetch('/api/user/watchlists')
@@ -151,6 +152,10 @@ function App() {
     setStockInfoLoading(true);
     setRefreshError(null);
     setStockInfoError(null);
+
+    // Trigger chart refresh by incrementing refresh count
+    setRefreshCount((prev) => prev + 1);
+
     apiFetch(`/api/stock-info/${submittedTicker}`, {
       method: 'POST',
     })
@@ -527,6 +532,7 @@ function App() {
                   startDate={startDate}
                   endDate={endDate}
                   onRangePerformance={setRangePerf}
+                  refreshKey={refreshCount}
                 />
               </>
             )}

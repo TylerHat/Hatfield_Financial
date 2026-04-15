@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify, request
 
-from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, PRIORITY_HIGH
+from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, clear_ticker_cache, PRIORITY_HIGH
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,9 @@ def refresh_stock_info_post(ticker):
         clear_cache(f'ohlcv_period:{ticker}')
         clear_cache(f'analyst:{ticker}')
         clear_cache(f'earnings:{ticker}')
+        # Clear the cached yf.Ticker object so yfinance fetches fresh data
+        # Critical for 24/7 assets like crypto where Ticker.info holds stale data
+        clear_ticker_cache(ticker)
         logger.info(f'Cache cleared for {ticker}')
         # Fetch and return fresh data
         return get_stock_info(ticker)
