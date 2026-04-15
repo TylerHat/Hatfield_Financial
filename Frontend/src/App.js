@@ -108,6 +108,7 @@ function App() {
 
   // Refresh data state
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState(null);
 
   useEffect(() => {
     apiFetch('/api/user/watchlists')
@@ -147,22 +148,27 @@ function App() {
   const handleRefreshData = () => {
     if (!submittedTicker) return;
     setRefreshing(true);
+    setStockInfoLoading(true);
+    setRefreshError(null);
     apiFetch(`/api/stock-info/${submittedTicker}`, {
       method: 'POST',
     })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
-          setStockInfoError(data.error);
+          setRefreshError(data.error);
         } else {
           setStockInfo(data);
+          setRefreshError(null);
           setStockInfoError(null);
         }
         setRefreshing(false);
+        setStockInfoLoading(false);
       })
       .catch(() => {
-        setStockInfoError('Could not refresh stock data.');
+        setRefreshError('Could not refresh stock data.');
         setRefreshing(false);
+        setStockInfoLoading(false);
       });
   };
 
@@ -362,14 +368,21 @@ function App() {
                     )}
                   </div>
                   <div className="overview-buttons">
-                    <button
-                      className="refresh-data-btn"
-                      disabled={refreshing || !submittedTicker}
-                      onClick={handleRefreshData}
-                      title="Clear cache and fetch fresh data"
-                    >
-                      {refreshing ? 'Refreshing...' : '↻ Refresh'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className="refresh-data-btn"
+                        disabled={refreshing || !submittedTicker}
+                        onClick={handleRefreshData}
+                        title="Clear cache and fetch fresh data"
+                      >
+                        {refreshing ? 'Refreshing...' : '↻ Refresh'}
+                      </button>
+                      {refreshError && (
+                        <span style={{ color: '#f85149', fontSize: '12px' }}>
+                          {refreshError}
+                        </span>
+                      )}
+                    </div>
                     {defaultWatchlist && (
                       <button
                         className={`wl-add-stock-btn ${watchlistTickers.has(submittedTicker) ? 'wl-add-stock-btn--added' : ''}`}

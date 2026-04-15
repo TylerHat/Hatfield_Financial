@@ -61,7 +61,8 @@ def refresh_stock_info_post(ticker):
         clear_cache(f'analyst:{ticker}')
         clear_cache(f'earnings:{ticker}')
         logger.info(f'Cache cleared for {ticker}')
-        return jsonify({'message': f'Successfully refreshed {ticker}', 'ticker': ticker}), 200
+        # Fetch and return fresh data
+        return get_stock_info(ticker)
     except Exception as e:
         logger.error(f'Error refreshing {ticker}: {type(e).__name__}: {str(e)}', exc_info=True)
         return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
