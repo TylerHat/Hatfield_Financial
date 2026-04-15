@@ -297,12 +297,21 @@ def get_stock_info(ticker):
             valuation = 'Potentially Overvalued'
             val_detail = f'P/E of {pe:.1f}x is significantly above the market average of ~20x'
 
-        # ── Day change (open → current price) ────────────────────────────────
+        # ── Day change (open → current price, or prev close → current for crypto) ───
         price = safe_float('currentPrice') or safe_float('regularMarketPrice')
-        open_price = float(hist['Open'].iloc[-1]) if not hist.empty else None
         day_change_pct = None
-        if price and open_price and open_price > 0:
-            day_change_pct = round(((price - open_price) / open_price) * 100, 2)
+
+        if price and not hist.empty:
+            # Try to use today's opening price first (for stocks with market hours)
+            open_price = float(hist['Open'].iloc[-1]) if not pd.isna(hist['Open'].iloc[-1]) else None
+
+            # For crypto or when opening price isn't available, use previous day's close
+            if not open_price or open_price == 0:
+                if len(hist) >= 2:
+                    open_price = float(hist['Close'].iloc[-2])  # Previous day's close
+
+            if open_price and open_price > 0:
+                day_change_pct = round(((price - open_price) / open_price) * 100, 2)
 
         # ── 52-week range position ────────────────────────────────────────────
         hi52 = safe_float('fiftyTwoWeekHigh')
