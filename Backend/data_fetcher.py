@@ -98,7 +98,7 @@ class YFinanceQueue:
     seconds are promoted one level (3→2, 2→1) on dequeue.
     """
 
-    _CALL_INTERVAL   = 0.6    # seconds between calls (~100 calls/min)
+    _CALL_INTERVAL   = 0.3    # seconds between calls (~200 calls/min, was 0.6 to handle burst traffic)
     _PROMOTE_AFTER_S = 30.0   # promote after this many seconds waiting
     _SUBMIT_TIMEOUT  = 15.0   # max seconds a caller blocks (property timeout is now 5s, so queue timeout can be shorter)
 
