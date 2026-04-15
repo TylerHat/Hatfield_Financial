@@ -272,20 +272,36 @@ class YFinanceQueue:
                 self._last_call = time.time()
 
                 # ── Execute ────────────────────────────────────────────────
+                # Run fn() in a guarded thread so a hanging yfinance call
+                # cannot permanently block the worker and stall the entire queue.
+                _fn_result = {}
+                _fn_exc    = {}
+
+                def _run():
+                    try:
+                        _fn_result['val'] = fn()
+                    except Exception as _e:
+                        _fn_exc['exc'] = _e
+
+                _t = threading.Thread(target=_run, daemon=True)
+                _t.start()
+                _t.join(timeout=self._SUBMIT_TIMEOUT)
+
                 try:
-                    holder['result'] = fn()
-                    self._min_successes += 1
-                    # Track endpoint type
-                    if endpoint_type:
-                        self._min_endpoint_calls[endpoint_type] = self._min_endpoint_calls.get(endpoint_type, 0) + 1
-                except TimeoutError as exc:
-                    self._min_timeouts += 1
-                    holder['exc'] = exc
-                    if endpoint_type:
-                        self._min_endpoint_calls[endpoint_type] = self._min_endpoint_calls.get(endpoint_type, 0) + 1
-                except Exception as exc:
-                    self._min_failures += 1
-                    holder['exc'] = exc
+                    if _t.is_alive():
+                        # fn() is still hanging — move on, do not block the worker
+                        self._min_timeouts += 1
+                        holder['exc'] = TimeoutError(
+                            f'yfinance call hung for {self._SUBMIT_TIMEOUT}s, worker moving on'
+                        )
+                        logger.warning('yfinance call hung after %ss (%s) — worker unblocked',
+                                       self._SUBMIT_TIMEOUT, endpoint_type or 'unknown')
+                    elif 'exc' in _fn_exc:
+                        self._min_failures += 1
+                        holder['exc'] = _fn_exc['exc']
+                    else:
+                        holder['result'] = _fn_result.get('val')
+                        self._min_successes += 1
                     if endpoint_type:
                         self._min_endpoint_calls[endpoint_type] = self._min_endpoint_calls.get(endpoint_type, 0) + 1
                 finally:
