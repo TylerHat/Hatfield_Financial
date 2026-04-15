@@ -12,6 +12,7 @@ import AnalystPanel from './components/AnalystPanel';
 import Watchlist from './components/Watchlist';
 import AdminPanel from './components/AdminPanel';
 import AccountPanel from './components/AccountPanel';
+import ApiMonitorPanel from './components/ApiMonitorPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -312,6 +313,14 @@ function App() {
             Administration
           </button>
         )}
+        {user?.is_admin && (
+          <button
+            className={`tab-btn tab-btn--admin ${activeTab === 'api-monitor' ? 'active' : ''}`}
+            onClick={() => setActiveTab('api-monitor')}
+          >
+            API Monitor
+          </button>
+        )}
       </nav>
 
       <main className="app-main">
@@ -538,6 +547,8 @@ function App() {
         {activeTab === 'account' && <AccountPanel />}
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
+
+        {activeTab === 'api-monitor' && user?.is_admin && <ApiMonitorPanel />}
       </main>
     </div>
   );

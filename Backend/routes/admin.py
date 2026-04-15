@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, g, request
 
 from models import db, User
 from auth import admin_required
+from data_fetcher import _yf_queue
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -56,3 +57,28 @@ def update_user_role(user_id):
         'message': f'Successfully {action} {target.username}',
         'user': target.to_dict(),
     }), 200
+
+
+@admin_bp.route('/metrics/start/<int:minutes>', methods=['POST'])
+@admin_required
+def start_metrics_recording(minutes):
+    """Start recording API metrics for the specified number of minutes (5 or 10)."""
+    if minutes not in (5, 10):
+        return jsonify({'error': 'minutes must be 5 or 10'}), 400
+    result = _yf_queue.start_recording(minutes)
+    return jsonify(result), 200
+
+
+@admin_bp.route('/metrics/status', methods=['GET'])
+@admin_required
+def metrics_status():
+    """Get current recording status and captured data."""
+    return jsonify(_yf_queue.get_status()), 200
+
+
+@admin_bp.route('/metrics/clear', methods=['POST'])
+@admin_required
+def clear_metrics():
+    """Clear all recorded metrics data."""
+    _yf_queue.clear_recording()
+    return jsonify({'status': 'cleared'}), 200
