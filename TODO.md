@@ -25,16 +25,6 @@ If a stock is delisted dont ask for its info anymore.
 
 Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / Score = Reward / Effort (higher = better ROI).
 
----
-
-### 1. Multi-Strategy Signal Consensus on Single Ticker
-**Description**: Run all 9 strategies against a ticker simultaneously and return a composite score (e.g. "6/9 strategies BUY") alongside each strategy's conviction, displayed as a summary panel above the chart.
-**Why it matters**: Eliminates the need to manually tab through each strategy. A 7/9 BUY consensus is far more actionable than any individual signal.
-**yfinance data**: No new data needed — reuses `get_ohlcv()` already in cache from current strategy calls.
-**Reward**: 9 | **Effort**: 5 | **Score**: 1.80
-**Implementation notes**: Backend adds `GET /api/strategy-consensus/<ticker>?start=&end=` that calls each of the 9 strategy route functions in parallel (ThreadPoolExecutor), aggregates the latest signal per strategy, and returns counts + per-strategy summary. Frontend adds a compact consensus bar above StockChart showing green/red strategy icons.
-
----
 
 ### 2. Insider Transaction Feed on Stock Info Page
 **Description**: Display the most recent insider buy/sell transactions (officer name, role, shares, value, date) as a table on the stock detail view, with a net-buy/net-sell 90-day summary badge.

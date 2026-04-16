@@ -615,6 +615,265 @@ def get_analyst_data(ticker, priority=PRIORITY_MEDIUM):
     return data if data else None
 
 
+_INSIDER_TTL = 3600        # 1 hour — insider filings update infrequently
+_INSTITUTIONAL_TTL = 3600  # 1 hour — 13F filings are quarterly
+
+
+def _safe_val(v):
+    """Return None for NaN/None, else the value as-is."""
+    if v is None:
+        return None
+    try:
+        import math
+        if isinstance(v, float) and math.isnan(v):
+            return None
+    except Exception:
+        pass
+    return v
+
+
+def _find_col(df_cols, *candidates):
+    """
+    Return the first column name in df_cols that matches any candidate
+    (case-insensitive, ignoring leading # and whitespace).
+    """
+    normalized = {c.lower().strip().lstrip('#'): c for c in df_cols}
+    for candidate in candidates:
+        key = candidate.lower().strip().lstrip('#')
+        if key in normalized:
+            return normalized[key]
+    return None
+
+
+def get_insider_transactions(ticker, limit=10, priority=PRIORITY_MEDIUM):
+    """
+    Fetch recent insider transactions for a ticker with 1-hour TTL.
+
+    Uses dynamic column detection to handle yfinance version differences:
+      - old: filer / shares / value / text / startDate / ownership
+      - new: Insider / #Shares / Value / Transaction / Date / Position
+
+    Parameters
+    ----------
+    ticker : str
+    limit : int      – max rows to return
+    priority : int   – queue priority
+
+    Returns
+    -------
+    list[dict] or None
+    """
+    ticker = ticker.upper()
+    key = f'insider:{ticker}'
+
+    cached = _cache_get(key, _INSIDER_TTL)
+    if cached is not None:
+        _yf_queue._min_endpoint_calls['get_insider_transactions'] = (
+            _yf_queue._min_endpoint_calls.get('get_insider_transactions', 0) + 1
+        )
+        return cached
+
+    stock = _get_ticker(ticker)
+    try:
+        df = _fetch_with_retry(
+            lambda: stock.insider_transactions,
+            f'{ticker} insider_transactions',
+            priority=priority,
+            endpoint_type='get_insider_transactions',
+        )
+        if df is None or (hasattr(df, 'empty') and df.empty):
+            logger.debug(f'get_insider_transactions({ticker}): empty or None DataFrame')
+            return None
+
+        cols = list(df.columns)
+        logger.info(f'get_insider_transactions({ticker}): columns={cols}, rows={len(df)}')
+
+        # Locate each logical field dynamically
+        c_filer    = _find_col(cols, 'Insider', 'filer', 'Name')
+        c_shares   = _find_col(cols, '#Shares', 'Shares', 'shares', 'Share')
+        c_value    = _find_col(cols, 'Value', 'value')
+        c_text     = _find_col(cols, 'Transaction', 'text', 'Text', 'Type', 'type')
+        c_date     = _find_col(cols, 'Date', 'startDate', 'Start Date', 'Start_Date')
+        c_own      = _find_col(cols, 'Ownership', 'ownership', 'Position', 'position')
+
+        rows = []
+        for _, row in df.head(limit).iterrows():
+            try:
+                filer  = _safe_val(row[c_filer])  if c_filer  else None
+                shares = _safe_val(row[c_shares]) if c_shares else None
+                value  = _safe_val(row[c_value])  if c_value  else None
+                text   = _safe_val(row[c_text])   if c_text   else None
+                own    = _safe_val(row[c_own])    if c_own    else None
+
+                # Date: may be in the index if it's a DatetimeIndex
+                date_val = None
+                if c_date:
+                    date_val = _safe_val(row[c_date])
+                if date_val is None and hasattr(df.index, 'dtype'):
+                    # DatetimeIndex — use row's index label
+                    idx = row.name
+                    if idx is not None:
+                        date_val = idx
+
+                entry = {
+                    'filer': str(filer) if filer is not None else None,
+                    'text':  str(text)  if text  is not None else None,
+                    'shares': int(float(shares)) if shares is not None else None,
+                    'value':  float(value)       if value  is not None else None,
+                    'ownership': str(own) if own is not None else None,
+                    'date': str(date_val)[:10] if date_val is not None else None,
+                }
+                rows.append(entry)
+            except Exception as row_exc:
+                logger.debug(f'get_insider_transactions({ticker}) row parse error: {row_exc}')
+                continue
+
+        if rows:
+            _cache_set(key, rows)
+            return rows
+        logger.warning(f'get_insider_transactions({ticker}): DataFrame had {len(df)} rows but none parsed (cols={cols})')
+    except Exception as exc:
+        logger.warning(f'get_insider_transactions({ticker}): {exc}')
+    return None
+
+
+def get_institutional_holders(ticker, limit=15, priority=PRIORITY_MEDIUM):
+    """
+    Fetch institutional holders + major holders summary for a ticker (1-hour TTL).
+
+    Uses dynamic column detection to handle yfinance version differences.
+    % Out values are stored as-is from yfinance (already a percentage, e.g. 5.23 = 5.23%).
+
+    Returns a dict with:
+      'holders'      – list of dicts (top holders from stock.institutional_holders)
+      'major'        – dict of summary stats from stock.major_holders
+      'totalCount'   – number of institutional holders (from major_holders)
+
+    Parameters
+    ----------
+    ticker : str
+    limit : int      – max holder rows to return
+    priority : int   – queue priority
+    """
+    ticker = ticker.upper()
+    key = f'institutional:{ticker}'
+
+    cached = _cache_get(key, _INSTITUTIONAL_TTL)
+    if cached is not None:
+        _yf_queue._min_endpoint_calls['get_institutional_holders'] = (
+            _yf_queue._min_endpoint_calls.get('get_institutional_holders', 0) + 1
+        )
+        return cached
+
+    stock = _get_ticker(ticker)
+    result = {}
+
+    # ── institutional_holders ─────────────────────────────────────────────
+    try:
+        ih = _fetch_with_retry(
+            lambda: stock.institutional_holders,
+            f'{ticker} institutional_holders',
+            priority=priority,
+            endpoint_type='get_institutional_holders',
+        )
+        if ih is not None and hasattr(ih, 'empty') and not ih.empty:
+            cols = list(ih.columns)
+            logger.info(f'get_institutional_holders({ticker}): institutional_holders cols={cols}, rows={len(ih)}')
+
+            c_holder = _find_col(cols, 'Holder', 'holder', 'Institution', 'Name')
+            c_shares = _find_col(cols, 'Shares', 'shares', '#Shares')
+            c_pct    = _find_col(cols, '% Out', 'pctHeld', '% Held', 'pctOut', '% Outstanding')
+            c_value  = _find_col(cols, 'Value', 'value')
+            c_date   = _find_col(cols, 'Date Reported', 'dateReported', 'Date', 'Report Date')
+
+            rows = []
+            for _, row in ih.head(limit).iterrows():
+                try:
+                    holder  = _safe_val(row[c_holder]) if c_holder else None
+                    shares  = _safe_val(row[c_shares]) if c_shares else None
+                    pct_raw = _safe_val(row[c_pct])    if c_pct    else None
+                    value   = _safe_val(row[c_value])  if c_value  else None
+                    date_r  = _safe_val(row[c_date])   if c_date   else None
+
+                    # yfinance returns % Out as a decimal fraction (0.0523 = 5.23%)
+                    pct_out = None
+                    if pct_raw is not None:
+                        pct_f = float(pct_raw)
+                        # If value is > 1, it's already a percentage; otherwise multiply by 100
+                        pct_out = round(pct_f if pct_f > 1 else pct_f * 100, 2)
+
+                    entry = {
+                        'holder': str(holder) if holder is not None else None,
+                        'shares': int(float(shares)) if shares is not None else None,
+                        'pctOut': pct_out,
+                        'value': float(value) if value is not None else None,
+                        'dateReported': str(date_r)[:10] if date_r is not None else None,
+                    }
+                    rows.append(entry)
+                except Exception as row_exc:
+                    logger.debug(f'get_institutional_holders({ticker}) ih row error: {row_exc}')
+                    continue
+            if rows:
+                result['holders'] = rows
+        elif ih is not None:
+            logger.debug(f'get_institutional_holders({ticker}): institutional_holders is empty')
+    except Exception as exc:
+        logger.warning(f'get_institutional_holders({ticker}) institutional_holders: {exc}')
+
+    # ── major_holders ─────────────────────────────────────────────────────
+    try:
+        mh = _fetch_with_retry(
+            lambda: stock.major_holders,
+            f'{ticker} major_holders',
+            priority=priority,
+            endpoint_type='get_institutional_holders',
+        )
+        if mh is not None and hasattr(mh, 'empty') and not mh.empty:
+            cols = list(mh.columns)
+            logger.info(f'get_institutional_holders({ticker}): major_holders cols={cols}, rows={len(mh)}')
+            major = {}
+
+            for _, row in mh.iterrows():
+                try:
+                    # Columns vary by yfinance version: integer (0,1) or named ('Value','name')
+                    col_list = list(row.index)
+                    val_col = col_list[0]
+                    lbl_col = col_list[1] if len(col_list) > 1 else None
+                    val = row[val_col]
+                    lbl = str(row[lbl_col]).lower() if lbl_col else str(row.name).lower()
+                    v = _safe_val(val)
+                    if v is None:
+                        continue
+                    fv = float(v)
+                    # Convert fraction → percent where needed (values ≤ 1 are fractions)
+                    pct = round(fv * 100, 2) if fv <= 1 else round(fv, 2)
+                    if 'insider' in lbl:
+                        major['insidersPct'] = pct
+                    elif 'float' in lbl and 'institution' in lbl:
+                        major['institutionsFloatPct'] = pct
+                    elif 'institution' in lbl and 'count' not in lbl and 'number' not in lbl:
+                        major['institutionsPct'] = pct
+                    elif 'count' in lbl or 'number' in lbl:
+                        major['institutionsCount'] = int(fv)
+                except Exception as row_exc:
+                    logger.debug(f'get_institutional_holders({ticker}) mh row error: {row_exc}')
+                    continue
+            if major:
+                result['major'] = major
+                if 'institutionsCount' in major:
+                    result['totalCount'] = major['institutionsCount']
+        elif mh is not None:
+            logger.debug(f'get_institutional_holders({ticker}): major_holders is empty')
+    except Exception as exc:
+        logger.warning(f'get_institutional_holders({ticker}) major_holders: {exc}')
+
+    if result:
+        _cache_set(key, result)
+        return result
+    logger.warning(f'get_institutional_holders({ticker}): no data retrieved from either property')
+    return None
+
+
 def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5, priority=PRIORITY_LOW):
     """Bulk OHLCV download for many tickers.
 

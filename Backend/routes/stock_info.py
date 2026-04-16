@@ -4,12 +4,45 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify, request
 
-from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, clear_cache, clear_ticker_cache, PRIORITY_HIGH
+import yfinance as yf
+from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, get_insider_transactions, get_institutional_holders, clear_cache, clear_ticker_cache, PRIORITY_HIGH
 
 logger = logging.getLogger(__name__)
 
 stock_info_bp = Blueprint('stock_info', __name__)
 logger.info(f'stock_info blueprint created: {stock_info_bp}')
+
+
+@stock_info_bp.route('/api/debug/yfinance/<ticker>')
+def debug_yfinance(ticker):
+    """Temporary debug endpoint — returns raw yfinance DataFrame info for insider/institutional data."""
+    ticker = ticker.upper()
+    stock = yf.Ticker(ticker)
+    out = {}
+
+    for prop in ('insider_transactions', 'institutional_holders', 'major_holders'):
+        try:
+            df = getattr(stock, prop)
+            if df is None:
+                out[prop] = {'status': 'None returned'}
+            elif hasattr(df, 'empty') and df.empty:
+                out[prop] = {'status': 'empty DataFrame'}
+            else:
+                sample = []
+                for _, row in df.head(3).iterrows():
+                    sample.append({str(k): str(v) for k, v in row.items()})
+                out[prop] = {
+                    'status': 'ok',
+                    'columns': list(df.columns),
+                    'index_name': str(df.index.name),
+                    'dtypes': {str(k): str(v) for k, v in df.dtypes.items()},
+                    'rows': len(df),
+                    'sample': sample,
+                }
+        except Exception as exc:
+            out[prop] = {'status': 'error', 'error': str(exc)}
+
+    return jsonify(out)
 
 
 def compute_rsi(prices, period=14):
@@ -60,6 +93,8 @@ def refresh_stock_info_post(ticker):
         clear_cache(f'ohlcv_period:{ticker}')
         clear_cache(f'analyst:{ticker}')
         clear_cache(f'earnings:{ticker}')
+        clear_cache(f'insider:{ticker}')
+        clear_cache(f'institutional:{ticker}')
         # Clear the cached yf.Ticker object so yfinance fetches fresh data
         # Critical for 24/7 assets like crypto where Ticker.info holds stale data
         clear_ticker_cache(ticker)
@@ -534,6 +569,46 @@ def get_stock_info(ticker):
         v = safe_float('heldPercentInstitutions', 4)
         if v is not None:
             response['institutionalPctHeld'] = v
+
+        # ── Insider Transactions ──────────────────────────────────────────────
+        insider_txns = get_insider_transactions(ticker, limit=10, priority=PRIORITY_HIGH)
+        if insider_txns:
+            response['insiderTransactions'] = insider_txns
+
+            # Net 90-day summary badge
+            cutoff = date.today() - timedelta(days=90)
+            net_value = 0.0
+            for txn in insider_txns:
+                try:
+                    txn_date = date.fromisoformat(txn['date'][:10]) if txn.get('date') else None
+                    if txn_date and txn_date >= cutoff and txn.get('value') is not None:
+                        net_value += txn['value']
+                except Exception:
+                    pass
+            if net_value != 0.0:
+                sign = '+' if net_value > 0 else ''
+                abs_v = abs(net_value)
+                if abs_v >= 1e9:
+                    fmt_val = f'${abs_v / 1e9:.1f}B'
+                elif abs_v >= 1e6:
+                    fmt_val = f'${abs_v / 1e6:.1f}M'
+                elif abs_v >= 1e3:
+                    fmt_val = f'${abs_v / 1e3:.0f}K'
+                else:
+                    fmt_val = f'${abs_v:.0f}'
+                label = 'Net Buy' if net_value > 0 else 'Net Sell'
+                response['insiderNet90d'] = f'{label}: {sign}{fmt_val}'
+                response['insiderNet90dValue'] = round(net_value, 2)
+
+        # ── Institutional Holdings ────────────────────────────────────────────
+        inst = get_institutional_holders(ticker, limit=15, priority=PRIORITY_HIGH)
+        if inst:
+            if inst.get('holders'):
+                response['institutionalHolders'] = inst['holders']
+            if inst.get('major'):
+                response['institutionalMajor'] = inst['major']
+            if inst.get('totalCount') is not None:
+                response['institutionalCount'] = inst['totalCount']
 
         logger.info(f'Successfully returned stock data for {ticker}')
         return jsonify(response)
