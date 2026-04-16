@@ -979,7 +979,9 @@
   border: 1px solid #30363d;
   border-radius: 8px;
   padding: 12px 14px 12px 14px;
-  width: 300px;
+  width: 360px;
+  max-height: 70vh;
+  overflow-y: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
