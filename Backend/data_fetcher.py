@@ -32,7 +32,7 @@ _lock = threading.Lock()
 
 # TTLs (seconds)
 _OHLCV_TTL = 300       # 5 minutes — covers strategy switching
-_INFO_TTL = 1800        # 30 minutes — fundamentals change slowly
+_INFO_TTL = 600         # 10 minutes — balances price freshness with Yahoo rate limits
 _EARNINGS_TTL = 3600    # 1 hour — rarely changes intraday
 _SPY_TTL = 600          # 10 minutes — shared across all RS calculations
 _ANALYST_TTL = 1800     # 30 minutes — analyst data changes infrequently
