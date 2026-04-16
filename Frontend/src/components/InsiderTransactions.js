@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 function fmtValue(v) {
   if (v == null) return 'N/A';
@@ -29,6 +29,39 @@ function net90dColor(value) {
   return value > 0 ? 'green' : 'red';
 }
 
+function InfoPopover({ children }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!show) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setShow(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [show]);
+
+  return (
+    <div className="panel-info-wrap" ref={ref}>
+      <button
+        className="panel-info-btn"
+        onClick={() => setShow(s => !s)}
+        aria-label="More information"
+        title="What is this?"
+      >
+        i
+      </button>
+      {show && (
+        <div className="panel-info-popover">
+          <button className="chart-info-close" onClick={() => setShow(false)}>✕</button>
+          <div className="chart-info-content">{children}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InsiderTransactions({ transactions, net90d, net90dValue }) {
   const [open, setOpen] = useState(true);
 
@@ -37,6 +70,19 @@ export default function InsiderTransactions({ transactions, net90d, net90dValue 
       <div className="insider-panel">
         <div className="insider-header">
           <span className="insider-title">Insider Transactions</span>
+          <InfoPopover>
+            <p className="chart-info-desc">Insider Transactions</p>
+            <p>Shows recent buy and sell activity by company insiders — executives, directors, and large shareholders who are required to report trades to the SEC.</p>
+            <p className="chart-info-note">Insider <strong style={{color:'#3fb950'}}>purchases</strong> are the strongest signal: when a CEO or CFO buys with their own money it signals confidence in the company's future. <strong style={{color:'#f85149'}}>Sales</strong> are less meaningful and often reflect personal financial planning. The <strong>90-day net</strong> badge summarises whether insiders have been net buyers or sellers over the past 3 months.</p>
+            <p className="chart-info-desc" style={{marginTop:'10px'}}>Column Definitions</p>
+            <p><strong>Type</strong> — the nature of the transaction:<br/>
+            · <strong style={{color:'#3fb950'}}>Purchase</strong> — insider bought shares on the open market with personal funds<br/>
+            · <strong style={{color:'#f85149'}}>Sale</strong> — insider sold shares they already held<br/>
+            · <strong style={{color:'#58a6ff'}}>Grant / Award</strong> — shares or options received as compensation (not an open-market buy)</p>
+            <p><strong>Ownership</strong> — how the shares are held:<br/>
+            · <strong>D (Direct)</strong> — shares owned personally by the insider<br/>
+            · <strong>I (Indirect)</strong> — shares held through a trust, family member, or entity the insider controls</p>
+          </InfoPopover>
         </div>
         <p className="insider-empty">No insider transaction data available for this ticker.</p>
       </div>
@@ -59,6 +105,19 @@ export default function InsiderTransactions({ transactions, net90d, net90dValue 
             {net90d} <span className="insider-badge-sub">(90d)</span>
           </span>
         )}
+        <InfoPopover>
+          <p className="chart-info-desc">Insider Transactions</p>
+          <p>Shows recent buy and sell activity by company insiders — executives, directors, and large shareholders who are required to report trades to the SEC.</p>
+          <p className="chart-info-note">Insider <strong style={{color:'#3fb950'}}>purchases</strong> are the strongest signal: when a CEO or CFO buys with their own money it signals confidence in the company's future. <strong style={{color:'#f85149'}}>Sales</strong> are less meaningful and often reflect personal financial planning. The <strong>90-day net</strong> badge summarises whether insiders have been net buyers or sellers over the past 3 months.</p>
+          <p className="chart-info-desc" style={{marginTop:'10px'}}>Column Definitions</p>
+          <p><strong>Type</strong> — the nature of the transaction:<br/>
+          · <strong style={{color:'#3fb950'}}>Purchase</strong> — insider bought shares on the open market with personal funds<br/>
+          · <strong style={{color:'#f85149'}}>Sale</strong> — insider sold shares they already held<br/>
+          · <strong style={{color:'#58a6ff'}}>Grant / Award</strong> — shares or options received as compensation (not an open-market buy)</p>
+          <p><strong>Ownership</strong> — how the shares are held:<br/>
+          · <strong>D (Direct)</strong> — shares owned personally by the insider<br/>
+          · <strong>I (Indirect)</strong> — shares held through a trust, family member, or entity the insider controls</p>
+        </InfoPopover>
       </div>
 
       {open && (

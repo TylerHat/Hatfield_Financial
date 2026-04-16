@@ -939,6 +939,61 @@
 .text-green { color: #3fb950; }
 .text-red   { color: #f85149; }
 
+/* Info button + popover for insider / institutional panels */
+.panel-info-wrap {
+  position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.panel-info-btn {
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 50%;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, serif;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+
+.panel-info-btn:hover {
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
+.panel-info-popover {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  z-index: 20;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 14px 12px 14px;
+  width: 300px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.panel-info-popover p {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #c9d1d9;
+}
+
+.panel-info-popover p:last-child {
+  margin-bottom: 0;
+}
+
 /* Institutional holdings summary strip */
 .inst-summary-row {
   display: flex;
