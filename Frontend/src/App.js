@@ -9,6 +9,8 @@ import StrategyGuide from './components/StrategyGuide';
 import StatCard, { StatCardGrid } from './components/StatCard';
 import Recommendations from './components/Recommendations';
 import AnalystPanel from './components/AnalystPanel';
+import InsiderTransactions from './components/InsiderTransactions';
+import InstitutionalHoldings from './components/InstitutionalHoldings';
 import Watchlist from './components/Watchlist';
 import AdminPanel from './components/AdminPanel';
 import AccountPanel from './components/AccountPanel';
@@ -420,6 +422,18 @@ function App() {
                   Overview
                 </button>
                 <button
+                  className={`subtab-btn ${analysisSubTab === 'insider' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('insider')}
+                >
+                  Insider Transactions
+                </button>
+                <button
+                  className={`subtab-btn ${analysisSubTab === 'institutional' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('institutional')}
+                >
+                  Institutional Holdings
+                </button>
+                <button
                   className={`subtab-btn ${analysisSubTab === 'analyst' ? 'active' : ''}`}
                   onClick={() => setAnalysisSubTab('analyst')}
                 >
@@ -441,6 +455,22 @@ function App() {
                 stockInfoLoading={stockInfoLoading}
                 stockInfoError={stockInfoError}
                 hideOverview
+              />
+            )}
+
+            {submittedTicker && analysisSubTab === 'insider' && (
+              <InsiderTransactions
+                transactions={stockInfo?.insiderTransactions}
+                net90d={stockInfo?.insiderNet90d}
+                net90dValue={stockInfo?.insiderNet90dValue}
+              />
+            )}
+
+            {submittedTicker && analysisSubTab === 'institutional' && (
+              <InstitutionalHoldings
+                holders={stockInfo?.institutionalHolders}
+                major={stockInfo?.institutionalMajor}
+                totalCount={stockInfo?.institutionalCount}
               />
             )}
 
