@@ -830,6 +830,13 @@
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 6px;
+  overflow: visible;
+}
+
+.insider-panel > .insider-table-wrap:last-child,
+.insider-panel > div:last-child {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
   overflow: hidden;
 }
 
