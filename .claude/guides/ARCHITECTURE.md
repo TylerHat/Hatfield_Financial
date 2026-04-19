@@ -3,6 +3,8 @@
 React 18 frontend + Flask backend financial dashboard. Desktop-only, dark-themed, single-page with tabs.
 Data source: Yahoo Finance (yfinance). Port 5000 (API), Port 3000 (UI).
 
+> **Lambda sidecar**: a separate Lambda function (`Backend/lambda_handler.py`, built with `Backend/Dockerfile.lambda`) pre-computes S&P 500 recommendations on a schedule and writes results to S3 (`S3_CACHE_BUCKET`). The ECS backend reads from that bucket to serve `/api/recommendations` instantly.
+
 **Detailed references:**
 - API contracts → `guides/API.md`
 - Strategy signal logic → `guides/FIN_STRATEGIES.md`
@@ -24,14 +26,18 @@ Hatfield_Financial/
 │   ├── sp500.py                        Static S&P 500 ticker list
 │   ├── cache.py                        Thread-safe in-memory cache with TTL (used by recommendations)
 │   ├── data_fetcher.py                 Shared data-fetching layer with caching (OHLCV, info, SPY, earnings, analyst)
+│   ├── Dockerfile                      ECS Fargate image (gunicorn --workers 1 --threads 4 --timeout 120)
+│   ├── Dockerfile.lambda               Lambda image for recommendations pre-compute
+│   ├── lambda_handler.py               Lambda entry point — fetches S&P 500 data and writes to S3
 │   ├── instance/                       SQLite database (hatfield.db, gitignored)
 │   └── routes/
-│       ├── stock_data.py               GET /api/stock/<ticker>
-│       ├── stock_info.py               GET /api/stock-info/<ticker> (also fetches SPY for relative strength)
+│       ├── stock_data.py               GET/POST /api/stock/<ticker>
+│       ├── stock_info.py               GET/POST /api/stock-info/<ticker>
 │       ├── backtest.py                 GET /api/backtest/<ticker>
-│       ├── auth_routes.py              POST /api/auth/register, /login, GET /me
+│       ├── auth_routes.py              POST /api/auth/register, /login, GET+PATCH /api/auth/me
+│       ├── admin.py                    Admin-only user management + API metrics (@admin_required)
 │       ├── user_data.py                Watchlist, portfolio, settings CRUD (all @login_required)
-│       ├── recommendations.py          GET /api/recommendations — batch S&P 500 recommendations (20-min cache)
+│       ├── recommendations.py          GET /api/recommendations + /progress — batch S&P 500 (20-min cache)
 │       ├── analyst_data.py             GET /api/analyst-data/<ticker> — price targets, recommendations, earnings estimates
 │       └── strategies/
 │           ├── bollinger_bands.py
@@ -58,6 +64,12 @@ Hatfield_Financial/
             ├── Backtester.js / Backtester.css       Strategy backtesting: equity curve charts, trade tables, performance metrics
             ├── StrategyGuide.js        Static strategy documentation tab
             ├── Recommendations.js / Recommendations.css   Recommendations tab (filter bar, DataTable, on-demand strategy signals)
+            ├── Watchlist.js / Watchlist.css               Watchlist management tab
+            ├── AccountPanel.js / AccountPanel.css         Account settings tab (email, password)
+            ├── AdminPanel.js / AdminPanel.css             Admin-only user management tab (@admin UI)
+            ├── ApiMonitorPanel.js / ApiMonitorPanel.css   Admin-only API metrics tab
+            ├── InsiderTransactions.js  Insider buy/sell transactions sub-tab in Stock Analysis
+            ├── InstitutionalHoldings.js  Top institutional holders sub-tab in Stock Analysis
             ├── Badge.js / Badge.css
             ├── StatCard.js / StatCard.css
             └── DataTable.js / DataTable.css
@@ -72,7 +84,7 @@ User → React Tab → apiFetch(/api/*) → Flask route → data_fetcher (cached
                         ↓                           ↓
                   Bearer token injected        In-memory cache layer:
                   from localStorage            - OHLCV: 5-min TTL (280-day warmup)
-                  401 → clears token           - Ticker info: 30-min TTL
+                  401 → clears token           - Ticker info: 10-min TTL
                                                - SPY: 10-min TTL (shared globally)
                                                - Earnings: 1-hour TTL
                                                - Analyst data: 30-min TTL
@@ -116,10 +128,25 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - Client-side response cache: GET requests cached for 2 minutes (max 50 entries)
 
 ### Tab Structure
-- **Stock Analysis** — StockChart + StockInfo + AnalystPanel
+- **Stock Analysis** — StockChart + StockInfo + AnalystPanel + sub-tabs (see below)
 - **Recommendations** — Recommendations (S&P 500 batch screener with filter bar, strategy signals)
-- **Components** — Badge, StatCard, DataTable showcase
+- **Watchlist** — Watchlist (manage saved tickers)
 - **Strategy Guide** — StrategyGuide (static docs)
+- **Account** — AccountPanel (email, password settings)
+- **Administration** *(admin only)* — AdminPanel (user management)
+- **API Monitor** *(admin only)* — ApiMonitorPanel (API metrics dashboard)
+
+### Stock Analysis Sub-Tabs
+
+The Stock Analysis tab contains a secondary sub-tab bar within it:
+
+| Sub-tab | Components |
+|---------|-----------|
+| Overview | StockInfo (analysis cards + fundamentals) |
+| Insider Activity | InsiderTransactions |
+| Institutional | InstitutionalHoldings |
+| Analyst | AnalystPanel |
+| Charts | StockChart + Backtester |
 
 ### Stock Info Flow
 - `App.js` fetches `/api/stock-info/<ticker>` once per ticker change
@@ -146,7 +173,7 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 - All errors return `{ "error": "message" }` with appropriate HTTP status code
 
 ### Data Fetcher (`Backend/data_fetcher.py`)
-- Centralized caching layer; all routes use `get_ohlcv()`, `get_ticker_info()`, `get_spy_history()`, `get_spy_period()`, `get_earnings_dates()`, `get_analyst_data()`
+- Centralized caching layer; all routes use `get_ohlcv()`, `get_ticker_info()`, `get_spy_history()`, `get_spy_period()`, `get_earnings_dates()`, `get_analyst_data()`, `get_insider_transactions()`, `get_institutional_holders()`
 - `get_ohlcv()` always fetches with 280-day warmup (max any strategy needs), cached 5 min
 - SPY data cached globally (10-min TTL), shared across stock_info, relative_strength, backtest
 - Recommendations cache pre-warmed on server start via background thread
@@ -160,9 +187,9 @@ App mount → GET /api/auth/me → validate token → show dashboard or AuthPage
 ### Auth System
 - `Backend/auth.py`: `create_token()`, `decode_token()`, `@login_required` decorator
 - `@login_required` extracts Bearer token, sets `g.current_user_id`, returns 401 on failure
-- Registration validation: username 3-30 chars, email format, password 8+ with upper/lower/digit
-- Rate limits: login 5/min/IP, register 30/hour/IP (via flask-limiter)
-- CORS restricted to `http://localhost:3000`
+- Registration validation: username 3-30 chars, email required + format check, password 8+ with upper/lower/digit
+- Rate limits: login 5/min/IP, register 30/hour/IP, PATCH /me 10/min/IP (via flask-limiter)
+- CORS: always allows `https://hatfield-financial.com` plus any origin in `ALLOWED_ORIGIN` env var (comma-separated list)
 
 ### Backtest Engine (`routes/backtest.py`)
 - `_simulate_trades()` — runs signal list through capital simulation

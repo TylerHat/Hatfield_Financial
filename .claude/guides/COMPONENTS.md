@@ -84,6 +84,10 @@ Single-metric display card for portfolio and stock summary data.
 - String starting with `'-'` or negative number → red (`.stat-card__delta--negative`)
 - Zero or neutral → gray (`.stat-card__delta--neutral`)
 
+### Loading State
+
+When `loading={true}`, the value, delta, and subtext are rendered at 50% opacity, and a centered CSS spinner (16px, `#58a6ff`) appears overlaid on the card. There are no skeleton bar elements — the content dims in place.
+
 ### CSS Classes
 
 ```
@@ -99,10 +103,6 @@ stat-card__delta--neutral
 stat-card__delta-label
 stat-card__subtext
 stat-card__error
-stat-card__skeleton
-stat-card__skeleton-bar
-stat-card__skeleton-bar--wide
-stat-card__skeleton-bar--narrow
 ```
 
 ### Usage Examples
@@ -170,6 +170,7 @@ Sortable, scannable data table for signals, screener results, and any tabular fi
 | `caption` | string \| null | `null` | Accessible `<caption>` for screen readers |
 | `rowKey` | string \| function \| null | `null` | React key: field name, `(row, i) => key` function, or falls back to index |
 | `onRowClick` | `(row, index) => void` \| null | `null` | Called when a row is clicked. Adds pointer cursor style to rows via inline style. |
+| `onRowDoubleClick` | `(row, index) => void` \| null | `null` | Called when a row is double-clicked. |
 
 ### ColumnDef Shape
 
@@ -313,13 +314,17 @@ Multi-panel chart stack with technical indicators, signal overlays, expand/info 
 
 ### Key Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `ticker` | string | Active ticker symbol |
-| `startDate` | string | `YYYY-MM-DD` chart start |
-| `endDate` | string | `YYYY-MM-DD` chart end |
-| `strategy` | string \| null | Active strategy key or `null` for raw chart |
-| `onSignals` | function | `(signals) => void` — lifts signals to parent (`App.js`) |
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `ticker` | string | — | Active ticker symbol |
+| `strategy` | string \| null | — | Active strategy key or `null` for raw chart |
+| `fetchStart` | string | — | `YYYY-MM-DD` — start of data fetch window (includes warmup) |
+| `fetchEnd` | string | — | `YYYY-MM-DD` — end of data fetch window |
+| `startDate` | string | — | `YYYY-MM-DD` — start of user-visible chart window |
+| `endDate` | string | — | `YYYY-MM-DD` — end of user-visible chart window |
+| `onSignals` | function | — | `(signals) => void` — lifts signals to parent (`App.js`) |
+| `onRangePerformance` | function | — | `(perf) => void` — lifts range performance stats to parent |
+| `refreshKey` | number | `0` | Increment to force a data re-fetch |
 
 ### Chart Layout (top to bottom)
 
@@ -449,6 +454,64 @@ Strategy backtesting panel with equity curve chart, trade history table, and per
 | `strategy` | string | Strategy key (e.g. `bollinger-bands`) |
 | `startDate` | string | `YYYY-MM-DD` backtest start |
 | `endDate` | string | `YYYY-MM-DD` backtest end |
+
+---
+
+---
+
+## InsiderTransactions
+
+**File**: `components/InsiderTransactions.js`
+**Import**: `import InsiderTransactions from './components/InsiderTransactions'`
+
+Displays recent insider buy/sell transactions in a DataTable. Data fetched internally via `/api/stock-info/<ticker>` (insider transactions sub-field) or a dedicated endpoint.
+
+Sub-tab in the Stock Analysis **Insider Activity** panel.
+
+---
+
+## InstitutionalHoldings
+
+**File**: `components/InstitutionalHoldings.js`
+**Import**: `import InstitutionalHoldings from './components/InstitutionalHoldings'`
+
+Displays top institutional holders and their share counts/percentages. Sub-tab in the Stock Analysis **Institutional** panel.
+
+---
+
+## Watchlist
+
+**File**: `components/Watchlist.js` + `Watchlist.css`
+**Import**: `import Watchlist from './components/Watchlist'`
+
+Watchlist management tab. Allows creating/deleting watchlists and adding/removing ticker symbols. Displays each watchlist with its tickers and the price recorded when the ticker was added (`price_at_add`). Requires auth.
+
+---
+
+## AccountPanel
+
+**File**: `components/AccountPanel.js` + `AccountPanel.css`
+**Import**: `import AccountPanel from './components/AccountPanel'`
+
+Account settings tab. Allows the logged-in user to update their email address via `PATCH /api/auth/me`.
+
+---
+
+## AdminPanel
+
+**File**: `components/AdminPanel.js` + `AdminPanel.css`
+**Import**: `import AdminPanel from './components/AdminPanel'`
+
+Admin-only user management tab. Lists all users, allows granting/revoking admin status (`PATCH /api/admin/users/<id>/role`) and deleting accounts (`DELETE /api/admin/users/<id>`). Only rendered when `user.is_admin === true`.
+
+---
+
+## ApiMonitorPanel
+
+**File**: `components/ApiMonitorPanel.js` + `ApiMonitorPanel.css`
+**Import**: `import ApiMonitorPanel from './components/ApiMonitorPanel'`
+
+Admin-only API metrics tab. Starts/stops recording and displays captured API queue metrics. Uses `POST /api/admin/metrics/start/<minutes>`, `GET /api/admin/metrics/status`, and `POST /api/admin/metrics/clear`. Only rendered when `user.is_admin === true`.
 
 ---
 

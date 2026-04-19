@@ -137,7 +137,7 @@ Fixed heights for consistent desktop layout. All charts use `maintainAspectRatio
 | Volume chart | `220px` | `.volume-chart` |
 | MACD chart | `220px` | `.macd-chart` |
 | ATR chart | `220px` | `.atr-chart` |
-| Stochastic chart | `220px` | `.stochastic-chart` |
+| Stochastic chart | `220px` | `.stoch-chart` |
 | OBV chart | `220px` | `.obv-chart` |
 | RSI chart | `130px` | `.rsi-chart` (conditional) |
 

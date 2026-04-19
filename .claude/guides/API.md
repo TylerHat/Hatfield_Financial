@@ -10,6 +10,12 @@ All endpoints return JSON. Errors return `{ "error": "message" }` with an approp
 
 Price, volume, moving averages, MACD, and RSI for a ticker.
 
+## POST `/api/stock/<ticker>`
+
+Force-refresh the OHLCV cache for a ticker. No body required. Returns the same shape as `GET /api/stock/<ticker>`.
+
+---
+
 **Query params**
 
 | Param | Default | Description |
@@ -62,6 +68,12 @@ All time-series arrays are the same length and index-aligned to `dates`. Null wh
 ## GET `/api/stock-info/<ticker>`
 
 Fundamentals, technicals, and analyst data. Always uses 1 year of history regardless of chart date range.
+
+## POST `/api/stock-info/<ticker>`
+
+Force-refresh the ticker info cache. No body required. Returns the same shape as `GET /api/stock-info/<ticker>`.
+
+---
 
 **Response fields**
 
@@ -209,7 +221,9 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
       "macdStatus": "BULLISH CROSSOVER",
       "volatilityStatus": "Normal Volatility",
       "trendAlignment": "Strong Uptrend",
-      "momentum": "STRONG MOMENTUM"
+      "momentum": "STRONG MOMENTUM",
+      "targetMeanPrice": 210.50,
+      "targetUpsidePct": 13.7
     }
   ],
   "lastUpdated": "2026-03-19T14:30:00",
@@ -238,6 +252,8 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 | `stocks[].volatilityStatus` | string | Volatility status string |
 | `stocks[].trendAlignment` | string | Trend alignment label |
 | `stocks[].momentum` | string | Momentum status |
+| `stocks[].targetMeanPrice` | number \| null | Analyst mean price target |
+| `stocks[].targetUpsidePct` | number \| null | % upside from current price to mean target |
 | `lastUpdated` | string | ISO timestamp of last cache refresh |
 | `count` | number | Number of stocks successfully fetched |
 | `failedCount` | number | Number of tickers that failed to fetch |
@@ -318,6 +334,7 @@ Create a new user account. No auth required.
 ```json
 {
   "username": "string (3-30 chars)",
+  "email": "string (required, valid email format)",
   "password": "string (8+ chars, uppercase, lowercase, digit)"
 }
 ```
@@ -330,12 +347,15 @@ Create a new user account. No auth required.
   "user": {
     "id": 1,
     "username": "tyler",
-    "created_at": "2026-03-18T12:00:00"
+    "email": "tyler@example.com",
+    "created_at": "2026-03-18T12:00:00",
+    "is_admin": false,
+    "last_login_at": null
   }
 }
 ```
 
-**Errors:** `400` validation failure, `409` username already exists.
+**Errors:** `400` validation failure, `409` username or email already exists.
 
 ---
 
@@ -359,7 +379,14 @@ Authenticate and receive a JWT token. No auth required.
 ```json
 {
   "token": "eyJhbGciOi...",
-  "user": { "id": 1, "username": "tyler", "created_at": "..." }
+  "user": {
+    "id": 1,
+    "username": "tyler",
+    "email": "tyler@example.com",
+    "created_at": "...",
+    "is_admin": false,
+    "last_login_at": "2026-03-18T10:00:00"
+  }
 }
 ```
 
@@ -375,11 +402,38 @@ Validate stored token and return current user. Requires `Authorization: Bearer <
 
 ```json
 {
-  "user": { "id": 1, "username": "tyler", "created_at": "..." }
+  "user": {
+    "id": 1,
+    "username": "tyler",
+    "email": "tyler@example.com",
+    "created_at": "...",
+    "is_admin": false,
+    "last_login_at": "..."
+  }
 }
 ```
 
 **Errors:** `401` missing/invalid/expired token.
+
+---
+
+### PATCH `/api/auth/me`
+
+Update the current user's email. Requires `Authorization: Bearer <token>`.
+
+**Rate limit:** 10 requests/minute per IP.
+
+**Request body**
+
+```json
+{ "email": "newemail@example.com" }
+```
+
+Pass `null` or empty string to clear the email.
+
+**Response (200):** `{ "user": { ... } }` — same shape as GET `/api/auth/me`
+
+**Errors:** `400` invalid email format, `409` email already in use.
 
 ---
 
@@ -422,18 +476,74 @@ Analyst coverage data including price targets, recommendation trends, upgrades/d
 
 ## GET `/api/recommendations/progress`
 
-Returns progress updates during the batch S&P 500 data fetch.
+Returns progress and partial results while the batch S&P 500 fetch is in progress.
 
 **Response (200)**
 
 ```json
 {
-  "status": "fetching",
-  "fetched": 250,
-  "total": 503,
-  "pct": 49.7
+  "status": "loading",
+  "stocks": [...],
+  "progress": 250,
+  "total": 503
 }
 ```
+
+| `status` | Meaning |
+|----------|---------|
+| `"complete"` | Cache is warm; `stocks` contains all results |
+| `"loading"` | Fetch in progress; `stocks` is a partial list so far |
+| `"idle"` | No fetch in progress and cache is empty |
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require `Authorization: Bearer <token>` and `is_admin: true`. Returns `401` if not authenticated, `403` if not admin.
+
+### GET `/api/admin/users`
+
+List all registered users.
+
+**Response (200):** `{ "users": [ { id, username, email, created_at, is_admin, last_login_at }, ... ] }`
+
+### DELETE `/api/admin/users/<id>`
+
+Delete a user by ID. Cannot delete yourself or another admin.
+
+**Response (200):** `{ "message": "User <username> deleted" }`
+
+**Errors:** `400` self-delete attempt, `403` target is admin, `404` user not found.
+
+### PATCH `/api/admin/users/<id>/role`
+
+Grant or revoke admin status.
+
+**Rate limit:** 10 requests/minute per IP.
+
+**Request body:** `{ "is_admin": true }`
+
+**Response (200):** `{ "message": "...", "user": { ... } }`
+
+**Errors:** `400` self-change attempt or missing/invalid `is_admin` field.
+
+### POST `/api/admin/metrics/start/<minutes>`
+
+Start recording API queue metrics for `minutes` minutes (must be `5` or `10`).
+
+**Response (200):** `{ ... }` — recording status object.
+
+### GET `/api/admin/metrics/status`
+
+Get current recording status and captured data.
+
+**Response (200):** `{ ... }` — queue status object.
+
+### POST `/api/admin/metrics/clear`
+
+Clear all recorded metrics data.
+
+**Response (200):** `{ "status": "cleared" }`
 
 ---
 
@@ -455,7 +565,7 @@ List all watchlists with their ticker items.
       "name": "Tech Stocks",
       "created_at": "...",
       "items": [
-        { "id": 1, "ticker": "AAPL", "added_at": "..." }
+        { "id": 1, "ticker": "AAPL", "added_at": "...", "price_at_add": 185.20 }
       ]
     }
   ]
@@ -476,7 +586,7 @@ Add a ticker to a watchlist.
 
 **Request body:** `{ "ticker": "AAPL" }`
 
-**Response (201):** `{ "item": { ... } }`
+**Response (201):** `{ "item": { "id": 1, "ticker": "AAPL", "added_at": "...", "price_at_add": 185.20 } }`
 
 **Errors:** `404` watchlist not found or not owned, `409` ticker already in watchlist.
 

@@ -18,7 +18,7 @@ Conviction thresholds: **HIGH** ≥ 60 · **MEDIUM** ≥ 30 · **LOW** < 30
 - **BUY**: Close crosses *below* the lower band + volume > 1.3× 20-day avg → oversold with volume confirmation
 - **SELL**: Close crosses *above* the upper band + volume > 1.3× 20-day avg → overbought with volume confirmation
 
-**Score**: distance of close from the violated band, scaled to band width (max 100)
+**Score**: `int(abs(close - violated_band) / band_width * 200)`, capped at 100
 
 ---
 
@@ -46,7 +46,7 @@ State machine: only one BUY allowed per drawdown episode; SELL resets it.
 - **BUY**: RS ratio crosses *above* its 10-day MA → stock gaining strength vs the market
 - **SELL**: RS ratio crosses *below* its 10-day MA → stock losing strength vs the market
 
-Fetches SPY in parallel for the same date range.
+Fetches SPY with 20 extra warmup days before `user_start` (to stabilize the 10-day MA of the RS ratio), then aligns on common dates via `dropna()`.
 
 **Score**: deviation of RS from its MA, scaled by 2000 (max 100)
 

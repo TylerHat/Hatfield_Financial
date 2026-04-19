@@ -7,7 +7,7 @@ Documents yfinance behavior, known quirks, and defensive patterns already establ
 ## Data Source
 
 All market data comes from **Yahoo Finance via the `yfinance` Python library**. No API key required.
-Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 30-min, SPY 10-min, earnings 1-hr, analyst 30-min). User data is stored in SQLite (local) or PostgreSQL (prod).
+Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 10-min, SPY 10-min, earnings 1-hr, analyst 30-min). User data is stored in SQLite (local) or PostgreSQL (prod).
 
 ---
 
@@ -88,20 +88,26 @@ Each strategy fetches extra history before `start` so rolling indicators are sta
 
 ## RSI Implementation
 
-Two slightly different RSI implementations exist in the codebase:
+All RSI calculations across the codebase use Wilder's exponential smoothing with `alpha=1/period`:
 
-**`stock_data.py` and `stock_info.py`** — uses `ewm(com=period-1)`:
-```python
-avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
-```
-
-**`rsi.py` strategy** — uses `ewm(alpha=1/period)` (Wilder's formula):
 ```python
 avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
+avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
 ```
 
-Both approximate Wilder's smoothing. The `alpha=1/period` version in `rsi.py` is more precise.
-RSI values will differ slightly between the `/api/stock` endpoint and the `/api/strategy/rsi` endpoint.
+This is consistent in `stock_data.py`, `stock_info.py`, and `rsi.py`. RSI values should be identical across the `/api/stock`, `/api/stock-info`, and `/api/strategy/rsi` endpoints for the same date range.
+
+---
+
+## Insider & Institutional Data
+
+Two additional `data_fetcher.py` functions fetch ownership data:
+
+**`get_insider_transactions(ticker)`** — returns a list of recent insider buy/sell transactions from `stock.insider_transactions`. Each entry includes insider name, relationship, date, transaction type, shares, and value. Wrapped in `try/except`; returns `[]` on failure.
+
+**`get_institutional_holders(ticker)`** — returns a list of top institutional holders from `stock.institutional_holders`. Each entry includes holder name, shares held, date reported, and % out. Wrapped in `try/except`; returns `[]` on failure.
+
+Both functions use the standard yfinance timeout guard and return empty lists gracefully when the data is unavailable (common for smaller tickers or rate-limited requests).
 
 ---
 
@@ -183,6 +189,6 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 **Update this file when:**
 - A new data source is added (not just yfinance)
 - A new yfinance quirk or defensive pattern is discovered
-- The RSI implementation is standardized across the codebase
+- A new data fetching function is added to `data_fetcher.py`
 - The caching strategy changes (TTLs, persistence, new providers)
 - A new `stock.info` field is used and has known null behavior
