@@ -33,7 +33,11 @@ function AuthPage() {
         setError(pwError);
         return;
       }
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!email) {
+        setError('Email is required');
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setError('Invalid email format');
         return;
       }
@@ -101,9 +105,7 @@ function AuthPage() {
 
           {!isLogin && (
             <div className="auth-field">
-              <label htmlFor="email">
-                Email <span className="auth-optional">(optional)</span>
-              </label>
+              <label htmlFor="email">Email</label>
               <input
                 id="email"
                 type="email"
@@ -111,6 +113,7 @@ function AuthPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
+                required
               />
             </div>
           )}

@@ -23,7 +23,7 @@ def register():
     if error:
         return jsonify({'error': error}), 400
 
-    error = validate_email(email)
+    error = validate_email(email, required=True)
     if error:
         return jsonify({'error': error}), 400
 

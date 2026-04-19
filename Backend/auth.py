@@ -95,10 +95,10 @@ def validate_registration(username, password):
     return None
 
 
-def validate_email(email):
-    """Validate email format. Returns error string or None. None/empty is valid (optional)."""
+def validate_email(email, required=False):
+    """Validate email format. Returns error string or None."""
     if not email:
-        return None
+        return 'Email is required' if required else None
     if len(email) > 254:
         return 'Email must be 254 characters or less'
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
