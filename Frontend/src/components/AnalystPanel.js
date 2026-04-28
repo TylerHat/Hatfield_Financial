@@ -219,6 +219,50 @@ function EstimatesSection({ title, estimates, isRevenue }) {
   );
 }
 
+function riskColor(score) {
+  if (score == null) return '#8b949e';
+  if (score <= 3) return '#2ea043';
+  if (score <= 6) return '#d2993a';
+  return '#f85149';
+}
+
+function GovernanceRisk({ risk }) {
+  const cards = [
+    { key: 'overall', label: 'Overall' },
+    { key: 'audit', label: 'Audit' },
+    { key: 'board', label: 'Board' },
+    { key: 'compensation', label: 'Compensation' },
+    { key: 'shareholderRights', label: 'Shareholder Rights' },
+  ];
+
+  const hasAny = cards.some((c) => risk[c.key] != null);
+  if (!hasAny) return null;
+
+  return (
+    <div className="ap-section">
+      <div className="ap-subsection-title">Governance Risk</div>
+      <div className="ap-risk-subtitle">ISS scores · 1–10 · lower is better</div>
+      <div className="ap-risk-grid">
+        {cards.map(({ key, label }) => {
+          const score = risk[key];
+          if (score == null) return null;
+          const color = riskColor(score);
+          return (
+            <div
+              key={key}
+              className={`ap-risk-card${key === 'overall' ? ' ap-risk-card--overall' : ''}`}
+              style={{ borderTopColor: color }}
+            >
+              <span className="ap-risk-score" style={{ color }}>{score}</span>
+              <span className="ap-risk-label">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ── Upgrades/Downgrades columns ─────────────────────────────────────────── */
 
 const UD_COLUMNS = [
@@ -347,6 +391,9 @@ export default function AnalystPanel({ data, ticker, currentPrice, loading }) {
         estimates={data.revenueEstimate}
         isRevenue={true}
       />
+
+      {/* ── Governance risk ── */}
+      {data.governanceRisk && <GovernanceRisk risk={data.governanceRisk} />}
     </div>
   );
 }

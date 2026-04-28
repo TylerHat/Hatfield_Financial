@@ -273,3 +273,49 @@
   color: #8b949e;
   margin-top: 2px;
 }
+
+/* ── Governance Risk ──────────────────────────────────────────────────────── */
+
+.ap-risk-subtitle {
+  font-size: 0.75rem;
+  color: #8b949e;
+  margin-bottom: 10px;
+}
+
+.ap-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.ap-risk-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-top: 3px solid #30363d;
+  border-radius: 6px;
+  gap: 4px;
+}
+
+.ap-risk-score {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ap-risk-card--overall .ap-risk-score {
+  font-size: 2rem;
+}
+
+.ap-risk-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+  text-align: center;
+}
