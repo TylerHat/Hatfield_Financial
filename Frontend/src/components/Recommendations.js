@@ -7,7 +7,7 @@ import './Recommendations.css';
 const LS_KEY = 'hf_recommendations_cache';
 const LS_TTL = 20 * 60 * 1000; // 20 minutes in ms
 // Bump when the row shape changes so stale caches don't hide new columns.
-const LS_SCHEMA_VERSION = 3;
+const LS_SCHEMA_VERSION = 5;
 
 function loadCache() {
   try {
@@ -109,7 +109,186 @@ function priceActionVariant(pa) {
   return 'gray';
 }
 
-const REC_COLUMNS = [
+// ── Buy Score helpers ───────────────────────────────────────────────
+// All sub-scores return 0–100. Missing data resolves to 50 (neutral) so
+// data gaps neither inflate nor deflate the composite.
+
+function _peScore(pe) {
+  if (pe == null || pe <= 0) return 50; // negative/missing earnings = neutral
+  if (pe < 10) return 100;
+  if (pe < 15) return 80;
+  if (pe < 20) return 60;
+  if (pe < 30) return 40;
+  if (pe < 50) return 20;
+  return 5;
+}
+
+function _fcfYieldScore(y) {
+  if (y == null) return 50;
+  if (y >= 0.08) return 100;
+  if (y >= 0.06) return 80;
+  if (y >= 0.04) return 60;
+  if (y >= 0.02) return 40;
+  if (y >= 0) return 20;
+  return 0;
+}
+
+function _roeScore(r) {
+  if (r == null) return 50;
+  if (r >= 0.20) return 100;
+  if (r >= 0.15) return 80;
+  if (r >= 0.10) return 60;
+  if (r >= 0.05) return 40;
+  if (r >= 0) return 20;
+  return 0;
+}
+
+function _debtScore(de) {
+  // yfinance debtToEquity is reported as a percent (e.g. 50 = 50%, 200 = 200%).
+  if (de == null) return 50;
+  if (de < 30) return 100;
+  if (de < 60) return 80;
+  if (de < 100) return 60;
+  if (de < 200) return 40;
+  return 20;
+}
+
+function _grossMarginScore(g) {
+  if (g == null) return 50;
+  if (g >= 0.50) return 100;
+  if (g >= 0.40) return 80;
+  if (g >= 0.30) return 60;
+  if (g >= 0.20) return 40;
+  if (g >= 0.10) return 20;
+  return 0;
+}
+
+function _avg(values) {
+  const v = values.filter((x) => x != null);
+  if (v.length === 0) return 50;
+  return v.reduce((s, x) => s + x, 0) / v.length;
+}
+
+function _growthScore(g) {
+  if (g == null) return null; // signal: missing
+  const c = Math.max(-0.5, Math.min(0.5, g));
+  return (c + 0.5) / 1.0 * 100;
+}
+
+function _volRatioScore(vr) {
+  // Lower vol = better risk-adjusted profile, given equal expected return.
+  if (vr == null) return 50;
+  if (vr < 0.7) return 80;
+  if (vr <= 1.5) return 50;
+  return 20;
+}
+
+function computeBuyScore(row) {
+  const components = [];
+
+  // ── Valuation (18%) ─────────────────────────────────────────────────
+  // Forward P/E + FCF yield. The single biggest gap in the prior model.
+  const valuation = _avg([_peScore(row.forwardPE), _fcfYieldScore(row.fcfYield)]);
+  components.push({ w: 0.18, v: valuation });
+
+  // ── Trend Composite (25%) ───────────────────────────────────────────
+  // Consolidates the three trend signals (was 37% with triple-counting).
+  const trendMap = {
+    'Strong Uptrend': 100, 'Bullish (Mixed)': 75, 'Bullish (Short-term)': 75,
+    'N/A': 50, 'Bearish (Mixed)': 30, 'Bearish (Short-term)': 30, 'Strong Downtrend': 0,
+  };
+  const trendVal = trendMap[row.trendAlignment] ?? 50;
+  const macdMap = {
+    'BULLISH CROSSOVER': 100, 'BULLISH': 65, 'BEARISH': 35, 'BEARISH CROSSOVER': 0,
+  };
+  const macdVal = macdMap[row.macdStatus] ?? 50;
+  let momVal = 50;
+  if (row.momentum != null) {
+    const clamped = Math.max(-20, Math.min(20, row.momentum));
+    momVal = (clamped + 20) / 40 * 100;
+  }
+  const trendComposite = trendVal * 0.5 + momVal * 0.3 + macdVal * 0.2;
+  components.push({ w: 0.25, v: trendComposite });
+
+  // ── Analyst Sentiment (12%) ─────────────────────────────────────────
+  // Consensus level (6%) + target upside (6%, clamped −10/+30 — extreme
+  // targets historically have negative predictive value).
+  const recMap = { strong_buy: 100, buy: 75, hold: 50, sell: 25, strong_sell: 0 };
+  components.push({ w: 0.06, v: recMap[row.recommendationKey] ?? 50 });
+  let upsideVal = 50;
+  if (row.targetUpsidePct != null) {
+    const clamped = Math.max(-10, Math.min(30, row.targetUpsidePct));
+    upsideVal = (clamped + 10) / 40 * 100;
+  }
+  components.push({ w: 0.06, v: upsideVal });
+
+  // ── Quality (10%) ───────────────────────────────────────────────────
+  // ROE, debt/equity, gross margin — the persistent quality factor.
+  const quality = _avg([
+    _roeScore(row.returnOnEquity),
+    _debtScore(row.debtToEquity),
+    _grossMarginScore(row.grossMargins),
+  ]);
+  components.push({ w: 0.10, v: quality });
+
+  // ── Growth Trajectory (10%) ─────────────────────────────────────────
+  // Pragmatic v1 stand-in for analyst earnings revisions: forward
+  // earnings + revenue growth (yfinance does not expose revision history).
+  const eg = _growthScore(row.epsGrowth);
+  const rg = _growthScore(row.revenueGrowth);
+  const growth = (eg == null && rg == null) ? 50 : _avg([eg, rg]);
+  components.push({ w: 0.10, v: growth });
+
+  // ── 52-Week Position (8%) ───────────────────────────────────────────
+  // George/Hwang anomaly — proximity to 52w high persists.
+  const pos52 = row.fiftyTwoWeekPosition != null ? row.fiftyTwoWeekPosition : 50;
+  components.push({ w: 0.08, v: pos52 });
+
+  // ── Volatility / Risk-Adjusted (7%) ─────────────────────────────────
+  components.push({ w: 0.07, v: _volRatioScore(row.volRatio) });
+
+  // ── RSI — regime-conditioned (5%) ───────────────────────────────────
+  // In strong trends, RSI is unreliable as a contrarian signal — neutralize.
+  let rsiVal = 50;
+  const inStrongTrend = row.trendAlignment === 'Strong Uptrend' || row.trendAlignment === 'Strong Downtrend';
+  if (row.rsiValue != null && !inStrongTrend) {
+    const r = row.rsiValue;
+    rsiVal = r < 30 ? 100 : r < 40 ? 85 : r < 55 ? 60 : r < 70 ? 40 : 15;
+  }
+  components.push({ w: 0.05, v: rsiVal });
+
+  // ── Governance (3%) ─────────────────────────────────────────────────
+  let govVal = 50;
+  if (row.overallRisk != null) {
+    govVal = (11 - row.overallRisk) / 10 * 100;
+  }
+  components.push({ w: 0.03, v: govVal });
+
+  // ── Analyst Coverage (2%) ───────────────────────────────────────────
+  let covVal = 50;
+  if (row.numberOfAnalysts != null) {
+    covVal = Math.min(100, row.numberOfAnalysts / 20 * 100);
+  }
+  components.push({ w: 0.02, v: covVal });
+
+  return Math.round(components.reduce((sum, c) => sum + c.w * c.v, 0));
+}
+
+const SCORE_INFO_ROWS = [
+  { signal: 'Valuation', weight: '18%', logic: 'Avg of Forward P/E score (cheap=100, >50×=5) and FCF yield score (≥8%=100, negative=0)' },
+  { signal: 'Trend Composite', weight: '25%', logic: '50% MA 20/50/200 alignment + 30% 1M return vs SPY + 20% MACD — consolidated to stop triple-counting trend' },
+  { signal: 'Analyst Sentiment', weight: '12%', logic: '6% consensus level (Strong Buy→100, Strong Sell→0) + 6% target upside (clamped −10% to +30%)' },
+  { signal: 'Quality', weight: '10%', logic: 'Avg of ROE, Debt/Equity (inverted), and Gross Margin scores' },
+  { signal: 'Growth Trajectory', weight: '10%', logic: 'Avg of forward earnings growth and revenue growth (proxy for analyst revisions), clamped ±50%' },
+  { signal: '52-Week Position', weight: '8%', logic: 'Where price sits in the 52w range: at-low=0, at-high=100 (George/Hwang anomaly)' },
+  { signal: 'Volatility (Risk-Adj)', weight: '7%', logic: 'ATR ratio: LOW vol (<0.7×)→80, Normal→50, HIGH vol (>1.5×)→20' },
+  { signal: 'RSI (regime-conditioned)', weight: '5%', logic: 'Mean-reversion signal — neutralized in strong trends; otherwise oversold→100, overbought→15' },
+  { signal: 'Governance Risk', weight: '3%', logic: 'ISS overall risk inverted: risk 1→100, risk 10→10' },
+  { signal: 'Analyst Coverage', weight: '2%', logic: '20+ analysts = full score; missing data = 50 neutral' },
+];
+
+// REC_COLUMNS is defined inside the component so setShowScoreInfo is in scope.
+const _STATIC_COLUMNS = [
   {
     key: 'ticker',
     label: 'Stock',
@@ -235,7 +414,33 @@ export default function Recommendations({ onNavigateToStock }) {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showScoreInfo, setShowScoreInfo] = useState(false);
   const tickRef = useRef(null);
+
+  const REC_COLUMNS = [
+    {
+      key: 'buyScore',
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          Buy Score
+          <button
+            className="rec-score-info-btn"
+            onClick={(e) => { e.stopPropagation(); setShowScoreInfo(true); }}
+            title="How is this score calculated?"
+          >ⓘ</button>
+        </span>
+      ),
+      numeric: true,
+      sortable: true,
+      width: '110px',
+      render: (val) => {
+        if (val == null) return '—';
+        const color = val >= 70 ? '#2ea043' : val >= 40 ? '#d2993a' : '#f85149';
+        return <span style={{ color, fontWeight: 700, fontSize: '0.95rem' }}>{val}</span>;
+      },
+    },
+    ..._STATIC_COLUMNS,
+  ];
 
   // Re-render the "X mins ago" label every 30s
   useEffect(() => {
@@ -426,9 +631,10 @@ export default function Recommendations({ onNavigateToStock }) {
     ? stocks
     : stocks.filter((s) => s.recommendationKey === filter);
 
-  // Add _rowClass for selected row
+  // Add _rowClass and buyScore for each row
   const rows = filteredStocks.map((s) => ({
     ...s,
+    buyScore: computeBuyScore(s),
     _rowClass: s.ticker === expandedTicker ? 'rec-row--selected' : '',
   }));
 
@@ -608,6 +814,38 @@ export default function Recommendations({ onNavigateToStock }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Score methodology modal */}
+      {showScoreInfo && (
+        <div className="rec-score-modal-backdrop" onClick={() => setShowScoreInfo(false)}>
+          <div className="rec-score-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="rec-score-modal__close" onClick={() => setShowScoreInfo(false)}>✕</button>
+            <div className="rec-score-modal__title">Buy Score Methodology</div>
+            <div className="rec-score-modal__intro">
+              A weighted 0–100 composite that ranks stocks by their combined fundamental, analyst, and technical signals.
+              Higher scores indicate a stronger near-term buy case. Missing data defaults to a neutral value and does not inflate or deflate the score.
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th>Weight</th>
+                  <th>Scoring Logic</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SCORE_INFO_ROWS.map((r) => (
+                  <tr key={r.signal}>
+                    <td>{r.signal}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.weight}</td>
+                    <td>{r.logic}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

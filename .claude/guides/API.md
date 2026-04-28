@@ -236,8 +236,22 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 | `stocks[].priceAction` | string | Price action status |
 | `stocks[].macdStatus` | string | MACD status string |
 | `stocks[].volatilityStatus` | string | Volatility status string |
+| `stocks[].volRatio` | number\|null | ATR ratio (recent ATR / mean ATR); used by Buy Score risk-adjustment bucket |
 | `stocks[].trendAlignment` | string | Trend alignment label |
-| `stocks[].momentum` | string | Momentum status |
+| `stocks[].momentum` | number\|null | 1-month return relative to SPY (percent) |
+| `stocks[].overallRisk` | number\|null | yfinance ISS overall risk (1–10, lower=better) |
+| `stocks[].rsiValue` | number\|null | Wilder 14-day RSI |
+| `stocks[].numberOfAnalysts` | number\|null | Count of analyst opinions |
+| `stocks[].epsGrowth` | number\|null | Forward earnings growth rate (decimal, e.g. 0.12 = 12%) |
+| `stocks[].revenueGrowth` | number\|null | Forward revenue growth rate (decimal) |
+| `stocks[].forwardPE` | number\|null | Forward P/E ratio (falls back to trailing P/E when forward unavailable) |
+| `stocks[].returnOnEquity` | number\|null | ROE (decimal) |
+| `stocks[].debtToEquity` | number\|null | Debt-to-equity, reported by yfinance as percent (e.g. 50 = 50%) |
+| `stocks[].grossMargins` | number\|null | Gross margin (decimal) |
+| `stocks[].fcfYield` | number\|null | Free cash flow / market cap (decimal) |
+| `stocks[].fiftyTwoWeekHigh` | number\|null | 52-week high price |
+| `stocks[].fiftyTwoWeekLow` | number\|null | 52-week low price |
+| `stocks[].fiftyTwoWeekPosition` | number\|null | 0–100 — where current price sits in the 52w range |
 | `lastUpdated` | string | ISO timestamp of last cache refresh |
 | `count` | number | Number of stocks successfully fetched |
 | `failedCount` | number | Number of tickers that failed to fetch |

@@ -133,6 +133,34 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
                     overall_risk = int(overall_risk)
                 except (ValueError, TypeError):
                     overall_risk = None
+            raw_n = info.get('numberOfAnalystOpinions') or info.get('numberOfAnalystRatings')
+            n_analysts = None
+            if raw_n is not None:
+                try:
+                    n_analysts = int(raw_n)
+                except (ValueError, TypeError):
+                    pass
+            raw_eg = info.get('earningsGrowth')
+            eps_growth = _safe_float(raw_eg, decimals=4) if raw_eg is not None else None
+            raw_rg = info.get('revenueGrowth')
+            revenue_growth = _safe_float(raw_rg, decimals=4) if raw_rg is not None else None
+            forward_pe = _safe_float(info.get('forwardPE'))
+            if forward_pe is None:
+                forward_pe = _safe_float(info.get('trailingPE'))
+            roe = _safe_float(info.get('returnOnEquity'), decimals=4)
+            debt_to_equity = _safe_float(info.get('debtToEquity'))
+            gross_margins = _safe_float(info.get('grossMargins'), decimals=4)
+            fcf = info.get('freeCashflow')
+            mkt_cap = info.get('marketCap')
+            fcf_yield = None
+            if fcf is not None and mkt_cap is not None:
+                try:
+                    if float(mkt_cap) > 0:
+                        fcf_yield = round(float(fcf) / float(mkt_cap), 4)
+                except (ValueError, TypeError):
+                    pass
+            fifty_two_high = _safe_float(info.get('fiftyTwoWeekHigh'))
+            fifty_two_low = _safe_float(info.get('fiftyTwoWeekLow'))
         else:
             current_price = _safe_float(close.iloc[-1])
             prev_close = _safe_float(close.iloc[-2]) if len(close) >= 2 else None
@@ -141,6 +169,16 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             name = ticker
             target_mean = None
             overall_risk = None
+            n_analysts = None
+            eps_growth = None
+            revenue_growth = None
+            forward_pe = None
+            roe = None
+            debt_to_equity = None
+            gross_margins = None
+            fcf_yield = None
+            fifty_two_high = None
+            fifty_two_low = None
 
         # Day change
         if current_price and prev_close and prev_close > 0:
@@ -239,6 +277,18 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
         else:
             target_upside_pct = None
 
+        # 52-week position — fall back to price history if yfinance fields missing
+        if fifty_two_high is None and len(close) > 0:
+            fifty_two_high = _safe_float(close.tail(252).max())
+        if fifty_two_low is None and len(close) > 0:
+            fifty_two_low = _safe_float(close.tail(252).min())
+        fifty_two_position = None
+        if (fifty_two_high is not None and fifty_two_low is not None
+                and current_price is not None and fifty_two_high > fifty_two_low):
+            fifty_two_position = round(
+                (current_price - fifty_two_low) / (fifty_two_high - fifty_two_low) * 100, 2
+            )
+
         return {
             'ticker': ticker,
             'name': name,
@@ -251,9 +301,22 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'priceAction': price_action,
             'macdStatus': macd_status,
             'volatilityStatus': volatility_status,
+            'volRatio': vol_ratio,
             'trendAlignment': trend_alignment,
             'momentum': momentum,
             'overallRisk': overall_risk,
+            'rsiValue': rsi_val,
+            'numberOfAnalysts': n_analysts,
+            'epsGrowth': eps_growth,
+            'revenueGrowth': revenue_growth,
+            'forwardPE': forward_pe,
+            'returnOnEquity': roe,
+            'debtToEquity': debt_to_equity,
+            'grossMargins': gross_margins,
+            'fcfYield': fcf_yield,
+            'fiftyTwoWeekHigh': fifty_two_high,
+            'fiftyTwoWeekLow': fifty_two_low,
+            'fiftyTwoWeekPosition': fifty_two_position,
         }
     except Exception as e:
         logger.warning('_build_stock_data failed for ticker: %s', e)
