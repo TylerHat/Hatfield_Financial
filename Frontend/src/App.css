@@ -1182,6 +1182,9 @@
   gap: 12px;
   margin-bottom: 12px;
 }
+.info-cards-row--profile {
+  grid-template-columns: 1fr;
+}
 .info-cards-row--top {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -1215,6 +1218,76 @@
   color: #8b949e;
   line-height: 1.5;
   margin: 0;
+}
+
+/* Company Profile card */
+.info-card--profile {
+  gap: 12px;
+}
+.profile-description {
+  font-size: 0.84rem;
+  color: #c9d1d9;
+  line-height: 1.65;
+  margin: 0;
+}
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  padding-top: 4px;
+  border-top: 1px solid #21262d;
+}
+.profile-meta-item {
+  font-size: 0.81rem;
+  color: #8b949e;
+}
+.profile-link {
+  color: #58a6ff;
+  text-decoration: none;
+}
+.profile-link:hover {
+  text-decoration: underline;
+}
+.profile-governance {
+  padding-top: 8px;
+  border-top: 1px solid #21262d;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.profile-governance-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8b949e;
+}
+.profile-governance-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.gov-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 14px;
+  min-width: 60px;
+}
+.gov-label {
+  font-size: 0.72rem;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.gov-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #c9d1d9;
+  margin-top: 2px;
 }
 
 /* Status badges */
