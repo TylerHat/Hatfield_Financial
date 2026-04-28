@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from models import db, User
@@ -38,8 +39,12 @@ def register():
         password_hash=generate_password_hash(password),
         email=email,
     )
-    db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Email already in use'}), 409
 
     token = create_token(user.id)
     return jsonify({'token': token, 'user': user.to_dict()}), 201
@@ -91,12 +96,12 @@ def update_me():
     if 'email' not in data:
         return jsonify({'error': 'No updatable fields provided'}), 400
 
-    new_email = (data['email'] or '').strip() or None
-    err = validate_email(new_email)
+    new_email = (data['email'] or '').strip()
+    err = validate_email(new_email, required=True)
     if err:
         return jsonify({'error': err}), 400
 
-    if new_email and new_email != user.email:
+    if new_email != user.email:
         conflict = User.query.filter(User.email == new_email, User.id != user.id).first()
         if conflict:
             return jsonify({'error': 'Email already in use'}), 409

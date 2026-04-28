@@ -15,7 +15,7 @@ class User(db.Model):
                            onupdate=lambda: datetime.now(timezone.utc))
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     last_login_at = db.Column(db.DateTime, nullable=True)
-    email = db.Column(db.String(254), unique=True, nullable=True)
+    email = db.Column(db.String(254), unique=True, nullable=False)
 
     watchlists = db.relationship('Watchlist', backref='user', lazy=True, cascade='all, delete-orphan')
     holdings = db.relationship('PortfolioHolding', backref='user', lazy=True, cascade='all, delete-orphan')
