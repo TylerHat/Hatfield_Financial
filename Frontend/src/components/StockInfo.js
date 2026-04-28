@@ -169,18 +169,6 @@ export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, sto
                 </span>
               )}
             </div>
-            {info.overallRisk != null && (
-              <div className="profile-governance">
-                <span className="profile-governance-title">Governance Risk (1–10, lower is better)</span>
-                <div className="profile-governance-scores">
-                  {info.overallRisk != null && <span className="gov-score"><span className="gov-label">Overall</span><span className="gov-value">{info.overallRisk}</span></span>}
-                  {info.auditRisk != null && <span className="gov-score"><span className="gov-label">Audit</span><span className="gov-value">{info.auditRisk}</span></span>}
-                  {info.boardRisk != null && <span className="gov-score"><span className="gov-label">Board</span><span className="gov-value">{info.boardRisk}</span></span>}
-                  {info.compensationRisk != null && <span className="gov-score"><span className="gov-label">Compensation</span><span className="gov-value">{info.compensationRisk}</span></span>}
-                  {info.shareHolderRightsRisk != null && <span className="gov-score"><span className="gov-label">Shareholder Rights</span><span className="gov-value">{info.shareHolderRightsRisk}</span></span>}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

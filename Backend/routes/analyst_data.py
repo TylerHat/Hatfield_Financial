@@ -152,6 +152,17 @@ def analyst_data(ticker):
         if re_ is not None and not re_.empty:
             response['revenueEstimate'] = _estimates_to_dict(re_)
 
+        # ── Governance risk (ISS scores from .info) ──────────────────
+        gov = {
+            'overall':           _safe(info.get('overallRisk')),
+            'audit':             _safe(info.get('auditRisk')),
+            'board':             _safe(info.get('boardRisk')),
+            'compensation':      _safe(info.get('compensationRisk')),
+            'shareholderRights': _safe(info.get('shareHolderRightsRisk')),
+        }
+        if any(v is not None for v in gov.values()):
+            response['governanceRisk'] = gov
+
         return jsonify(response)
 
     except Exception as e:
