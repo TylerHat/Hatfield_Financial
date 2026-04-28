@@ -127,6 +127,12 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             rec_display = rec_key.replace('_', ' ').title() if rec_key else 'N/A'
             name = info.get('longName') or info.get('shortName') or ticker
             target_mean = _safe_float(info.get('targetMeanPrice'))
+            overall_risk = info.get('overallRisk')
+            if overall_risk is not None:
+                try:
+                    overall_risk = int(overall_risk)
+                except (ValueError, TypeError):
+                    overall_risk = None
         else:
             current_price = _safe_float(close.iloc[-1])
             prev_close = _safe_float(close.iloc[-2]) if len(close) >= 2 else None
@@ -134,6 +140,7 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             rec_display = 'N/A'
             name = ticker
             target_mean = None
+            overall_risk = None
 
         # Day change
         if current_price and prev_close and prev_close > 0:
@@ -246,6 +253,7 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'volatilityStatus': volatility_status,
             'trendAlignment': trend_alignment,
             'momentum': momentum,
+            'overallRisk': overall_risk,
         }
     except Exception as e:
         logger.warning('_build_stock_data failed for ticker: %s', e)

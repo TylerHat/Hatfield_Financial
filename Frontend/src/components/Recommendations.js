@@ -7,7 +7,7 @@ import './Recommendations.css';
 const LS_KEY = 'hf_recommendations_cache';
 const LS_TTL = 20 * 60 * 1000; // 20 minutes in ms
 // Bump when the row shape changes so stale caches don't hide new columns.
-const LS_SCHEMA_VERSION = 2;
+const LS_SCHEMA_VERSION = 3;
 
 function loadCache() {
   try {
@@ -208,6 +208,18 @@ const REC_COLUMNS = [
       if (val == null) return '—';
       const cls = val > 0 ? 'rec-positive' : val < 0 ? 'rec-negative' : 'rec-neutral';
       return <span className={cls}>{val > 0 ? '+' : ''}{val.toFixed(2)}%</span>;
+    },
+  },
+  {
+    key: 'overallRisk',
+    label: 'Gov. Risk',
+    numeric: true,
+    sortable: true,
+    width: '90px',
+    render: (val) => {
+      if (val == null) return '—';
+      const color = val <= 3 ? '#2ea043' : val <= 6 ? '#d2993a' : '#f85149';
+      return <span style={{ color, fontWeight: 600 }}>{val}</span>;
     },
   },
 ];
