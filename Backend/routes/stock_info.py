@@ -311,6 +311,21 @@ def get_stock_info(ticker):
                 return f'{sign}${v / 1e6:.2f}M'
             return f'{sign}${v:,.0f}'
 
+        def _fmt_shares(val):
+            if val is None:
+                return None
+            try:
+                v = float(val)
+            except (TypeError, ValueError):
+                return None
+            if v >= 1e12:
+                return f'{v / 1e12:.2f}T'
+            if v >= 1e9:
+                return f'{v / 1e9:.2f}B'
+            if v >= 1e6:
+                return f'{v / 1e6:.2f}M'
+            return f'{v:,.0f}'
+
         # ── Valuation assessment ──────────────────────────────────────────────
         pe = safe_float('trailingPE')
         if pe is None:
@@ -428,7 +443,33 @@ def get_stock_info(ticker):
             'earningsProximity': earnings_proximity,
             'earningsProximityDays': earnings_proximity_days,
             'earningsWarning': earnings_warning,
+            # ── Company profile ───────────────────────────────────────────────
+            'longBusinessSummary': info.get('longBusinessSummary') or None,
+            'fullTimeEmployees': info.get('fullTimeEmployees') or None,
+            'website': info.get('website') or None,
+            'city': info.get('city') or None,
+            'state': info.get('state') or None,
+            'country': info.get('country') or None,
+            'sharesOutstanding': _fmt_shares(info.get('sharesOutstanding')),
+            'floatShares': _fmt_shares(info.get('floatShares')),
+            'auditRisk': info.get('auditRisk') or None,
+            'boardRisk': info.get('boardRisk') or None,
+            'compensationRisk': info.get('compensationRisk') or None,
+            'shareHolderRightsRisk': info.get('shareHolderRightsRisk') or None,
+            'overallRisk': info.get('overallRisk') or None,
+            'lastSplitFactor': info.get('lastSplitFactor') or None,
         }
+
+        # ── Last split date ──────────────────────────────────────────────────
+        split_date_raw = info.get('lastSplitDate')
+        if split_date_raw:
+            try:
+                if isinstance(split_date_raw, (int, float)):
+                    response['lastSplitDate'] = datetime.fromtimestamp(split_date_raw).strftime('%Y-%m-%d')
+                else:
+                    response['lastSplitDate'] = str(split_date_raw)
+            except Exception:
+                pass
 
         # ── Ex-dividend date ─────────────────────────────────────────────────
         ex_div_raw = info.get('exDividendDate')

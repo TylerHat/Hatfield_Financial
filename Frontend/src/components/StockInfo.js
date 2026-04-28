@@ -132,6 +132,59 @@ export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, sto
         </div>
       )}
 
+      {/* ── Company Profile ──────────────────────────────────────── */}
+      {info.longBusinessSummary && (
+        <div className="info-cards-row info-cards-row--profile">
+          <div className="info-card info-card--profile">
+            <div className="card-title">Company Profile</div>
+            <p className="profile-description">{info.longBusinessSummary}</p>
+            <div className="profile-meta">
+              {info.fullTimeEmployees && (
+                <span className="profile-meta-item">
+                  {Number(info.fullTimeEmployees).toLocaleString()} employees
+                </span>
+              )}
+              {info.website && (
+                <span className="profile-meta-item">
+                  <a href={info.website} target="_blank" rel="noopener noreferrer" className="profile-link">
+                    {info.website.replace(/^https?:\/\//, '')}
+                  </a>
+                </span>
+              )}
+              {(info.city || info.country) && (
+                <span className="profile-meta-item">
+                  {[info.city, info.state, info.country].filter(Boolean).join(', ')}
+                </span>
+              )}
+              {(info.sharesOutstanding || info.floatShares) && (
+                <span className="profile-meta-item">
+                  {info.sharesOutstanding && `Shares Out: ${info.sharesOutstanding}`}
+                  {info.sharesOutstanding && info.floatShares && '  \u2022  '}
+                  {info.floatShares && `Float: ${info.floatShares}`}
+                </span>
+              )}
+              {info.lastSplitFactor && info.lastSplitDate && (
+                <span className="profile-meta-item">
+                  Last Split: {info.lastSplitFactor} on {info.lastSplitDate}
+                </span>
+              )}
+            </div>
+            {info.overallRisk != null && (
+              <div className="profile-governance">
+                <span className="profile-governance-title">Governance Risk (1–10, lower is better)</span>
+                <div className="profile-governance-scores">
+                  {info.overallRisk != null && <span className="gov-score"><span className="gov-label">Overall</span><span className="gov-value">{info.overallRisk}</span></span>}
+                  {info.auditRisk != null && <span className="gov-score"><span className="gov-label">Audit</span><span className="gov-value">{info.auditRisk}</span></span>}
+                  {info.boardRisk != null && <span className="gov-score"><span className="gov-label">Board</span><span className="gov-value">{info.boardRisk}</span></span>}
+                  {info.compensationRisk != null && <span className="gov-score"><span className="gov-label">Compensation</span><span className="gov-value">{info.compensationRisk}</span></span>}
+                  {info.shareHolderRightsRisk != null && <span className="gov-score"><span className="gov-label">Shareholder Rights</span><span className="gov-value">{info.shareHolderRightsRisk}</span></span>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Analysis cards ───────────────────────────────────────── */}
       {/* Row 1: Valuation, Momentum, 52-Week Range */}
       <div className="info-cards-row info-cards-row--top">
