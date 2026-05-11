@@ -1,10 +1,13 @@
-"""Custom ETF routes — admin-only.
+"""Custom ETF routes.
 
-GET  /api/custom-etf/strategies              List registered strategies
-GET  /api/custom-etf/<id>/state              Portfolio + holdings + trades + equity series
-GET  /api/custom-etf/<id>/rankings           Score every recommendation under the strategy
-POST /api/custom-etf/<id>/rebalance          Run a rebalance pass against fresh recs
-POST /api/custom-etf/<id>/reset              Wipe state and start fresh
+Reads are available to any logged-in user (the simulator state is shared
+across all viewers). Writes (rebalance, reset) remain admin-only.
+
+GET  /api/custom-etf/strategies              List registered strategies        (login)
+GET  /api/custom-etf/<id>/state              Portfolio + holdings + trades     (login)
+GET  /api/custom-etf/<id>/rankings           Score every recommendation         (login)
+POST /api/custom-etf/<id>/rebalance          Run a rebalance pass               (admin)
+POST /api/custom-etf/<id>/reset              Wipe state and start fresh         (admin)
 
 Auto-rebalance has a 24h cooldown unless the request body sets {"force": true}.
 The frontend triggers /rebalance after Recommendations finishes refreshing;
@@ -18,7 +21,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from auth import admin_required
+from auth import admin_required, login_required
 from services.custom_etf.simulator import (
     rebalance, reset_portfolio, serialize_state, summarize, get_or_create_portfolio,
 )
@@ -59,7 +62,7 @@ def _recs_by_ticker(stocks):
 
 
 @custom_etf_bp.route('/strategies', methods=['GET'])
-@admin_required
+@login_required
 def list_etf_strategies():
     return jsonify({
         'strategies': [s.config.to_dict() for s in list_strategies()],
@@ -67,7 +70,7 @@ def list_etf_strategies():
 
 
 @custom_etf_bp.route('/summary', methods=['GET'])
-@admin_required
+@login_required
 def summary_all():
     """Headline stats for every registered strategy — drives the multi-ETF
     comparison sidebar so adding a new strategy automatically shows up."""
@@ -79,7 +82,7 @@ def summary_all():
 
 
 @custom_etf_bp.route('/<strategy_id>/state', methods=['GET'])
-@admin_required
+@login_required
 def get_state(strategy_id):
     strategy = get_strategy(strategy_id)
     if strategy is None:
@@ -92,7 +95,7 @@ def get_state(strategy_id):
 
 
 @custom_etf_bp.route('/<strategy_id>/rankings', methods=['GET'])
-@admin_required
+@login_required
 def get_rankings(strategy_id):
     """Score every recommendation under the strategy and return a ranked list.
 

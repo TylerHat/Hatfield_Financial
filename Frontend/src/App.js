@@ -335,14 +335,12 @@ function App() {
             Administration
           </button>
         )}
-        {user?.is_admin && (
-          <button
-            className={`tab-btn tab-btn--admin ${activeTab === 'custom-etf' ? 'active' : ''}`}
-            onClick={() => setActiveTab('custom-etf')}
-          >
-            Custom ETF
-          </button>
-        )}
+        <button
+          className={`tab-btn ${activeTab === 'custom-etf' ? 'active' : ''}`}
+          onClick={() => setActiveTab('custom-etf')}
+        >
+          Custom ETF
+        </button>
         {user?.is_admin && (
           <button
             className={`tab-btn tab-btn--admin ${activeTab === 'api-monitor' ? 'active' : ''}`}
@@ -615,7 +613,7 @@ function App() {
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
 
-        {activeTab === 'custom-etf' && user?.is_admin && <CustomEtfPanel />}
+        {activeTab === 'custom-etf' && <CustomEtfPanel />}
 
         {activeTab === 'api-monitor' && user?.is_admin && <ApiMonitorPanel />}
       </main>

@@ -12,6 +12,7 @@ import {
   Filler,
 } from 'chart.js';
 import { apiFetch } from '../api';
+import { useAuth } from '../AuthContext';
 import './CustomEtfPanel.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -131,6 +132,8 @@ function ScoreBadge({ score }) {
 }
 
 export default function CustomEtfPanel() {
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
   const [summaries, setSummaries] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [state, setState] = useState(null);
@@ -357,15 +360,19 @@ export default function CustomEtfPanel() {
           </div>
 
           <div className="cetf-actions">
-            <button className="cetf-btn" onClick={() => handleRebalance(false)} disabled={busy}>
-              Run Rebalance
-            </button>
-            <button className="cetf-btn cetf-btn--ghost" onClick={() => handleRebalance(true)} disabled={busy}>
-              Force Rebalance (skip cooldown)
-            </button>
-            <button className="cetf-btn cetf-btn--danger" onClick={() => setConfirmReset(true)} disabled={busy}>
-              Reset Simulation
-            </button>
+            {isAdmin && (
+              <>
+                <button className="cetf-btn" onClick={() => handleRebalance(false)} disabled={busy}>
+                  Run Rebalance
+                </button>
+                <button className="cetf-btn cetf-btn--ghost" onClick={() => handleRebalance(true)} disabled={busy}>
+                  Force Rebalance (skip cooldown)
+                </button>
+                <button className="cetf-btn cetf-btn--danger" onClick={() => setConfirmReset(true)} disabled={busy}>
+                  Reset Simulation
+                </button>
+              </>
+            )}
             <span className="cetf-meta">
               Buy ≥ {cfg.buyThreshold} · Sell ≤ {cfg.sellThreshold} · Slippage {cfg.slippageBps} bps
             </span>
