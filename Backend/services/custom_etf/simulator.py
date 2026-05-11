@@ -47,6 +47,7 @@ def reset_portfolio(strategy: EtfStrategy) -> EtfPortfolio:
 
 def _score_universe(strategy: EtfStrategy, recs: list[dict]) -> dict[str, dict]:
     """Compute scores for every recommendation row. Returns {ticker: {...row, score}}."""
+    strategy.prepare(recs)
     out = {}
     for row in recs:
         ticker = row.get('ticker')
@@ -231,6 +232,8 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
     """
     cfg = strategy.config
     portfolio = get_or_create_portfolio(strategy)
+    # Prime any universe-level state the strategy needs to score individual rows.
+    strategy.prepare(list(recs_by_ticker.values()))
 
     holdings = []
     positions_value = 0.0

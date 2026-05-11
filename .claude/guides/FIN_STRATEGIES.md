@@ -188,6 +188,20 @@ Defensive ballast — captures the low-volatility anomaly. Weights: low vol-rati
 low debt 15%, inverted overall-risk 15%, gross margin 15%. Lower thresholds keep the portfolio
 invested when high-quality low-vol names are scarce. See `low_vol_defensive.py`.
 
+### Analyst Conviction — Top 10
+**ID**: `analyst-conviction-top10` · **Buy ≥** 60 · **Sell ≤** 50 · **Max** 10
+
+Strong_buy-filtered analyst-target strategy. Eligibility: `recommendationKey == 'strong_buy'`
+AND `numberOfAnalysts ≥ 3`. Ranking: Bayesian-shrunk `targetUpsidePct` using
+`adjusted = (n·upside + k·μ) / (n + k)` where `μ` is the strong_buy-universe mean upside
+(recomputed each rebalance in `prepare()`) and `k = 10`. Shrunk upside is clamped to
+[−10%, +50%] and linear-scaled to 0-100. Solves the small-sample problem so a 2-analyst
+60%-target name doesn't dominate a 25-analyst 25%-target name. See `analyst_conviction.py`.
+
+**Note**: this strategy uses the `EtfStrategy.prepare(recs)` hook to cache `μ` before scoring;
+the simulator calls `prepare()` once per rebalance pass. Any future strategy that needs
+universe-wide statistics should follow the same pattern.
+
 ---
 
 ## Maintenance Note

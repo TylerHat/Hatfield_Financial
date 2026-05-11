@@ -48,3 +48,9 @@ class EtfStrategy(ABC):
     def is_eligible(self, row: dict) -> bool:
         """Optional eligibility filter. Default: any row with a current price."""
         return row.get('currentPrice') is not None
+
+    def prepare(self, recs: list[dict]) -> None:
+        """Optional hook called once per rebalance before scoring begins.
+        Use to compute universe-wide statistics (e.g. mean values for
+        Bayesian shrinkage) that individual score() calls need."""
+        pass
