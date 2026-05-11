@@ -160,9 +160,40 @@ The `/api/backtest/<ticker>` endpoint supports a subset of strategies with inter
 
 ---
 
+## Custom ETF Strategies
+
+Distinct from the 9 chart-analysis strategies above. Custom ETF strategies are **universe-wide
+portfolio simulators**: each maps a recommendation row → 0-100 score, and the engine buys the
+top-`max_positions` names equal-weight, rebalancing on the Recommendations refresh (24h cooldown).
+Registered in `Backend/services/custom_etf/strategies/__init__.py`.
+
+### Buy Score — Top 10 Green
+**ID**: `buy-score-top10` · **Buy ≥** 70 · **Sell ≤** 65 · **Max** 10
+
+Quality/Value/GARP blend mirroring the Recommendations table Buy Score. Weights: Valuation 18%,
+Trend composite 25%, Analyst 12%, Quality 10%, Growth 10%, 52-week position 8%, Volatility 7%,
+RSI (regime-conditioned) 5%, Governance 3%, Coverage 2%. See `buy_score.py` for curves.
+
+### Momentum — Top 10 Trending
+**ID**: `momentum-top10` · **Buy ≥** 70 · **Sell ≤** 60 · **Max** 10
+
+Pure trend factor — uncorrelated to Buy Score. Weights: price momentum 50% (clamped −20% → +40%),
+trend alignment 25%, MACD status 15%, 52-week position 10%. Wider buy/sell band reflects faster
+decay of momentum vs fundamentals. See `momentum_top10.py`.
+
+### Low Volatility — Defensive Top 10
+**ID**: `low-vol-defensive` · **Buy ≥** 65 · **Sell ≤** 55 · **Max** 10
+
+Defensive ballast — captures the low-volatility anomaly. Weights: low vol-ratio 35%, ROE 20%,
+low debt 15%, inverted overall-risk 15%, gross margin 15%. Lower thresholds keep the portfolio
+invested when high-quality low-vol names are scarce. See `low_vol_defensive.py`.
+
+---
+
 ## Maintenance Note
 
 **Update this file when:**
 - A new strategy is added → add its section with key, warmup, indicators, signal logic, and score formula
 - An existing strategy's signal logic changes (thresholds, filters, indicators)
 - A strategy is added to or removed from backtest support
+- A Custom ETF strategy is added, removed, or has its weights/thresholds changed
