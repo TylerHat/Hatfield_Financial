@@ -264,6 +264,44 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ── Next-rebalance countdown banner ───────────────────────────────── */
+.cetf-next-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  color: #79c0ff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 18px;
+}
+
+.cetf-next-run strong {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.cetf-next-run__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+  animation: cetf-pulse 2s ease-in-out infinite;
+}
+
+.cetf-next-run__when {
+  color: #8b949e;
+}
+
+@keyframes cetf-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── Sections ──────────────────────────────────────────────────────── */
 .cetf-section {
   margin-bottom: 24px;

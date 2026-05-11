@@ -39,6 +39,91 @@ function fmtDateTime(iso) {
   }
 }
 
+// ── Auto-rebalance schedule helpers ────────────────────────────────
+// Mirrors the EventBridge Scheduler config: 9:30 AM America/New_York,
+// MON-FRI. Computed entirely client-side; no backend round trip needed.
+
+const ET_FMT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric',
+  hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
+});
+
+function etParts(d) {
+  const o = {};
+  for (const p of ET_FMT.formatToParts(d)) o[p.type] = p.value;
+  return o;
+}
+
+// Construct a real UTC Date for "9:30 AM ET on (year, month, day)".
+// Tries both EDT (UTC-4) and EST (UTC-5) and returns whichever round-trips
+// to 9:30 in ET wall time — handles DST transitions automatically.
+function build930ET(year, month, day) {
+  for (const utcHour of [13, 14]) {
+    const cand = new Date(Date.UTC(year, month - 1, day, utcHour, 30, 0));
+    const p = etParts(cand);
+    if (parseInt(p.hour, 10) === 9 && parseInt(p.minute, 10) === 30) return cand;
+  }
+  return null;
+}
+
+function nextAutoRebalance() {
+  const now = new Date();
+  const today = etParts(now);
+  let y = parseInt(today.year, 10);
+  let m = parseInt(today.month, 10);
+  let d = parseInt(today.day, 10);
+
+  for (let i = 0; i < 7; i++) {
+    const cand = build930ET(y, m, d);
+    if (cand && cand > now) {
+      const wd = etParts(cand).weekday;
+      if (wd !== 'Sat' && wd !== 'Sun') return cand;
+    }
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    y = next.getUTCFullYear(); m = next.getUTCMonth() + 1; d = next.getUTCDate();
+  }
+  return null;
+}
+
+function fmtCountdown(ms) {
+  if (ms <= 0) return 'imminent';
+  const s = Math.floor(ms / 1000);
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
+function NextRebalanceTimer() {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const next = useMemo(nextAutoRebalance, [Math.floor(now / 60000)]); // recompute each minute
+  if (!next) return null;
+  const remaining = next.getTime() - now;
+  const whenET = next.toLocaleString(undefined, {
+    timeZone: 'America/New_York',
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+
+  return (
+    <span className="cetf-next-run" title={`Auto-rebalance fires at 9:30 AM ET, MON-FRI. Next: ${whenET} ET`}>
+      <span className="cetf-next-run__dot" />
+      Next auto-rebalance in <strong>{fmtCountdown(remaining)}</strong>
+      <span className="cetf-next-run__when"> · {whenET} ET</span>
+    </span>
+  );
+}
+
 function ScoreBadge({ score }) {
   if (score == null) return <span className="cetf-score cetf-score--na">—</span>;
   const cls = score >= 70 ? 'cetf-score--green' : score >= 40 ? 'cetf-score--amber' : 'cetf-score--red';
@@ -285,6 +370,9 @@ export default function CustomEtfPanel() {
               Buy ≥ {cfg.buyThreshold} · Sell ≤ {cfg.sellThreshold} · Slippage {cfg.slippageBps} bps
             </span>
           </div>
+
+          <NextRebalanceTimer />
+
 
           {/* ── Equity Curve ───────────────────────────────────────── */}
           <section className="cetf-section">
