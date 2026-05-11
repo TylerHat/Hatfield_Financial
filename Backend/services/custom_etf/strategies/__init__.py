@@ -35,11 +35,16 @@ rebalance will create a fresh $100k portfolio for the new strategy.
 
 from .base import EtfStrategy, StrategyConfig
 from .buy_score import BuyScoreStrategy
+from .momentum_top10 import MomentumTop10Strategy
+from .low_vol_defensive import LowVolDefensiveStrategy
+from .analyst_conviction import AnalystConvictionStrategy
 
 # Register every strategy here.
 _REGISTERED = (
     BuyScoreStrategy(),
-    # MomentumTop10Strategy(),  # ← add new strategies here
+    MomentumTop10Strategy(),
+    LowVolDefensiveStrategy(),
+    AnalystConvictionStrategy(),
 )
 
 STRATEGIES = {s.config.id: s for s in _REGISTERED}
