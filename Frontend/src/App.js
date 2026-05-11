@@ -14,7 +14,9 @@ import InstitutionalHoldings from './components/InstitutionalHoldings';
 import Watchlist from './components/Watchlist';
 import AdminPanel from './components/AdminPanel';
 import AccountPanel from './components/AccountPanel';
+import AboutPage from './components/AboutPage';
 import ApiMonitorPanel from './components/ApiMonitorPanel';
+import CustomEtfPanel from './components/CustomEtfPanel';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -319,12 +321,26 @@ function App() {
         >
           Account
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'about' ? 'active' : ''}`}
+          onClick={() => setActiveTab('about')}
+        >
+          About
+        </button>
         {user?.is_admin && (
           <button
             className={`tab-btn tab-btn--admin ${activeTab === 'administration' ? 'active' : ''}`}
             onClick={() => setActiveTab('administration')}
           >
             Administration
+          </button>
+        )}
+        {user?.is_admin && (
+          <button
+            className={`tab-btn tab-btn--admin ${activeTab === 'custom-etf' ? 'active' : ''}`}
+            onClick={() => setActiveTab('custom-etf')}
+          >
+            Custom ETF
           </button>
         )}
         {user?.is_admin && (
@@ -595,8 +611,11 @@ function App() {
         {activeTab === 'guide' && <StrategyGuide />}
 
         {activeTab === 'account' && <AccountPanel />}
+        {activeTab === 'about' && <AboutPage />}
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
+
+        {activeTab === 'custom-etf' && user?.is_admin && <CustomEtfPanel />}
 
         {activeTab === 'api-monitor' && user?.is_admin && <ApiMonitorPanel />}
       </main>

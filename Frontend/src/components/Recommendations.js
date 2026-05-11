@@ -6,6 +6,24 @@ import './Recommendations.css';
 
 const LS_KEY = 'hf_recommendations_cache';
 const LS_TTL = 20 * 60 * 1000; // 20 minutes in ms
+
+// Fires every Custom ETF strategy's rebalance after a fresh recommendations
+// load. Backend enforces a 24h cooldown, so calling this on every refresh is
+// safe — non-admin users will silently 403 and we ignore it.
+function triggerCustomEtfRebalance() {
+  apiFetch('/api/custom-etf/strategies')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data?.strategies) return;
+      data.strategies.forEach((s) => {
+        apiFetch(`/api/custom-etf/${s.id}/rebalance`, {
+          method: 'POST',
+          body: JSON.stringify({ force: false }),
+        }).catch(() => {});
+      });
+    })
+    .catch(() => {});
+}
 // Bump when the row shape changes so stale caches don't hide new columns.
 const LS_SCHEMA_VERSION = 5;
 
@@ -488,6 +506,7 @@ export default function Recommendations({ onNavigateToStock }) {
       // Only cache non-empty results to avoid blocking retries
       if (newStocks.length > 0) {
         saveCache(newStocks, serverLastUpdated);
+        triggerCustomEtfRebalance();
       }
     }
 
