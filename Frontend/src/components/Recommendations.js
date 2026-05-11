@@ -65,18 +65,7 @@ function formatTimeAgo(isoOrTimestamp) {
   return `${hrs} hours ago`;
 }
 
-const STRATEGIES = [
-  { value: 'none', label: 'None' },
-  { value: 'post-earnings-drift', label: 'Post-Earnings Drift' },
-  { value: 'relative-strength', label: 'Relative Strength vs Market' },
-  { value: 'bollinger-bands', label: 'Bollinger Bands' },
-  { value: 'mean-reversion', label: 'Mean Reversion' },
-  { value: 'macd-crossover', label: 'MACD Crossover' },
-  { value: 'rsi', label: 'RSI Overbought / Oversold' },
-  { value: 'volatility-squeeze', label: 'Volatility Squeeze' },
-  { value: '52-week-breakout', label: '52-Week Breakout' },
-  { value: 'ma-confluence', label: 'MA Confluence' },
-];
+const NONE_STRATEGY = { value: 'none', label: 'None' };
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -428,12 +417,36 @@ export default function Recommendations({ onNavigateToStock }) {
   const [filter, setFilter] = useState('all');
   const [selectedStrategy, setSelectedStrategy] = useState('none');
   const [expandedTicker, setExpandedTicker] = useState(null);
-  const [strategySignals, setStrategySignals] = useState({});
+  const [etfStrategies, setEtfStrategies] = useState([]);
+  const [rankings, setRankings] = useState({ strategyId: null, loading: false, error: null, byTicker: {}, buyThreshold: null, sellThreshold: null });
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
   const tickRef = useRef(null);
+
+  const etfScoreColumn = {
+    key: 'etfScore',
+    label: 'Strategy Score',
+    numeric: true,
+    sortable: true,
+    width: '140px',
+    render: (val, row) => {
+      if (val == null) return <span style={{ color: '#484f58' }}>—</span>;
+      const color = val >= 70 ? '#2ea043' : val >= 40 ? '#d2993a' : '#f85149';
+      return (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+          <span style={{ color, fontWeight: 700, fontSize: '0.95rem' }}>{Math.round(val)}</span>
+          {row.etfRank != null && (
+            <span style={{ color: '#484f58', fontSize: '0.72rem' }}>#{row.etfRank}</span>
+          )}
+          {row.etfHeld && (
+            <span title="Currently held by this strategy" style={{ color: '#58a6ff', fontSize: '0.72rem' }}>●</span>
+          )}
+        </span>
+      );
+    },
+  };
 
   const REC_COLUMNS = [
     {
@@ -457,6 +470,7 @@ export default function Recommendations({ onNavigateToStock }) {
         return <span style={{ color, fontWeight: 700, fontSize: '0.95rem' }}>{val}</span>;
       },
     },
+    ...(selectedStrategy !== 'none' ? [etfScoreColumn] : []),
     ..._STATIC_COLUMNS,
   ];
 
@@ -579,36 +593,48 @@ export default function Recommendations({ onNavigateToStock }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch strategy signals when expanded ticker or strategy changes
-  const fetchSignals = useCallback((ticker) => {
-    if (selectedStrategy === 'none' || !ticker) return;
+  // Load the registered Custom ETF strategies once on mount
+  useEffect(() => {
+    apiFetch('/api/custom-etf/strategies')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.strategies) setEtfStrategies(data.strategies);
+      })
+      .catch(() => {});
+  }, []);
 
-    console.log('[Recommendations] fetching signals for', ticker, 'strategy:', selectedStrategy);
-    setStrategySignals((prev) => ({
-      ...prev,
-      [ticker]: { loading: true, error: null, signals: [] },
-    }));
-
-    apiFetch(`/api/strategy/${selectedStrategy}/${ticker}`)
+  // Fetch rankings whenever the selected Custom ETF strategy changes
+  useEffect(() => {
+    if (selectedStrategy === 'none') {
+      setRankings({ strategyId: null, loading: false, error: null, byTicker: {}, buyThreshold: null, sellThreshold: null });
+      return;
+    }
+    let cancelled = false;
+    setRankings((prev) => ({ ...prev, strategyId: selectedStrategy, loading: true, error: null }));
+    apiFetch(`/api/custom-etf/${selectedStrategy}/rankings`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) {
-          console.error('[Recommendations] signal error for', ticker, ':', data.error);
-        } else {
-          console.log('[Recommendations] signals for', ticker, ':', (data.signals || []).length, 'signals');
+          setRankings({ strategyId: selectedStrategy, loading: false, error: data.error, byTicker: {}, buyThreshold: null, sellThreshold: null });
+          return;
         }
-        setStrategySignals((prev) => ({
-          ...prev,
-          [ticker]: { loading: false, error: data.error || null, signals: data.signals || [] },
-        }));
+        const byTicker = {};
+        (data.rankings || []).forEach((r) => { byTicker[r.ticker] = r; });
+        setRankings({
+          strategyId: selectedStrategy,
+          loading: false,
+          error: null,
+          byTicker,
+          buyThreshold: data.buyThreshold ?? null,
+          sellThreshold: data.sellThreshold ?? null,
+        });
       })
-      .catch((err) => {
-        console.error('[Recommendations] signal fetch failed for', ticker, ':', err);
-        setStrategySignals((prev) => ({
-          ...prev,
-          [ticker]: { loading: false, error: 'Failed to fetch signals.', signals: [] },
-        }));
+      .catch(() => {
+        if (cancelled) return;
+        setRankings({ strategyId: selectedStrategy, loading: false, error: 'Failed to load rankings.', byTicker: {}, buyThreshold: null, sellThreshold: null });
       });
+    return () => { cancelled = true; };
   }, [selectedStrategy]);
 
   // Handle row click
@@ -619,10 +645,7 @@ export default function Recommendations({ onNavigateToStock }) {
       return;
     }
     setExpandedTicker(ticker);
-    if (selectedStrategy !== 'none') {
-      fetchSignals(ticker);
-    }
-  }, [expandedTicker, selectedStrategy, fetchSignals]);
+  }, [expandedTicker]);
 
   // Handle row double-click — navigate to Stock Analysis
   const handleRowDoubleClick = useCallback((row) => {
@@ -630,13 +653,6 @@ export default function Recommendations({ onNavigateToStock }) {
       onNavigateToStock(row.ticker);
     }
   }, [onNavigateToStock]);
-
-  // Re-fetch signals when strategy changes and a ticker is expanded
-  useEffect(() => {
-    if (expandedTicker && selectedStrategy !== 'none') {
-      fetchSignals(expandedTicker);
-    }
-  }, [selectedStrategy, expandedTicker, fetchSignals]);
 
   // Compute filter counts
   const counts = {};
@@ -650,16 +666,26 @@ export default function Recommendations({ onNavigateToStock }) {
     ? stocks
     : stocks.filter((s) => s.recommendationKey === filter);
 
-  // Add _rowClass and buyScore for each row
-  const rows = filteredStocks.map((s) => ({
-    ...s,
-    buyScore: computeBuyScore(s),
-    _rowClass: s.ticker === expandedTicker ? 'rec-row--selected' : '',
-  }));
+  // Add _rowClass, buyScore, and (when a Custom ETF strategy is active) etfScore/etfRank
+  const strategyActive = selectedStrategy !== 'none';
+  const rows = filteredStocks.map((s) => {
+    const r = rankings.byTicker[s.ticker];
+    return {
+      ...s,
+      buyScore: computeBuyScore(s),
+      etfScore: r?.score ?? null,
+      etfRank: r?.rank ?? null,
+      etfHeld: r?.held ?? false,
+      _rowClass: s.ticker === expandedTicker ? 'rec-row--selected' : '',
+    };
+  });
 
-  // Get expanded stock's signal data
-  const expandedData = expandedTicker ? strategySignals[expandedTicker] : null;
+  // Get expanded stock data
   const expandedStock = expandedTicker ? stocks.find((s) => s.ticker === expandedTicker) : null;
+  const expandedRank = expandedTicker ? rankings.byTicker[expandedTicker] : null;
+  const activeStrategyMeta = strategyActive
+    ? etfStrategies.find((es) => es.id === selectedStrategy)
+    : null;
 
   return (
     <div className="rec-tab">
@@ -723,24 +749,42 @@ export default function Recommendations({ onNavigateToStock }) {
       {/* Strategy selector */}
       {!error && (stocks.length > 0 || !loading) && (
         <div className="rec-strategy-bar">
-          <span className="rec-strategy-bar__label">Strategy signal:</span>
+          <span className="rec-strategy-bar__label">Custom ETF Strategies:</span>
           <select
             value={selectedStrategy}
             onChange={(e) => setSelectedStrategy(e.target.value)}
           >
-            {STRATEGIES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+            <option value={NONE_STRATEGY.value}>{NONE_STRATEGY.label}</option>
+            {etfStrategies.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
+          {rankings.loading && (
+            <span style={{ fontSize: '0.78rem', color: '#8b949e' }}>
+              <span className="rec-loading-spinner" style={{ width: 12, height: 12 }} />
+              Scoring universe…
+            </span>
+          )}
+          {rankings.error && (
+            <span style={{ fontSize: '0.78rem', color: '#f85149' }}>{rankings.error}</span>
+          )}
+          {strategyActive && activeStrategyMeta && !rankings.loading && !rankings.error && (
+            <span style={{ fontSize: '0.78rem', color: '#8b949e' }} title={activeStrategyMeta.description}>
+              Buy ≥ {activeStrategyMeta.buyThreshold} · Sell ≤ {activeStrategyMeta.sellThreshold}
+            </span>
+          )}
         </div>
       )}
 
-      {/* Data table — show partial results while loading */}
+      {/* Data table — show partial results while loading.
+          `key` forces a remount when the strategy changes so the default sort
+          re-applies (DataTable seeds sortKey/sortDir from props only on mount). */}
       <DataTable
+        key={`rec-table-${selectedStrategy}`}
         columns={REC_COLUMNS}
         rows={rows}
-        defaultSortKey="ticker"
-        defaultSortDir="asc"
+        defaultSortKey={strategyActive ? 'etfScore' : 'ticker'}
+        defaultSortDir={strategyActive ? 'desc' : 'asc'}
         stickyHeader
         loading={loading && stocks.length === 0}
         error={error}
@@ -775,62 +819,77 @@ export default function Recommendations({ onNavigateToStock }) {
             </div>
           </div>
 
-          {selectedStrategy === 'none' && (
+          {!strategyActive && (
             <p className="rec-detail__prompt">
-              Select a strategy above to view signals for {expandedTicker}.
+              Select a Custom ETF strategy above to see how {expandedTicker} ranks.
             </p>
           )}
 
-          {selectedStrategy !== 'none' && expandedData?.loading && (
+          {strategyActive && rankings.loading && (
             <p className="rec-detail__loading">
               <span className="rec-loading-spinner" />
-              Loading {STRATEGIES.find((s) => s.value === selectedStrategy)?.label} signals…
+              Scoring {expandedTicker} under {activeStrategyMeta?.name || selectedStrategy}…
             </p>
           )}
 
-          {selectedStrategy !== 'none' && expandedData?.error && (
-            <p className="rec-detail__error">{expandedData.error}</p>
+          {strategyActive && rankings.error && (
+            <p className="rec-detail__error">{rankings.error}</p>
           )}
 
-          {selectedStrategy !== 'none' && expandedData && !expandedData.loading && !expandedData.error && (
+          {strategyActive && !rankings.loading && !rankings.error && (
             <div className="rec-detail__signals">
-              {expandedData.signals.length === 0 && (
+              {!expandedRank || expandedRank.score == null ? (
                 <p className="rec-detail__no-signals">
-                  No signals generated for {expandedTicker} with this strategy.
+                  {expandedTicker} could not be scored by {activeStrategyMeta?.name || selectedStrategy}
+                  {expandedRank && !expandedRank.eligible ? ' (ineligible for this strategy)' : ' (missing required data)'}.
                 </p>
-              )}
-              {expandedData.signals.slice(-5).reverse().map((sig, i) => (
-                <div key={i} className="rec-signal-card">
+              ) : (
+                <div className="rec-signal-card">
                   <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Date</span>
-                    <span className="rec-signal-card__value">{sig.date}</span>
+                    <span className="rec-signal-card__label">Strategy</span>
+                    <span className="rec-signal-card__value">{activeStrategyMeta?.name || selectedStrategy}</span>
                   </div>
                   <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Price</span>
-                    <span className="rec-signal-card__value">${sig.price?.toFixed(2)}</span>
+                    <span className="rec-signal-card__label">Score</span>
+                    <span className="rec-signal-card__value" style={{ fontWeight: 700 }}>
+                      {Math.round(expandedRank.score)}
+                    </span>
                   </div>
                   <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Signal</span>
+                    <span className="rec-signal-card__label">Rank</span>
                     <span className="rec-signal-card__value">
-                      <Badge variant={sig.type === 'BUY' ? 'buy' : 'sell'} size="sm">
-                        {sig.type}
+                      #{expandedRank.rank} of {Object.keys(rankings.byTicker).length}
+                    </span>
+                  </div>
+                  <div className="rec-signal-card__field">
+                    <span className="rec-signal-card__label">Buy Threshold</span>
+                    <span className="rec-signal-card__value">
+                      <Badge
+                        variant={expandedRank.score >= (rankings.buyThreshold ?? 70) ? 'buy' : 'sell'}
+                        size="sm"
+                      >
+                        {expandedRank.score >= (rankings.buyThreshold ?? 70) ? 'PASSES' : 'BELOW'}
                       </Badge>
                     </span>
                   </div>
                   <div className="rec-signal-card__field">
-                    <span className="rec-signal-card__label">Conviction</span>
+                    <span className="rec-signal-card__label">Held</span>
                     <span className="rec-signal-card__value">
-                      <Badge variant={sig.conviction?.toLowerCase()} size="sm">
-                        {sig.conviction} ({sig.score})
-                      </Badge>
+                      {expandedRank.held ? (
+                        <Badge variant="green" size="sm">In Portfolio</Badge>
+                      ) : (
+                        <Badge variant="gray" size="sm">Not Held</Badge>
+                      )}
                     </span>
                   </div>
-                  <div className="rec-signal-card__field rec-signal-card__reason">
-                    <span className="rec-signal-card__label">Reason</span>
-                    <span className="rec-signal-card__value">{sig.reason}</span>
-                  </div>
+                  {activeStrategyMeta?.description && (
+                    <div className="rec-signal-card__field rec-signal-card__reason">
+                      <span className="rec-signal-card__label">Description</span>
+                      <span className="rec-signal-card__value">{activeStrategyMeta.description}</span>
+                    </div>
+                  )}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

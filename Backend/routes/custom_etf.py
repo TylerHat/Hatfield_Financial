@@ -2,6 +2,7 @@
 
 GET  /api/custom-etf/strategies              List registered strategies
 GET  /api/custom-etf/<id>/state              Portfolio + holdings + trades + equity series
+GET  /api/custom-etf/<id>/rankings           Score every recommendation under the strategy
 POST /api/custom-etf/<id>/rebalance          Run a rebalance pass against fresh recs
 POST /api/custom-etf/<id>/reset              Wipe state and start fresh
 
@@ -88,6 +89,67 @@ def get_state(strategy_id):
     state = serialize_state(strategy, _recs_by_ticker(stocks))
     state['cooldownHours'] = REBALANCE_COOLDOWN.total_seconds() / 3600
     return jsonify(state)
+
+
+@custom_etf_bp.route('/<strategy_id>/rankings', methods=['GET'])
+@admin_required
+def get_rankings(strategy_id):
+    """Score every recommendation under the strategy and return a ranked list.
+
+    Powers the Recommendations tab's Custom ETF Strategies dropdown — picking
+    a strategy shows the same S&P 500 universe sorted by that strategy's score.
+    """
+    strategy = get_strategy(strategy_id)
+    if strategy is None:
+        return jsonify({'error': f'Unknown strategy: {strategy_id}'}), 404
+
+    stocks, _ = _load_recommendations()
+    if not stocks:
+        return jsonify({
+            'strategyId': strategy.config.id,
+            'strategyName': strategy.config.name,
+            'rankings': [],
+        })
+
+    try:
+        strategy.prepare(stocks)
+    except Exception as e:
+        logger.debug('strategy.prepare() failed for %s: %s', strategy_id, e)
+
+    held_tickers = {p.ticker for p in get_or_create_portfolio(strategy).positions}
+
+    scored = []
+    for row in stocks:
+        ticker = row.get('ticker')
+        if not ticker:
+            continue
+        eligible = strategy.is_eligible(row)
+        score = None
+        if eligible:
+            try:
+                score = strategy.score(row)
+            except Exception as e:
+                logger.debug('score() failed for %s on %s: %s', ticker, strategy_id, e)
+                score = None
+        scored.append({
+            'ticker': ticker,
+            'score': score,
+            'eligible': eligible,
+            'held': ticker in held_tickers,
+        })
+
+    # Sort: scored rows by score desc, then unscored last (stable by ticker).
+    scored.sort(key=lambda r: (r['score'] is None, -(r['score'] or 0), r['ticker']))
+    for i, r in enumerate(scored, start=1):
+        r['rank'] = i if r['score'] is not None else None
+
+    return jsonify({
+        'strategyId': strategy.config.id,
+        'strategyName': strategy.config.name,
+        'buyThreshold': strategy.config.buy_threshold,
+        'sellThreshold': strategy.config.sell_threshold,
+        'rankings': scored,
+    })
 
 
 @custom_etf_bp.route('/<strategy_id>/rebalance', methods=['POST'])
