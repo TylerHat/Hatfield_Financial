@@ -67,12 +67,15 @@ module "ecs" {
   efs_access_point_id           = module.efs.access_point_id
   service_discovery_service_arn = module.apigateway.service_discovery_service_arn
   s3_cache_bucket_name          = module.lambda.s3_cache_bucket_name
+  internal_api_secret           = var.internal_api_secret
 }
 
 module "lambda" {
-  source     = "./modules/lambda"
-  app_name   = var.app_name
-  aws_region = var.aws_region
+  source              = "./modules/lambda"
+  app_name            = var.app_name
+  aws_region          = var.aws_region
+  backend_url         = "https://api.${var.domain_name}"
+  internal_api_secret = var.internal_api_secret
 }
 
 module "dns" {

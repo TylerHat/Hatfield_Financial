@@ -55,3 +55,9 @@ variable "s3_cache_bucket_name" {
   type        = string
   default     = ""
 }
+
+variable "internal_api_secret" {
+  description = "Shared secret used by the daily ETF rebalance Lambda to authenticate to the backend. Must match the Lambda env var."
+  type        = string
+  sensitive   = true
+}

@@ -10,7 +10,9 @@ The frontend triggers /rebalance after Recommendations finishes refreshing;
 the cooldown prevents redundant trades when many users view the dashboard.
 """
 
+import hmac
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -130,6 +132,46 @@ def trigger_rebalance(strategy_id):
     except Exception as e:
         logger.error('rebalance failed for %s: %s', strategy_id, e, exc_info=True)
         return jsonify({'error': f'Rebalance failed: {e}'}), 500
+
+
+@custom_etf_bp.route('/auto-rebalance-all', methods=['POST'])
+def auto_rebalance_all():
+    """Internal endpoint hit by the daily EventBridge scheduler. Force-rebalances
+    every registered strategy. Authenticated via a shared secret in the
+    X-Internal-Secret header (env: INTERNAL_API_SECRET) — no JWT involved,
+    since the caller is a Lambda, not a logged-in user.
+    """
+    expected = os.environ.get('INTERNAL_API_SECRET', '')
+    provided = request.headers.get('X-Internal-Secret', '')
+    if not expected or not hmac.compare_digest(expected, provided):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    stocks, spy_price = _load_recommendations()
+    if not stocks:
+        logger.warning('Auto-rebalance skipped — recommendations cache empty')
+        return jsonify({'status': 'no_data', 'message': 'Recommendations cache empty'}), 503
+
+    results = []
+    for strategy in list_strategies():
+        try:
+            r = rebalance(strategy, stocks, spy_price=spy_price)
+            results.append({
+                'strategyId': strategy.config.id,
+                'totalValue': r['totalValue'],
+                'sells': len(r['actions']['sells']),
+                'buys': len(r['actions']['buys']),
+                'kept': len(r['actions']['kept']),
+            })
+        except Exception as e:
+            logger.error('Auto-rebalance failed for %s: %s', strategy.config.id, e, exc_info=True)
+            results.append({'strategyId': strategy.config.id, 'error': str(e)})
+
+    logger.info('Auto-rebalance complete — %d strategies processed', len(results))
+    return jsonify({
+        'status': 'ok',
+        'rebalancedAt': datetime.now(timezone.utc).isoformat(),
+        'results': results,
+    })
 
 
 @custom_etf_bp.route('/<strategy_id>/reset', methods=['POST'])
