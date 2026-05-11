@@ -12,3 +12,8 @@ output "ecr_lambda_repository_url" {
   description = "ECR repository URL for Lambda image"
   value       = aws_ecr_repository.lambda_recommendations.repository_url
 }
+
+output "etf_rebalance_lambda_name" {
+  description = "Name of the daily ETF rebalance Lambda"
+  value       = aws_lambda_function.etf_rebalance.function_name
+}

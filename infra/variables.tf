@@ -21,3 +21,9 @@ variable "domain_name" {
   type        = string
   default     = "hatfield-financial.com"
 }
+
+variable "internal_api_secret" {
+  description = "Shared secret for internal Lambda → backend calls (Custom ETF auto-rebalance). Generate with `openssl rand -hex 32`."
+  type        = string
+  sensitive   = true
+}

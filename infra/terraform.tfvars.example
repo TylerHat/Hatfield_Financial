@@ -7,3 +7,7 @@ domain_name = "hatfield-financial.com"
 db_username = "name"
 db_password = "password"
 secret_key  = "idkGoodLuckGuesing!"
+
+# Shared secret for internal Lambda → backend calls (Custom ETF auto-rebalance).
+# Generate with: openssl rand -hex 32
+internal_api_secret = "replace-me-with-a-long-random-hex-string"

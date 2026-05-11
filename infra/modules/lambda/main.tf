@@ -161,3 +161,119 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.recommendations_schedule.arn
 }
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Custom ETF daily rebalance Lambda + EventBridge Scheduler
+# Fires at 9:30 AM America/New_York, MON-FRI. POSTs to the backend's
+# /api/custom-etf/auto-rebalance-all endpoint, authenticated by a shared secret.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── IAM role for the rebalance Lambda ────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_etf_rebalance" {
+  name = "${var.app_name}-lambda-etf-rebalance-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "lambda.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = { Name = "${var.app_name}-lambda-etf-rebalance-role" }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_etf_rebalance_basic" {
+  role       = aws_iam_role.lambda_etf_rebalance.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# ── Lambda function (zip-based, stdlib only) ─────────────────────────────────
+
+data "archive_file" "etf_rebalance_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../../../Backend/lambda_rebalance_handler.py"
+  output_path = "${path.module}/etf_rebalance.zip"
+}
+
+resource "aws_lambda_function" "etf_rebalance" {
+  function_name    = "${var.app_name}-etf-rebalance"
+  role             = aws_iam_role.lambda_etf_rebalance.arn
+  runtime          = "python3.12"
+  handler          = "lambda_rebalance_handler.handler"
+  filename         = data.archive_file.etf_rebalance_zip.output_path
+  source_code_hash = data.archive_file.etf_rebalance_zip.output_base64sha256
+  timeout          = 180
+  memory_size      = 128
+
+  environment {
+    variables = {
+      BACKEND_URL         = var.backend_url
+      INTERNAL_API_SECRET = var.internal_api_secret
+    }
+  }
+
+  tags = { Name = "${var.app_name}-etf-rebalance" }
+}
+
+# ── EventBridge Scheduler (timezone-aware, beats classic cron) ───────────────
+
+resource "aws_iam_role" "etf_rebalance_scheduler" {
+  name = "${var.app_name}-etf-rebalance-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "scheduler.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "etf_rebalance_scheduler_invoke" {
+  name = "${var.app_name}-etf-rebalance-scheduler-invoke"
+  role = aws_iam_role.etf_rebalance_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = aws_lambda_function.etf_rebalance.arn
+      }
+    ]
+  })
+}
+
+resource "aws_scheduler_schedule" "etf_rebalance_daily" {
+  name        = "${var.app_name}-etf-rebalance-daily"
+  description = "Fire Custom ETF rebalance at NYSE open (9:30 ET, MON-FRI)"
+  group_name  = "default"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  # cron(minutes hours day-of-month month day-of-week year)
+  # 9:30 every weekday — timezone handles DST automatically.
+  schedule_expression          = "cron(30 9 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.etf_rebalance.arn
+    role_arn = aws_iam_role.etf_rebalance_scheduler.arn
+
+    retry_policy {
+      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = 2
+    }
+  }
+}
