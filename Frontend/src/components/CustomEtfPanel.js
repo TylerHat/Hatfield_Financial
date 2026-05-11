@@ -1,0 +1,420 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { apiFetch } from '../api';
+import './CustomEtfPanel.css';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
+function fmtMoney(n) {
+  if (n == null) return '—';
+  return `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtPct(n) {
+  if (n == null) return '—';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${Number(n).toFixed(2)}%`;
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function ScoreBadge({ score }) {
+  if (score == null) return <span className="cetf-score cetf-score--na">—</span>;
+  const cls = score >= 70 ? 'cetf-score--green' : score >= 40 ? 'cetf-score--amber' : 'cetf-score--red';
+  return <span className={`cetf-score ${cls}`}>{Math.round(score)}</span>;
+}
+
+export default function CustomEtfPanel() {
+  const [summaries, setSummaries] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [state, setState] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [flash, setFlash] = useState(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  // ── Load summary list (lightweight, drives the sidebar) ───────────
+  const loadSummaries = useCallback(async () => {
+    try {
+      const res = await apiFetch(`/api/custom-etf/summary?t=${Date.now()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load strategies');
+      setSummaries(data.strategies || []);
+      setActiveId((curr) => curr || data.strategies?.[0]?.id || null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSummaries();
+  }, [loadSummaries]);
+
+  // ── Load state for the active strategy ────────────────────────────
+  const loadState = useCallback(async (id) => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/custom-etf/${id}/state?t=${Date.now()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load state');
+      setState(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadState(activeId);
+  }, [activeId, loadState]);
+
+  // ── Manual rebalance (force=true skips cooldown) ──────────────────
+  const handleRebalance = async (force = false) => {
+    if (!activeId) return;
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    try {
+      const res = await apiFetch(`/api/custom-etf/${activeId}/rebalance`, {
+        method: 'POST',
+        body: JSON.stringify({ force }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Rebalance failed');
+      if (data.status === 'cooldown') {
+        setFlash({ kind: 'info', text: data.message });
+      } else if (data.status === 'no_data') {
+        setFlash({ kind: 'error', text: data.message });
+      } else {
+        const s = data.actions || {};
+        setFlash({
+          kind: 'success',
+          text: `Rebalanced — ${s.sells?.length || 0} sells, ${s.buys?.length || 0} buys, ${s.kept?.length || 0} held.`,
+        });
+        if (data.state) setState(data.state);
+        loadSummaries();  // refresh sidebar stats
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!activeId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/custom-etf/${activeId}/reset`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Reset failed');
+      setState(data.state);
+      setFlash({ kind: 'success', text: 'Simulation reset to starting capital.' });
+      setConfirmReset(false);
+      loadSummaries();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Chart data ────────────────────────────────────────────────────
+  const chartData = useMemo(() => {
+    const series = state?.equitySeries || [];
+    if (series.length === 0) return null;
+    const labels = series.map((p) => new Date(p.recordedAt).toLocaleDateString(undefined, {
+      month: 'short', day: 'numeric',
+    }));
+    const datasets = [
+      {
+        label: 'Portfolio',
+        data: series.map((p) => p.totalValue),
+        borderColor: '#2ea043',
+        backgroundColor: 'rgba(46,160,67,0.12)',
+        fill: true,
+        pointRadius: 3,
+        tension: 0.25,
+      },
+    ];
+    if (series.some((p) => p.spyValue != null)) {
+      datasets.push({
+        label: 'SPY (same $100k)',
+        data: series.map((p) => p.spyValue),
+        borderColor: '#58a6ff',
+        backgroundColor: 'transparent',
+        borderDash: [6, 4],
+        fill: false,
+        pointRadius: 2,
+        tension: 0.25,
+      });
+    }
+    return { labels, datasets };
+  }, [state]);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#e6edf3' } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${fmtMoney(ctx.parsed.y)}`,
+        },
+      },
+    },
+    scales: {
+      x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+      y: {
+        ticks: { color: '#8b949e', callback: (v) => `$${(v / 1000).toFixed(0)}k` },
+        grid: { color: '#21262d' },
+      },
+    },
+  };
+
+  const cfg = state?.strategy;
+  const port = state?.portfolio;
+  const holdings = state?.holdings || [];
+  const trades = state?.trades || [];
+
+  return (
+    <div className="cetf-panel">
+      <div className="cetf-panel__header">
+        <h2>Custom ETF Simulator</h2>
+        <p className="cetf-panel__subtitle">
+          Live paper-trading sandbox. Each strategy holds up to 10 positions, rebalances when the
+          Recommendations universe refreshes (24h cooldown), and is benchmarked against SPY.
+        </p>
+      </div>
+
+      <div className="cetf-layout">
+        {/* ── Left rail: every registered strategy with live stats ── */}
+        <aside className="cetf-rail">
+          <div className="cetf-rail__header">
+            Strategies <span className="cetf-rail__count">{summaries.length}</span>
+          </div>
+          {summaries.length === 0 && (
+            <div className="cetf-rail__empty">No strategies registered.</div>
+          )}
+          {summaries.map((s) => {
+            const ret = s.totalReturnPct;
+            const retCls = ret > 0 ? 'pos' : ret < 0 ? 'neg' : '';
+            return (
+              <button
+                key={s.id}
+                className={`cetf-rail__item ${s.id === activeId ? 'active' : ''}`}
+                onClick={() => setActiveId(s.id)}
+                title={s.description}
+              >
+                <div className="cetf-rail__name">{s.name}</div>
+                <div className="cetf-rail__stats">
+                  <span className="cetf-rail__value">{fmtMoney(s.totalValue)}</span>
+                  <span className={`cetf-rail__return ${retCls}`}>{fmtPct(ret)}</span>
+                </div>
+                <div className="cetf-rail__meta">
+                  {s.holdingsCount}/{s.maxPositions} held
+                  {s.lastRebalanceAt && ' · ' + new Date(s.lastRebalanceAt).toLocaleDateString()}
+                </div>
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* ── Detail pane for active strategy ── */}
+        <div className="cetf-detail">
+          {flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}
+          {error && <div className="cetf-flash cetf-flash--error">{error}</div>}
+
+          {loading && <div className="cetf-loading">Loading simulation…</div>}
+
+          {!loading && state && (
+            <>
+          <div className="cetf-summary-row">
+            <SummaryCard label="Total Value" value={fmtMoney(port.totalValue)} />
+            <SummaryCard label="Cash" value={fmtMoney(port.cash)} sub={fmtMoney(port.positionsValue) + ' invested'} />
+            <SummaryCard
+              label="Total Return"
+              value={fmtPct(port.totalReturnPct)}
+              accent={port.totalReturnPct >= 0 ? 'pos' : 'neg'}
+            />
+            <SummaryCard label="Holdings" value={`${holdings.length} / ${cfg.maxPositions}`} />
+            <SummaryCard
+              label="Last Rebalance"
+              value={fmtDateTime(port.lastRebalanceAt)}
+              sub={`Started ${fmtDateTime(port.createdAt)}`}
+            />
+          </div>
+
+          <div className="cetf-actions">
+            <button className="cetf-btn" onClick={() => handleRebalance(false)} disabled={busy}>
+              Run Rebalance
+            </button>
+            <button className="cetf-btn cetf-btn--ghost" onClick={() => handleRebalance(true)} disabled={busy}>
+              Force Rebalance (skip cooldown)
+            </button>
+            <button className="cetf-btn cetf-btn--danger" onClick={() => setConfirmReset(true)} disabled={busy}>
+              Reset Simulation
+            </button>
+            <span className="cetf-meta">
+              Buy ≥ {cfg.buyThreshold} · Sell ≤ {cfg.sellThreshold} · Slippage {cfg.slippageBps} bps
+            </span>
+          </div>
+
+          {/* ── Equity Curve ───────────────────────────────────────── */}
+          <section className="cetf-section">
+            <h3>Equity Curve</h3>
+            {chartData ? (
+              <div className="cetf-chart-wrap">
+                <Line data={chartData} options={chartOptions} />
+              </div>
+            ) : (
+              <div className="cetf-empty">No snapshots yet — run a rebalance to record the first data point.</div>
+            )}
+          </section>
+
+          {/* ── Holdings ───────────────────────────────────────────── */}
+          <section className="cetf-section">
+            <h3>Current Holdings ({holdings.length})</h3>
+            {holdings.length === 0 ? (
+              <div className="cetf-empty">No open positions.</div>
+            ) : (
+              <table className="cetf-table">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th className="num">Shares</th>
+                    <th className="num">Avg Cost</th>
+                    <th className="num">Current</th>
+                    <th className="num">Market Value</th>
+                    <th className="num">P/L</th>
+                    <th className="num">P/L %</th>
+                    <th className="num">Entry Score</th>
+                    <th className="num">Current Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdings.map((h) => (
+                    <tr key={h.ticker}>
+                      <td>
+                        <strong>{h.ticker}</strong>
+                        {h.name && <span className="cetf-name">{h.name.length > 24 ? h.name.slice(0, 24) + '…' : h.name}</span>}
+                      </td>
+                      <td className="num">{h.shares.toFixed(3)}</td>
+                      <td className="num">{fmtMoney(h.avgCost)}</td>
+                      <td className="num">{fmtMoney(h.currentPrice)}</td>
+                      <td className="num">{fmtMoney(h.marketValue)}</td>
+                      <td className={`num ${h.unrealizedPnl >= 0 ? 'pos' : 'neg'}`}>{fmtMoney(h.unrealizedPnl)}</td>
+                      <td className={`num ${h.unrealizedPnlPct >= 0 ? 'pos' : 'neg'}`}>{fmtPct(h.unrealizedPnlPct)}</td>
+                      <td className="num"><ScoreBadge score={h.entryScore} /></td>
+                      <td className="num"><ScoreBadge score={h.currentScore} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* ── Trade History ──────────────────────────────────────── */}
+          <section className="cetf-section">
+            <h3>Trade History ({trades.length})</h3>
+            {trades.length === 0 ? (
+              <div className="cetf-empty">No trades recorded yet.</div>
+            ) : (
+              <div className="cetf-trades-scroll">
+                <table className="cetf-table">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Action</th>
+                      <th>Ticker</th>
+                      <th className="num">Shares</th>
+                      <th className="num">Price</th>
+                      <th className="num">Value</th>
+                      <th className="num">Score</th>
+                      <th>Reason</th>
+                      <th className="num">Cash After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trades.map((t, i) => (
+                      <tr key={i}>
+                        <td>{fmtDateTime(t.executedAt)}</td>
+                        <td>
+                          <span className={`cetf-action cetf-action--${t.action.toLowerCase()}`}>{t.action}</span>
+                        </td>
+                        <td><strong>{t.ticker}</strong></td>
+                        <td className="num">{t.shares.toFixed(3)}</td>
+                        <td className="num">{fmtMoney(t.price)}</td>
+                        <td className="num">{fmtMoney(t.value)}</td>
+                        <td className="num"><ScoreBadge score={t.score} /></td>
+                        <td><span className="cetf-reason">{t.reason || '—'}</span></td>
+                        <td className="num">{fmtMoney(t.cashAfter)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+            </>
+          )}
+        </div>
+      </div>
+
+      {confirmReset && (
+        <div className="cetf-modal-backdrop" onClick={() => setConfirmReset(false)}>
+          <div className="cetf-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Reset simulation?</h3>
+            <p>
+              This wipes all positions, trades, and equity history for
+              <strong> {cfg?.name || 'this strategy'} </strong>
+              and restores cash to {fmtMoney(cfg?.startingCapital)}. This cannot be undone.
+            </p>
+            <div className="cetf-modal__actions">
+              <button className="cetf-btn cetf-btn--ghost" onClick={() => setConfirmReset(false)}>Cancel</button>
+              <button className="cetf-btn cetf-btn--danger" onClick={handleReset} disabled={busy}>
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, sub, accent }) {
+  return (
+    <div className="cetf-card">
+      <div className="cetf-card__label">{label}</div>
+      <div className={`cetf-card__value ${accent === 'pos' ? 'pos' : accent === 'neg' ? 'neg' : ''}`}>{value}</div>
+      {sub && <div className="cetf-card__sub">{sub}</div>}
+    </div>
+  );
+}

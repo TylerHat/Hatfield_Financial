@@ -100,6 +100,70 @@ class PortfolioHolding(db.Model):
         }
 
 
+class EtfPortfolio(db.Model):
+    """One row per registered Custom ETF strategy. Tracks the simulated
+    cash balance and last rebalance time. Holdings live in EtfPosition."""
+    __tablename__ = 'etf_portfolios'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    strategy_id = db.Column(db.String(64), unique=True, nullable=False)
+    cash = db.Column(db.Float, nullable=False)
+    starting_capital = db.Column(db.Float, nullable=False)
+    last_rebalance_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    positions = db.relationship('EtfPosition', backref='portfolio', lazy=True,
+                                cascade='all, delete-orphan')
+    trades = db.relationship('EtfTrade', backref='portfolio', lazy=True,
+                             cascade='all, delete-orphan')
+    snapshots = db.relationship('EtfEquitySnapshot', backref='portfolio', lazy=True,
+                                cascade='all, delete-orphan')
+
+
+class EtfPosition(db.Model):
+    """Currently-held position for a strategy."""
+    __tablename__ = 'etf_positions'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    portfolio_id = db.Column(db.Integer, db.ForeignKey('etf_portfolios.id'), nullable=False)
+    ticker = db.Column(db.String(20), nullable=False)
+    shares = db.Column(db.Float, nullable=False)
+    avg_cost = db.Column(db.Float, nullable=False)
+    entry_score = db.Column(db.Float, nullable=True)
+    entry_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (db.UniqueConstraint('portfolio_id', 'ticker', name='uq_etf_position'),)
+
+
+class EtfTrade(db.Model):
+    """Immutable log of every BUY/SELL the simulator executes."""
+    __tablename__ = 'etf_trades'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    portfolio_id = db.Column(db.Integer, db.ForeignKey('etf_portfolios.id'), nullable=False)
+    ticker = db.Column(db.String(20), nullable=False)
+    action = db.Column(db.String(8), nullable=False)  # BUY | SELL
+    shares = db.Column(db.Float, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    score = db.Column(db.Float, nullable=True)
+    reason = db.Column(db.String(40), nullable=True)  # e.g. SCORE_DROP, EXIT_UNIVERSE, NEW_GREEN
+    cash_after = db.Column(db.Float, nullable=False)
+    executed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class EtfEquitySnapshot(db.Model):
+    """Total portfolio value at a point in time. Recorded once per rebalance."""
+    __tablename__ = 'etf_equity_snapshots'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    portfolio_id = db.Column(db.Integer, db.ForeignKey('etf_portfolios.id'), nullable=False)
+    total_value = db.Column(db.Float, nullable=False)
+    cash = db.Column(db.Float, nullable=False)
+    positions_value = db.Column(db.Float, nullable=False)
+    spy_price = db.Column(db.Float, nullable=True)
+    recorded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class UserSettings(db.Model):
     __tablename__ = 'user_settings'
 
