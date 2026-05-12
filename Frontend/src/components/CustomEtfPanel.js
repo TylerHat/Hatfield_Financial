@@ -131,7 +131,7 @@ function ScoreBadge({ score }) {
   return <span className={`cetf-score ${cls}`}>{Math.round(score)}</span>;
 }
 
-export default function CustomEtfPanel() {
+export default function CustomEtfPanel({ onNavigateToStock }) {
   const { user } = useAuth();
   const isAdmin = !!user?.is_admin;
   const [summaries, setSummaries] = useState([]);
@@ -399,7 +399,7 @@ export default function CustomEtfPanel() {
             {holdings.length === 0 ? (
               <div className="cetf-empty">No open positions.</div>
             ) : (
-              <table className="cetf-table">
+              <table className="cetf-table cetf-table--clickable">
                 <thead>
                   <tr>
                     <th>Ticker</th>
@@ -415,7 +415,11 @@ export default function CustomEtfPanel() {
                 </thead>
                 <tbody>
                   {holdings.map((h) => (
-                    <tr key={h.ticker}>
+                    <tr
+                      key={h.ticker}
+                      onDoubleClick={() => onNavigateToStock && onNavigateToStock(h.ticker)}
+                      title="Double-click to view in Stock Analysis"
+                    >
                       <td>
                         <strong>{h.ticker}</strong>
                         {h.name && <span className="cetf-name">{h.name.length > 24 ? h.name.slice(0, 24) + '…' : h.name}</span>}

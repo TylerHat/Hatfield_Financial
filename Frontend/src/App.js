@@ -613,7 +613,15 @@ function App() {
 
         {activeTab === 'administration' && user?.is_admin && <AdminPanel />}
 
-        {activeTab === 'custom-etf' && <CustomEtfPanel />}
+        {activeTab === 'custom-etf' && (
+          <CustomEtfPanel
+            onNavigateToStock={(ticker) => {
+              setInputValue(ticker);
+              setSubmittedTicker(ticker);
+              setActiveTab('analysis');
+            }}
+          />
+        )}
 
         {activeTab === 'api-monitor' && user?.is_admin && <ApiMonitorPanel />}
       </main>

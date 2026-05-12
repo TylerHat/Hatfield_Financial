@@ -359,6 +359,10 @@
   background: #1c2128;
 }
 
+.cetf-table--clickable tbody tr {
+  cursor: pointer;
+}
+
 .cetf-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
