@@ -38,6 +38,7 @@ from .buy_score import BuyScoreStrategy
 from .momentum_top10 import MomentumTop10Strategy
 from .low_vol_defensive import LowVolDefensiveStrategy
 from .analyst_conviction import AnalystConvictionStrategy
+from .undervalued_strong_buy import UndervaluedStrongBuyStrategy
 
 # Register every strategy here.
 _REGISTERED = (
@@ -45,6 +46,7 @@ _REGISTERED = (
     MomentumTop10Strategy(),
     LowVolDefensiveStrategy(),
     AnalystConvictionStrategy(),
+    UndervaluedStrongBuyStrategy(),
 )
 
 STRATEGIES = {s.config.id: s for s in _REGISTERED}
