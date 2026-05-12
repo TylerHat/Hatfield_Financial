@@ -202,6 +202,18 @@ AND `numberOfAnalysts ≥ 3`. Ranking: Bayesian-shrunk `targetUpsidePct` using
 the simulator calls `prepare()` once per rebalance pass. Any future strategy that needs
 universe-wide statistics should follow the same pattern.
 
+### Undervalued Strong Buy — Top 10
+**ID**: `undervalued-strong-buy-top10` · **Buy ≥** 65 · **Sell ≤** 55 · **Max** 10
+
+Valuation-led companion to `analyst-conviction-top10`. Same strong_buy + ≥3 analysts gate,
+plus a value-trap guard (positive ROE, debt/equity < 200) and a hard requirement that
+`forwardPE` or `fcfYield` be available so the valuation component isn't a fallback.
+Score blend: **valuation 50%** (forwardPE + FCF yield via `buy_score` curves),
+**Bayesian-shrunk analyst upside 40%** (same k=10 shrinkage as analyst-conviction,
+clamped −10% → +50%), **quality 10%** (ROE + debt + gross margin). Uses the
+`prepare()` hook to cache the strong_buy-universe mean upside each rebalance.
+See `undervalued_strong_buy.py`.
+
 ---
 
 ## Maintenance Note
