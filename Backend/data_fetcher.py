@@ -893,21 +893,65 @@ def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5, prior
 
     for chunk_start in range(0, len(tickers), chunk_size):
         chunk = tickers[chunk_start:chunk_start + chunk_size]
-        try:
-            raw = _queue_call(
-                lambda chunk=chunk: yf.download(
-                    chunk,
-                    period=period,
-                    group_by='ticker',
-                    threads=False,  # CRITICAL: threads=False to avoid bypassing queue
-                    progress=False,
-                ),
-                priority=priority,
-                endpoint_type='get_many_ohlcv',
-            )
-        except Exception as exc:
-            logger.error('get_many_ohlcv chunk %d-%d failed: %s',
-                         chunk_start, chunk_start + len(chunk), exc)
+
+        raw = None
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                raw = _queue_call(
+                    lambda chunk=chunk: yf.download(
+                        chunk,
+                        period=period,
+                        group_by='ticker',
+                        threads=False,  # CRITICAL: threads=False to avoid bypassing queue
+                        progress=False,
+                    ),
+                    priority=priority,
+                    endpoint_type='get_many_ohlcv',
+                )
+                break
+            except Exception as exc:
+                msg = str(exc).lower()
+                retriable = any(s in msg for s in ('429', 'rate', 'too many', 'hung', 'timeout'))
+                if attempt < _MAX_RETRIES and retriable:
+                    sleep_s = _RETRY_DELAY * (2 ** attempt)
+                    logger.warning('get_many_ohlcv chunk %d-%d retry %d/%d in %ds: %s',
+                                   chunk_start, chunk_start + len(chunk),
+                                   attempt + 1, _MAX_RETRIES, sleep_s, exc)
+                    time.sleep(sleep_s)
+                    continue
+                logger.error('get_many_ohlcv chunk %d-%d failed after %d attempts: %s',
+                             chunk_start, chunk_start + len(chunk), attempt + 1, exc)
+                raw = None
+                break
+
+        if raw is None:
+            # Per-ticker fallback so a single bad chunk doesn't drop 50 tickers.
+            recovered = 0
+            for t in chunk:
+                try:
+                    single = _queue_call(
+                        lambda t=t: yf.download(
+                            t,
+                            period=period,
+                            group_by='ticker',
+                            threads=False,
+                            progress=False,
+                        ),
+                        priority=priority,
+                        endpoint_type='get_many_ohlcv_single',
+                    )
+                except Exception:
+                    continue
+                if single is None or single.empty:
+                    continue
+                df = single.dropna(how='all')
+                if df.empty:
+                    continue
+                result[t] = df
+                _cache_set(f'ohlcv_period:{t}:{period}', df)
+                recovered += 1
+            logger.info('get_many_ohlcv chunk %d-%d fallback recovered %d/%d tickers',
+                        chunk_start, chunk_start + len(chunk), recovered, len(chunk))
             continue
 
         # Single-ticker downloads return flat columns; multi returns MultiIndex.
