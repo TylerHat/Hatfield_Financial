@@ -13,7 +13,6 @@ slightly. UI surfaces this disclaimer next to the result.
 
 from __future__ import annotations
 
-import bisect
 import logging
 import time
 from datetime import datetime, timedelta
@@ -24,7 +23,7 @@ import pandas as pd
 from data_fetcher import get_many_ohlcv, PRIORITY_MEDIUM
 from sp500 import get_sp500_tickers
 from services.markov import classify_regimes, LOOKBACK
-from .backtest_jobs import set_progress
+from .backtest_jobs import set_progress, set_done
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +61,15 @@ def _generate_rebalance_dates(start, end, cadence, trading_days_index):
     if cadence == 'daily':
         return list(in_window)
 
-    # Weekly: first trading day each calendar week.
+    # Weekly: first trading day each ISO calendar week. Use ISO year too —
+    # the last days of December can fall in ISO week 1 of the next year, and
+    # mixing calendar-year with ISO-week would split that week across two
+    # tuple keys.
     seen_weeks = set()
     out = []
     for d in in_window:
-        wk = (d.year, d.isocalendar()[1])
+        iso = d.isocalendar()
+        wk = (iso[0], iso[1])   # (iso_year, iso_week)
         if wk in seen_weeks:
             continue
         seen_weeks.add(wk)
@@ -170,7 +173,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         for ticker, data in ticker_data.items():
             dates = data['dates']
             # Latest bar at or before rebal_date.
-            idx = bisect.bisect_right(dates, rebal_date) - 1
+            idx = dates.searchsorted(rebal_date, side='right') - 1
             if idx < LOOKBACK + 10:
                 continue
             r = int(data['regime'][idx])
@@ -210,7 +213,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
             pos = positions[ticker]
             data = ticker_data.get(ticker)
             if data is not None:
-                idx = bisect.bisect_right(data['dates'], rebal_date) - 1
+                idx = data['dates'].searchsorted(rebal_date, side='right') - 1
                 sell_price_raw = float(data['close'][idx]) if idx >= 0 else pos['avg_cost']
             else:
                 sell_price_raw = pos['avg_cost']
@@ -241,7 +244,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         for ticker, pos in positions.items():
             data = ticker_data.get(ticker)
             if data is not None:
-                idx = bisect.bisect_right(data['dates'], rebal_date) - 1
+                idx = data['dates'].searchsorted(rebal_date, side='right') - 1
                 mark = float(data['close'][idx]) if idx >= 0 else pos['avg_cost']
             else:
                 mark = pos['avg_cost']
@@ -295,7 +298,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         for ticker, pos in positions.items():
             data = ticker_data.get(ticker)
             if data is not None:
-                idx = bisect.bisect_right(data['dates'], rebal_date) - 1
+                idx = data['dates'].searchsorted(rebal_date, side='right') - 1
                 mark = float(data['close'][idx]) if idx >= 0 else pos['avg_cost']
             else:
                 mark = pos['avg_cost']
@@ -368,7 +371,6 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     logger.info('Backtest %s done in %.1fs: return=%.1f%%, trades=%d, win_rate=%.1f%%',
                 job_id, elapsed, total_return, num_trades, win_rate)
 
-    from .backtest_jobs import set_done
     set_done(job_id, {
         'summary': {
             'startingCapital': STARTING_CAPITAL,

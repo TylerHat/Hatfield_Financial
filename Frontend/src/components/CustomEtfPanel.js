@@ -14,6 +14,7 @@ import {
 import { apiFetch } from '../api';
 import { useAuth } from '../AuthContext';
 import MarkovBacktestPanel from './MarkovBacktestPanel';
+import MarkovExplainPanel from './MarkovExplainPanel';
 import './CustomEtfPanel.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -364,11 +365,33 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
               >
                 Backtest
               </button>
+              <button
+                type="button"
+                className={`cetf-detail-tab ${detailView === 'explain' ? 'active' : ''}`}
+                onClick={() => setDetailView('explain')}
+              >
+                How It Works
+              </button>
             </nav>
           )}
 
-          {detailView === 'backtest' && activeId === 'markov-regime' && (
-            <MarkovBacktestPanel />
+          {/* Keep the backtest + explain panels MOUNTED but hidden when not
+              active. This preserves the backtest panel's internal state
+              (job id, polling timer, completed result, control selections)
+              across sub-tab switches — switching to "How It Works" and back
+              no longer wipes a running or completed backtest. The polling
+              effect keeps running in the background even while hidden, so a
+              long backtest finishes regardless of which tab is visible. */}
+          {activeId === 'markov-regime' && (
+            <div style={{ display: detailView === 'backtest' ? 'block' : 'none' }}>
+              <MarkovBacktestPanel />
+            </div>
+          )}
+
+          {activeId === 'markov-regime' && (
+            <div style={{ display: detailView === 'explain' ? 'block' : 'none' }}>
+              <MarkovExplainPanel />
+            </div>
           )}
 
           {detailView === 'live' && flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}

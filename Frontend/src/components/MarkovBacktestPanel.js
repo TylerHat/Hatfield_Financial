@@ -34,7 +34,10 @@ export default function MarkovBacktestPanel() {
 
     async function poll() {
       try {
-        const res = await apiFetch(`/api/custom-etf/backtest/${jobId}`);
+        // Cache-bust: apiFetch caches GET responses for 2 min and the polling
+        // endpoint returns 200 with changing data — without ?t=... every poll
+        // after the first would return stale cached progress forever.
+        const res = await apiFetch(`/api/custom-etf/backtest/${jobId}?t=${Date.now()}`);
         const data = await res.json();
         if (cancelled) return;
         if (!res.ok) {
