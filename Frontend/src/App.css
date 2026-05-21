@@ -1663,3 +1663,284 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+/* ─── Markov Method ──────────────────────────────────────────────────────── */
+.markov-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 0;
+}
+
+.markov-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid #30363d;
+  padding-bottom: 12px;
+}
+
+.markov-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #c9d1d9;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.markov-subtitle {
+  font-size: 0.85rem;
+  color: #8b949e;
+}
+
+.markov-loading,
+.markov-error {
+  padding: 40px;
+  text-align: center;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+}
+
+.markov-error {
+  color: #f85149;
+  border-color: #6a1f24;
+}
+
+.markov-card {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 16px 20px;
+}
+
+.markov-card__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #21262d;
+}
+
+.markov-card__title-main {
+  color: #3FDE7E;
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.markov-card__title-meta {
+  color: #6e7681;
+  font-size: 0.75rem;
+}
+
+.markov-card__footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #21262d;
+  font-size: 0.75rem;
+  color: #6e7681;
+  font-style: italic;
+}
+
+.markov-matrix {
+  display: grid;
+  grid-template-columns: 100px repeat(3, 1fr);
+  grid-auto-rows: 64px;
+  gap: 4px;
+}
+
+.markov-matrix__corner {
+  background: transparent;
+}
+
+.markov-matrix__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #8b949e;
+  letter-spacing: 0.6px;
+  background: #161b22;
+  border-radius: 4px;
+}
+
+.markov-matrix__row-header {
+  background: #161b22;
+}
+
+.markov-matrix__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #161b22;
+  color: rgba(201, 209, 217, 0.55);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  border-radius: 4px;
+}
+
+.markov-matrix__cell--diag {
+  background: rgba(63, 222, 126, 0.18);
+  color: #6BF0A6;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border: 1px solid rgba(63, 222, 126, 0.35);
+}
+
+.markov-flips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.markov-flips__item {
+  display: grid;
+  grid-template-columns: 110px 90px 24px 90px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #161b22;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.markov-flips__date {
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+
+.markov-flips__regime {
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-align: center;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.markov-flips__regime--bull {
+  background: rgba(132, 187, 161, 0.2);
+  color: #84BBA1;
+}
+
+.markov-flips__regime--bear {
+  background: rgba(197, 127, 134, 0.2);
+  color: #C57F86;
+}
+
+.markov-flips__regime--sideways,
+.markov-flips__regime--side {
+  background: rgba(164, 171, 183, 0.2);
+  color: #A4ABB7;
+}
+
+.markov-flips__arrow {
+  color: #6e7681;
+  text-align: center;
+}
+
+.markov-flips__empty {
+  padding: 20px;
+  text-align: center;
+  color: #6e7681;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.markov-footnote {
+  font-size: 0.75rem;
+  color: #6e7681;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.markov-forecast__controls {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.markov-forecast__btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.markov-forecast__btn:hover {
+  background: #21262d;
+  color: #c9d1d9;
+}
+
+.markov-forecast__btn.active {
+  background: rgba(63, 222, 126, 0.15);
+  border-color: rgba(63, 222, 126, 0.5);
+  color: #3FDE7E;
+}
+
+.markov-forecast__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.markov-forecast__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 12px;
+  background: #161b22;
+  border-radius: 6px;
+  border-left: 3px solid #30363d;
+}
+
+.markov-forecast__tile-label {
+  font-size: 0.75rem;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.markov-forecast__tile-value {
+  font-size: 2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #c9d1d9;
+}
+
+.markov-forecast__tile--bull {
+  border-left-color: #84BBA1;
+}
+.markov-forecast__tile--bull .markov-forecast__tile-value {
+  color: #84BBA1;
+}
+
+.markov-forecast__tile--bear {
+  border-left-color: #C57F86;
+}
+.markov-forecast__tile--bear .markov-forecast__tile-value {
+  color: #C57F86;
+}
+
+.markov-forecast__tile--side {
+  border-left-color: #A4ABB7;
+}
+.markov-forecast__tile--side .markov-forecast__tile-value {
+  color: #A4ABB7;
+}

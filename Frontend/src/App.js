@@ -17,6 +17,7 @@ import AccountPanel from './components/AccountPanel';
 import AboutPage from './components/AboutPage';
 import ApiMonitorPanel from './components/ApiMonitorPanel';
 import CustomEtfPanel from './components/CustomEtfPanel';
+import MarkovMethod from './components/MarkovMethod';
 
 const STRATEGIES = [
   { value: 'none', label: 'None (Raw Price Chart)' },
@@ -459,6 +460,12 @@ function App() {
                 >
                   Technical Charts
                 </button>
+                <button
+                  className={`subtab-btn ${analysisSubTab === 'markov' ? 'active' : ''}`}
+                  onClick={() => setAnalysisSubTab('markov')}
+                >
+                  Markov Method
+                </button>
               </nav>
             )}
 
@@ -579,6 +586,14 @@ function App() {
                   refreshKey={refreshCount}
                 />
               </>
+            )}
+
+            {submittedTicker && analysisSubTab === 'markov' && dateRangeValid && stockInfo && (
+              <MarkovMethod
+                ticker={submittedTicker}
+                start={startDate}
+                end={endDate}
+              />
             )}
           </>
         )}

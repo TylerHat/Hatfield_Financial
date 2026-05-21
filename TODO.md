@@ -47,3 +47,7 @@ Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / S
 ### Make a new main section to analyse cryto popularity and review functions to predict high volitility. 
 this may be a high cost due to analyzing the news for swings
 ETFs might be best to review but will need to have some yfinance queries to see high volume/interest
+
+# Make a strat on this video https://www.youtube.com/watch?v=ZVMTeDBmSrI
+- github https://github.com/jackson-video-resources/markov-hedge-fund-method
+
