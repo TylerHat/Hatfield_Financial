@@ -25,7 +25,7 @@ function triggerCustomEtfRebalance() {
     .catch(() => {});
 }
 // Bump when the row shape changes so stale caches don't hide new columns.
-const LS_SCHEMA_VERSION = 5;
+const LS_SCHEMA_VERSION = 6;
 
 function loadCache() {
   try {

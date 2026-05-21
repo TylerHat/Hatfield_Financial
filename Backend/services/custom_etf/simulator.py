@@ -3,8 +3,9 @@
 Strategy-agnostic. Given an EtfStrategy and a fresh recommendations snapshot,
 it (a) sells holdings whose score has dropped below the strategy's
 sell_threshold or that have left the universe, then (b) buys top-ranked
-green stocks (score >= buy_threshold) up to max_positions, equal-weighting
-available cash across new buys.
+green stocks (score >= buy_threshold) up to max_positions, sizing each new
+buy at 1 / max_positions of total equity (cash + marked holdings), bounded
+by available cash so we never overdraft.
 
 State persists in the etf_portfolios / etf_positions / etf_trades /
 etf_equity_snapshots tables.
@@ -112,6 +113,16 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
         db.session.delete(pos)
         del held[ticker]
 
+    # Mark held positions to current quote so new buys can be sized against
+    # *total equity*, not just cash. Falls back to avg_cost when the held
+    # ticker has no fresh quote in this snapshot.
+    held_value = 0.0
+    for ticker, pos in held.items():
+        row = universe.get(ticker)
+        mark = row['currentPrice'] if row and row.get('currentPrice') else pos.avg_cost
+        held_value += pos.shares * mark
+    total_equity = portfolio.cash + held_value
+
     # ── Phase 2: BUY ──────────────────────────────────────────────────
     # Candidates: rows in green (score >= buy_threshold), not currently held,
     # ranked by score desc. Take top (max_positions - len(held)) of them.
@@ -123,9 +134,12 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
     candidates = green[:buy_slots]
 
     if candidates and portfolio.cash > 0:
-        # Equal-weight available cash across the new buys. Reserve a 1 % buffer
-        # so slippage rounding doesn't push cash negative.
-        per_slot = (portfolio.cash * 0.99) / len(candidates)
+        # Target weight: 1 / max_positions of total equity (cash + marked
+        # holdings). Bounded by available cash so we never overdraft when
+        # several slots open at once. Reserve a 1 % buffer for slippage.
+        target_per_slot = total_equity / cfg.max_positions
+        cash_cap = (portfolio.cash * 0.99) / len(candidates)
+        per_slot = min(target_per_slot, cash_cap)
         for row in candidates:
             quote = row['currentPrice']
             if quote is None or quote <= 0:
