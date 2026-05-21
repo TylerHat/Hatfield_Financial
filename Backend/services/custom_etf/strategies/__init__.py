@@ -39,6 +39,7 @@ from .momentum_top10 import MomentumTop10Strategy
 from .low_vol_defensive import LowVolDefensiveStrategy
 from .analyst_conviction import AnalystConvictionStrategy
 from .undervalued_strong_buy import UndervaluedStrongBuyStrategy
+from .markov_regime import MarkovRegimeStrategy
 
 # Register every strategy here.
 _REGISTERED = (
@@ -47,6 +48,7 @@ _REGISTERED = (
     LowVolDefensiveStrategy(),
     AnalystConvictionStrategy(),
     UndervaluedStrongBuyStrategy(),
+    MarkovRegimeStrategy(),
 )
 
 STRATEGIES = {s.config.id: s for s in _REGISTERED}

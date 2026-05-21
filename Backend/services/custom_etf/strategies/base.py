@@ -54,3 +54,13 @@ class EtfStrategy(ABC):
         Use to compute universe-wide statistics (e.g. mean values for
         Bayesian shrinkage) that individual score() calls need."""
         pass
+
+    def weight(self, row: dict) -> float:
+        """Optional conviction weight for position sizing. The simulator
+        normalises returned weights across selected candidates so they sum
+        to 1.0 of allocatable equity. Default 1.0 → equal weight (preserves
+        the historical behavior for strategies that don't override this).
+
+        Return must be > 0; non-positive values are clamped to 1.0 to avoid
+        zeroing out a position the strategy already passed score() for."""
+        return 1.0

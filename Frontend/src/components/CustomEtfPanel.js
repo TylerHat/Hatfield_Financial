@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { apiFetch } from '../api';
 import { useAuth } from '../AuthContext';
+import MarkovBacktestPanel from './MarkovBacktestPanel';
 import './CustomEtfPanel.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -142,6 +143,7 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
   const [error, setError] = useState(null);
   const [flash, setFlash] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [detailView, setDetailView] = useState('live');   // 'live' | 'backtest' (markov only)
 
   // ── Load summary list (lightweight, drives the sidebar) ───────────
   const loadSummaries = useCallback(async () => {
@@ -179,6 +181,9 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
 
   useEffect(() => {
     loadState(activeId);
+    // Reset to Live whenever the active strategy changes — only markov-regime
+    // exposes a Backtest sub-tab, so any other strategy should start on Live.
+    setDetailView('live');
   }, [activeId, loadState]);
 
   // ── Manual rebalance (force=true skips cooldown) ──────────────────
@@ -343,12 +348,35 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
 
         {/* ── Detail pane for active strategy ── */}
         <div className="cetf-detail">
-          {flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}
-          {error && <div className="cetf-flash cetf-flash--error">{error}</div>}
+          {activeId === 'markov-regime' && (
+            <nav className="cetf-detail-tabs">
+              <button
+                type="button"
+                className={`cetf-detail-tab ${detailView === 'live' ? 'active' : ''}`}
+                onClick={() => setDetailView('live')}
+              >
+                Live Simulation
+              </button>
+              <button
+                type="button"
+                className={`cetf-detail-tab ${detailView === 'backtest' ? 'active' : ''}`}
+                onClick={() => setDetailView('backtest')}
+              >
+                Backtest
+              </button>
+            </nav>
+          )}
 
-          {loading && <div className="cetf-loading">Loading simulation…</div>}
+          {detailView === 'backtest' && activeId === 'markov-regime' && (
+            <MarkovBacktestPanel />
+          )}
 
-          {!loading && state && (
+          {detailView === 'live' && flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}
+          {detailView === 'live' && error && <div className="cetf-flash cetf-flash--error">{error}</div>}
+
+          {detailView === 'live' && loading && <div className="cetf-loading">Loading simulation…</div>}
+
+          {detailView === 'live' && !loading && state && (
             <>
           <div className="cetf-summary-row">
             <SummaryCard label="Total Value" value={fmtMoney(port.totalValue)} />
