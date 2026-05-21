@@ -127,6 +127,17 @@
 .cetf-rail__return.pos { color: #3fb950; }
 .cetf-rail__return.neg { color: #f85149; }
 
+.cetf-rail__vs-spy {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: #8b949e;
+}
+
+.cetf-rail__vs-spy.bull { color: #58a6ff; }
+.cetf-rail__vs-spy.bear { color: #d2993a; }
+
 .cetf-rail__meta {
   margin-top: 4px;
   font-size: 0.74rem;

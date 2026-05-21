@@ -222,6 +222,17 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
     total_value = portfolio.cash + positions_value
     total_return_pct = ((total_value / portfolio.starting_capital) - 1) * 100
 
+    snapshots = (EtfEquitySnapshot.query
+                 .filter_by(portfolio_id=portfolio.id)
+                 .order_by(EtfEquitySnapshot.recorded_at.asc()).all())
+    spy_baseline = next((s.spy_price for s in snapshots if s.spy_price), None)
+    spy_latest = next((s.spy_price for s in reversed(snapshots) if s.spy_price), None)
+    spy_return_pct = None
+    vs_spy_pct = None
+    if spy_baseline and spy_latest and spy_baseline > 0:
+        spy_return_pct = ((spy_latest / spy_baseline) - 1) * 100
+        vs_spy_pct = total_return_pct - spy_return_pct
+
     return {
         'id': cfg.id,
         'name': cfg.name,
@@ -232,6 +243,8 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
         'cash': round(portfolio.cash, 2),
         'positionsValue': round(positions_value, 2),
         'totalReturnPct': round(total_return_pct, 2),
+        'spyReturnPct': round(spy_return_pct, 2) if spy_return_pct is not None else None,
+        'vsSpyPct': round(vs_spy_pct, 2) if vs_spy_pct is not None else None,
         'holdingsCount': len(portfolio.positions),
         'lastRebalanceAt': portfolio.last_rebalance_at.isoformat()
             if portfolio.last_rebalance_at else None,
