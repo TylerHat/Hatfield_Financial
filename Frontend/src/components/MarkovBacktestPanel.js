@@ -90,30 +90,42 @@ export default function MarkovBacktestPanel() {
   const chartData = useMemo(() => {
     if (!result?.equityCurve?.length) return null;
     const startingCapital = result.params.startingCapital;
-    return {
-      labels: result.equityCurve.map((p) => p.date),
-      datasets: [
-        {
-          label: 'Portfolio Value',
-          data: result.equityCurve.map((p) => p.value),
-          borderColor: '#3FDE7E',
-          backgroundColor: 'rgba(63,222,126,0.10)',
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.15,
-          fill: true,
-        },
-        {
-          label: 'Starting Capital',
-          data: result.equityCurve.map(() => startingCapital),
-          borderColor: '#30363d',
-          borderWidth: 1,
-          borderDash: [6, 4],
-          pointRadius: 0,
-          fill: false,
-        },
-      ],
-    };
+    const hasSpy = result.equityCurve.some((p) => p.spyValue != null);
+    const datasets = [
+      {
+        label: 'Markov Portfolio',
+        data: result.equityCurve.map((p) => p.value),
+        borderColor: '#3FDE7E',
+        backgroundColor: 'rgba(63,222,126,0.10)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: true,
+      },
+    ];
+    if (hasSpy) {
+      datasets.push({
+        label: 'SPY (benchmark)',
+        // chart.js skips null values when spanGaps is false (default)
+        data: result.equityCurve.map((p) => p.spyValue),
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88,166,255,0.06)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.15,
+        fill: false,
+      });
+    }
+    datasets.push({
+      label: 'Starting Capital',
+      data: result.equityCurve.map(() => startingCapital),
+      borderColor: '#30363d',
+      borderWidth: 1,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false,
+    });
+    return { labels: result.equityCurve.map((p) => p.date), datasets };
   }, [result]);
 
   const chartOptions = {
@@ -226,6 +238,10 @@ export default function MarkovBacktestPanel() {
             <div className="markov-bt__stat-grid">
               <Stat label="Total Return" value={fmtPct(s.totalReturn, true)} accent={s.totalReturn >= 0 ? 'pos' : 'neg'}
                     sub={`${s.totalReturnDollar >= 0 ? '+' : ''}${fmtMoneyFull(s.totalReturnDollar)}`} />
+              <Stat label="vs SPY"
+                    value={s.vsSpy == null ? '—' : fmtPct(s.vsSpy, true)}
+                    accent={s.vsSpy == null ? '' : s.vsSpy >= 0 ? 'pos' : 'neg'}
+                    sub={s.spyReturn == null ? 'SPY benchmark unavailable' : `SPY: ${fmtPct(s.spyReturn, true)}`} />
               <Stat label="Final Value" value={fmtMoneyFull(s.finalValue)} sub={`Started ${fmtMoneyFull(s.startingCapital)}`} />
               <Stat label="Win Rate" value={`${s.winRate.toFixed(1)}%`}
                     accent={s.winRate >= 50 ? 'pos' : 'neg'}

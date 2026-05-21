@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
-from data_fetcher import get_many_ohlcv, PRIORITY_MEDIUM
+from data_fetcher import get_many_ohlcv, get_spy_history, PRIORITY_MEDIUM
 from sp500 import get_sp500_tickers
 from services.markov import classify_regimes, LOOKBACK
 from .backtest_jobs import set_progress, set_done
@@ -98,6 +98,25 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
 
     # Bulk OHLC fetch — uses the per-ticker cache, so reruns are fast.
     all_ohlc = get_many_ohlcv(universe, period=period, priority=PRIORITY_MEDIUM)
+    set_progress(job_id, 28, f'Fetched OHLC for {len(all_ohlc)} tickers — pulling SPY benchmark...')
+
+    # SPY benchmark — fetch the full window so we can mark-to-baseline at each
+    # rebalance. The history endpoint expects timezone-naive datetimes covering
+    # the full backtest range; pad a little so the first rebalance lands inside.
+    spy_fetch_start = (start_date - pd.DateOffset(days=10)).to_pydatetime()
+    spy_fetch_end = (end_date + pd.DateOffset(days=2)).to_pydatetime()
+    spy_hist = get_spy_history(spy_fetch_start, spy_fetch_end, priority=PRIORITY_MEDIUM)
+    spy_dates = None
+    spy_closes = None
+    if spy_hist is not None and not spy_hist.empty:
+        spy_idx = spy_hist.index
+        if spy_idx.tz is not None:
+            spy_idx = spy_idx.tz_localize(None)
+        spy_dates = spy_idx
+        spy_closes = spy_hist['Close'].to_numpy(dtype=float)
+    else:
+        logger.warning('SPY history unavailable — equity curve will omit benchmark')
+
     set_progress(job_id, 30, f'Fetched OHLC for {len(all_ohlc)} tickers — pre-computing regimes...')
 
     # Pre-compute per-ticker regime arrays + cumulative transition counts.
@@ -161,6 +180,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     positions = {}   # ticker → {shares, avg_cost, entry_date, entry_bull_5d}
     equity_curve = []
     trades = []
+    spy_baseline_price = None   # SPY close at the first rebalance — anchors the benchmark line at STARTING_CAPITAL
 
     for k, rebal_date in enumerate(rebalance_dates):
         if (k + 1) % 5 == 0 or k == 0:
@@ -304,11 +324,25 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
                 mark = pos['avg_cost']
             positions_value += pos['shares'] * mark
         total_value = cash + positions_value
+
+        # SPY benchmark — normalise to STARTING_CAPITAL at the first rebalance
+        # so both lines share the same y-axis starting point.
+        spy_value = None
+        if spy_dates is not None and len(spy_dates) > 0:
+            sidx = spy_dates.searchsorted(rebal_date, side='right') - 1
+            if sidx >= 0:
+                spy_close = float(spy_closes[sidx])
+                if spy_baseline_price is None:
+                    spy_baseline_price = spy_close
+                if spy_baseline_price > 0:
+                    spy_value = round(STARTING_CAPITAL * (spy_close / spy_baseline_price), 2)
+
         equity_curve.append({
             'date': rebal_date.strftime('%Y-%m-%d'),
             'value': round(total_value, 2),
             'cash': round(cash, 2),
             'positionsValue': round(positions_value, 2),
+            'spyValue': spy_value,
         })
 
     set_progress(job_id, 97, 'Computing summary statistics...')
@@ -367,6 +401,15 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     best_trade = max((t['pnlPct'] for t in closed), default=0)
     worst_trade = min((t['pnlPct'] for t in closed), default=0)
 
+    # SPY benchmark return over the same rebalance window — read the last
+    # non-None spyValue off the equity curve.
+    spy_return = None
+    vs_spy = None
+    last_spy = next((pt['spyValue'] for pt in reversed(equity_curve) if pt.get('spyValue') is not None), None)
+    if last_spy is not None and STARTING_CAPITAL > 0:
+        spy_return = (last_spy / STARTING_CAPITAL - 1) * 100
+        vs_spy = total_return - spy_return
+
     elapsed = time.time() - t_start
     logger.info('Backtest %s done in %.1fs: return=%.1f%%, trades=%d, win_rate=%.1f%%',
                 job_id, elapsed, total_return, num_trades, win_rate)
@@ -394,6 +437,8 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
             'tickersAnalyzed': len(ticker_data),
             'cashAtEnd': round(cash, 2),
             'openPositions': len(open_positions),
+            'spyReturn': round(spy_return, 2) if spy_return is not None else None,
+            'vsSpy': round(vs_spy, 2) if vs_spy is not None else None,
         },
         'equityCurve': equity_curve,
         'trades': trades,
