@@ -42,6 +42,7 @@ from routes.user_data import user_data_bp
 from routes.recommendations import recommendations_bp, prewarm_cache
 from routes.analyst_data import analyst_data_bp
 from routes.custom_etf import custom_etf_bp
+from routes.markov import markov_bp
 
 app = Flask(__name__)
 _raw_origin = os.environ.get('ALLOWED_ORIGIN', 'http://localhost:3000')
@@ -111,6 +112,7 @@ app.register_blueprint(user_data_bp)
 app.register_blueprint(recommendations_bp)
 app.register_blueprint(analyst_data_bp)
 app.register_blueprint(custom_etf_bp)
+app.register_blueprint(markov_bp)
 
 # Rate limits on auth endpoints
 limiter.limit('5/minute')(app.view_functions['auth.login'])

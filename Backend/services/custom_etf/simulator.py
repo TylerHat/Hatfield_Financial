@@ -134,21 +134,35 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
     candidates = green[:buy_slots]
 
     if candidates and portfolio.cash > 0:
-        # Target weight: 1 / max_positions of total equity (cash + marked
-        # holdings). Bounded by available cash so we never overdraft when
-        # several slots open at once. Reserve a 1 % buffer for slippage.
-        target_per_slot = total_equity / cfg.max_positions
-        cash_cap = (portfolio.cash * 0.99) / len(candidates)
-        per_slot = min(target_per_slot, cash_cap)
-        for row in candidates:
+        # Weight-normalised sizing. Each strategy can opt into conviction-
+        # weighted allocation by overriding weight(); the default is 1.0 →
+        # equal weight, identical to the legacy behavior.
+        #
+        # Allocatable dollars: target one slot-equivalent of total equity per
+        # candidate (so opening fewer than max_positions doesn't overload one
+        # name), capped by 99% of cash to leave a buffer for slippage.
+        raw_weights = [max(strategy.weight(row), 0.0) or 1.0 for row in candidates]
+        total_weight = sum(raw_weights) or float(len(candidates))
+        target_total = min(
+            (total_equity / cfg.max_positions) * len(candidates),
+            portfolio.cash * 0.99,
+        )
+        for row, w in zip(candidates, raw_weights):
             quote = row['currentPrice']
             if quote is None or quote <= 0:
                 continue
             buy_price = quote * (1 + slippage)
-            shares = per_slot / buy_price
+            per_position = target_total * (w / total_weight)
+            shares = per_position / buy_price
             if shares <= 0:
                 continue
             cost = shares * buy_price
+            if cost > portfolio.cash:
+                # Guard against floating-point drift on the cap above.
+                shares = (portfolio.cash * 0.999) / buy_price
+                cost = shares * buy_price
+                if shares <= 0:
+                    continue
             portfolio.cash -= cost
             db.session.add(EtfPosition(
                 portfolio_id=portfolio.id, ticker=row['ticker'],

@@ -13,6 +13,8 @@ import {
 } from 'chart.js';
 import { apiFetch } from '../api';
 import { useAuth } from '../AuthContext';
+import MarkovBacktestPanel from './MarkovBacktestPanel';
+import MarkovExplainPanel from './MarkovExplainPanel';
 import './CustomEtfPanel.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -142,6 +144,7 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
   const [error, setError] = useState(null);
   const [flash, setFlash] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [detailView, setDetailView] = useState('live');   // 'live' | 'backtest' (markov only)
 
   // ── Load summary list (lightweight, drives the sidebar) ───────────
   const loadSummaries = useCallback(async () => {
@@ -179,7 +182,19 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
 
   useEffect(() => {
     loadState(activeId);
+    // Reset to Live whenever the active strategy changes — only markov-regime
+    // exposes a Backtest sub-tab, so any other strategy should start on Live.
+    setDetailView('live');
   }, [activeId, loadState]);
+
+  // Safety net: backtest tab is admin-only. If admin status drops while
+  // they're on the Backtest tab, bounce them back to Live so they don't
+  // see a blank pane.
+  useEffect(() => {
+    if (!isAdmin && detailView === 'backtest') {
+      setDetailView('live');
+    }
+  }, [isAdmin, detailView]);
 
   // ── Manual rebalance (force=true skips cooldown) ──────────────────
   const handleRebalance = async (force = false) => {
@@ -343,12 +358,61 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
 
         {/* ── Detail pane for active strategy ── */}
         <div className="cetf-detail">
-          {flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}
-          {error && <div className="cetf-flash cetf-flash--error">{error}</div>}
+          {activeId === 'markov-regime' && (
+            <nav className="cetf-detail-tabs">
+              <button
+                type="button"
+                className={`cetf-detail-tab ${detailView === 'live' ? 'active' : ''}`}
+                onClick={() => setDetailView('live')}
+              >
+                Live Simulation
+              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={`cetf-detail-tab ${detailView === 'backtest' ? 'active' : ''}`}
+                  onClick={() => setDetailView('backtest')}
+                >
+                  Backtest
+                </button>
+              )}
+              <button
+                type="button"
+                className={`cetf-detail-tab ${detailView === 'explain' ? 'active' : ''}`}
+                onClick={() => setDetailView('explain')}
+              >
+                How It Works
+              </button>
+            </nav>
+          )}
 
-          {loading && <div className="cetf-loading">Loading simulation…</div>}
+          {/* Keep the backtest + explain panels MOUNTED but hidden when not
+              active. This preserves the backtest panel's internal state
+              (job id, polling timer, completed result, control selections)
+              across sub-tab switches — switching to "How It Works" and back
+              no longer wipes a running or completed backtest. The polling
+              effect keeps running in the background even while hidden, so a
+              long backtest finishes regardless of which tab is visible. */}
+          {/* Admin-only — the backtest endpoints behind this panel are
+              gated by @admin_required on the backend. */}
+          {isAdmin && activeId === 'markov-regime' && (
+            <div style={{ display: detailView === 'backtest' ? 'block' : 'none' }}>
+              <MarkovBacktestPanel />
+            </div>
+          )}
 
-          {!loading && state && (
+          {activeId === 'markov-regime' && (
+            <div style={{ display: detailView === 'explain' ? 'block' : 'none' }}>
+              <MarkovExplainPanel />
+            </div>
+          )}
+
+          {detailView === 'live' && flash && <div className={`cetf-flash cetf-flash--${flash.kind}`}>{flash.text}</div>}
+          {detailView === 'live' && error && <div className="cetf-flash cetf-flash--error">{error}</div>}
+
+          {detailView === 'live' && loading && <div className="cetf-loading">Loading simulation…</div>}
+
+          {detailView === 'live' && !loading && state && (
             <>
           <div className="cetf-summary-row">
             <SummaryCard label="Total Value" value={fmtMoney(port.totalValue)} />

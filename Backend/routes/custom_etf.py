@@ -26,6 +26,8 @@ from services.custom_etf.simulator import (
     rebalance, reset_portfolio, serialize_state, summarize, get_or_create_portfolio,
 )
 from services.custom_etf.strategies import get_strategy, list_strategies
+from services.custom_etf import backtest_jobs
+from services.custom_etf.markov_portfolio_backtest import run_markov_portfolio_backtest
 
 logger = logging.getLogger(__name__)
 
@@ -263,3 +265,35 @@ def reset_etf(strategy_id):
         'status': 'reset',
         'state': serialize_state(strategy, _recs_by_ticker(stocks)),
     })
+
+
+# ── Backtest (Markov Regime only, for now) ──────────────────────────────
+# Backtests are long-running (10s–5min depending on cache state). Run as a
+# background job; the UI polls /backtest/<job_id> for progress + results.
+
+@custom_etf_bp.route('/markov-regime/backtest', methods=['POST'])
+@admin_required
+def start_markov_backtest():
+    body = request.get_json(silent=True) or {}
+    years = body.get('years', 1)
+    cadence = body.get('cadence', 'weekly')
+
+    if years not in (1, 3):
+        return jsonify({'error': 'years must be 1 or 3'}), 400
+    if cadence not in ('weekly', 'daily'):
+        return jsonify({'error': 'cadence must be "weekly" or "daily"'}), 400
+
+    spec = {'strategy': 'markov-regime', 'years': years, 'cadence': cadence}
+    job_id = backtest_jobs.create_job(spec)
+    backtest_jobs.run_job_async(job_id, run_markov_portfolio_backtest, years, cadence)
+
+    return jsonify({'jobId': job_id, 'spec': spec}), 202
+
+
+@custom_etf_bp.route('/backtest/<job_id>', methods=['GET'])
+@admin_required
+def get_backtest_status(job_id):
+    job = backtest_jobs.get_job(job_id)
+    if job is None:
+        return jsonify({'error': 'Job not found (may have expired)'}), 404
+    return jsonify(job)

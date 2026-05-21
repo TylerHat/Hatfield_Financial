@@ -27,6 +27,7 @@ from data_fetcher import (
     PRIORITY_MEDIUM,
 )
 from sp500 import get_sp500_tickers
+from services.markov import analyze_markov
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,27 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
                 (current_price - fifty_two_low) / (fifty_two_high - fifty_two_low) * 100, 2
             )
 
+        # ── Markov regime fields ──────────────────────────────────────────
+        # Used by the Markov Regime ETF strategy. Cheap (~50ms / ticker) and
+        # uses the same close series we already have in scope.
+        markov_regime = None
+        markov_bull_3d = None
+        markov_bull_5d = None
+        markov_bear_5d = None
+        try:
+            markov = analyze_markov(close.to_numpy(dtype=float))
+            if markov is not None:
+                markov_regime = markov['current_regime']
+                f5 = markov['forecast'].get('5d')
+                f3 = markov['forecast'].get('3d')
+                if f5:
+                    markov_bull_5d = round(f5['bull'], 4)
+                    markov_bear_5d = round(f5['bear'], 4)
+                if f3:
+                    markov_bull_3d = round(f3['bull'], 4)
+        except Exception:
+            pass
+
         return {
             'ticker': ticker,
             'name': name,
@@ -317,6 +339,10 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'fiftyTwoWeekHigh': fifty_two_high,
             'fiftyTwoWeekLow': fifty_two_low,
             'fiftyTwoWeekPosition': fifty_two_position,
+            'markovRegime': markov_regime,
+            'markovBull3d': markov_bull_3d,
+            'markovBull5d': markov_bull_5d,
+            'markovBear5d': markov_bear_5d,
         }
     except Exception as e:
         logger.warning('_build_stock_data failed for ticker: %s', e)
