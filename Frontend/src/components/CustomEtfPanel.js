@@ -313,6 +313,8 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
           {summaries.map((s) => {
             const ret = s.totalReturnPct;
             const retCls = ret > 0 ? 'pos' : ret < 0 ? 'neg' : '';
+            const vsSpy = s.vsSpyPct;
+            const vsSpyCls = vsSpy == null ? '' : vsSpy > 0 ? 'bull' : vsSpy < 0 ? 'bear' : '';
             return (
               <button
                 key={s.id}
@@ -325,6 +327,11 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
                   <span className="cetf-rail__value">{fmtMoney(s.totalValue)}</span>
                   <span className={`cetf-rail__return ${retCls}`}>{fmtPct(ret)}</span>
                 </div>
+                {vsSpy != null && (
+                  <div className={`cetf-rail__vs-spy ${vsSpyCls}`}>
+                    vs SPY {fmtPct(vsSpy)}
+                  </div>
+                )}
                 <div className="cetf-rail__meta">
                   {s.holdingsCount}/{s.maxPositions} held
                   {s.lastRebalanceAt && ' · ' + new Date(s.lastRebalanceAt).toLocaleDateString()}
