@@ -272,7 +272,7 @@ def reset_etf(strategy_id):
 # background job; the UI polls /backtest/<job_id> for progress + results.
 
 @custom_etf_bp.route('/markov-regime/backtest', methods=['POST'])
-@login_required
+@admin_required
 def start_markov_backtest():
     body = request.get_json(silent=True) or {}
     years = body.get('years', 1)
@@ -291,7 +291,7 @@ def start_markov_backtest():
 
 
 @custom_etf_bp.route('/backtest/<job_id>', methods=['GET'])
-@login_required
+@admin_required
 def get_backtest_status(job_id):
     job = backtest_jobs.get_job(job_id)
     if job is None:

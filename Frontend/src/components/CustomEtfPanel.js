@@ -187,6 +187,15 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
     setDetailView('live');
   }, [activeId, loadState]);
 
+  // Safety net: backtest tab is admin-only. If admin status drops while
+  // they're on the Backtest tab, bounce them back to Live so they don't
+  // see a blank pane.
+  useEffect(() => {
+    if (!isAdmin && detailView === 'backtest') {
+      setDetailView('live');
+    }
+  }, [isAdmin, detailView]);
+
   // ── Manual rebalance (force=true skips cooldown) ──────────────────
   const handleRebalance = async (force = false) => {
     if (!activeId) return;
@@ -358,13 +367,15 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
               >
                 Live Simulation
               </button>
-              <button
-                type="button"
-                className={`cetf-detail-tab ${detailView === 'backtest' ? 'active' : ''}`}
-                onClick={() => setDetailView('backtest')}
-              >
-                Backtest
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={`cetf-detail-tab ${detailView === 'backtest' ? 'active' : ''}`}
+                  onClick={() => setDetailView('backtest')}
+                >
+                  Backtest
+                </button>
+              )}
               <button
                 type="button"
                 className={`cetf-detail-tab ${detailView === 'explain' ? 'active' : ''}`}
@@ -382,7 +393,9 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
               no longer wipes a running or completed backtest. The polling
               effect keeps running in the background even while hidden, so a
               long backtest finishes regardless of which tab is visible. */}
-          {activeId === 'markov-regime' && (
+          {/* Admin-only — the backtest endpoints behind this panel are
+              gated by @admin_required on the backend. */}
+          {isAdmin && activeId === 'markov-regime' && (
             <div style={{ display: detailView === 'backtest' ? 'block' : 'none' }}>
               <MarkovBacktestPanel />
             </div>
