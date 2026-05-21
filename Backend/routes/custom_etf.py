@@ -47,12 +47,23 @@ def _load_recommendations():
 
     spy_price = None
     try:
-        from data_fetcher import get_spy_period, PRIORITY_LOW
-        hist = get_spy_period('5d', priority=PRIORITY_LOW)
+        from data_fetcher import get_spy_period, get_spy_history, PRIORITY_MEDIUM
+        # First try the cached 5d period fetch at MEDIUM priority (LOW was
+        # getting starved behind other calls during the daily auto-rebalance).
+        hist = get_spy_period('5d', priority=PRIORITY_MEDIUM)
+        if hist is None or hist.empty:
+            # Fallback: explicit date-range fetch. Different code path, different
+            # cache key — more likely to succeed when the period fetch is failing.
+            end = datetime.now(timezone.utc).date() + timedelta(days=1)
+            start = end - timedelta(days=10)
+            hist = get_spy_history(start.isoformat(), end.isoformat(),
+                                   priority=PRIORITY_MEDIUM)
         if hist is not None and not hist.empty:
             spy_price = float(hist['Close'].iloc[-1])
-    except Exception as e:
-        logger.debug('SPY price fetch failed: %s', e)
+        else:
+            logger.warning('SPY price fetch returned empty — snapshot will have NULL spy_price')
+    except Exception:
+        logger.warning('SPY price fetch failed', exc_info=True)
 
     return cached.get('stocks', []), spy_price
 
