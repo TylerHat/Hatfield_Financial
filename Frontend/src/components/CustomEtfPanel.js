@@ -547,7 +547,13 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
 
           {/* ── Trade History ──────────────────────────────────────── */}
           <section className="cetf-section">
-            <h3>Trade History ({trades.length})</h3>
+            <h3>
+              Trade History (
+              {state.tradeStats?.totalTrades != null && state.tradeStats.totalTrades > trades.length
+                ? `showing ${trades.length} of ${state.tradeStats.totalTrades}`
+                : trades.length}
+              )
+            </h3>
             {trades.length === 0 ? (
               <div className="cetf-empty">No trades recorded yet.</div>
             ) : (

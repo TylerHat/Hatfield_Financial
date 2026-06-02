@@ -427,9 +427,9 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
                     'pnlPct': round(realized_pnl_pct, 2),
                     'executedAt': t.executed_at.isoformat(),
                 }
-                if best_trade is None or realized_pnl > best_trade['pnl']:
+                if best_trade is None or realized_pnl_pct > best_trade['pnlPct']:
                     best_trade = trade_summary
-                if worst_trade is None or realized_pnl < worst_trade['pnl']:
+                if worst_trade is None or realized_pnl_pct < worst_trade['pnlPct']:
                     worst_trade = trade_summary
                 cb['shares'] = max(0.0, cb['shares'] - t.shares)
                 if cb['shares'] <= 1e-9:
@@ -447,12 +447,15 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
             'realizedPnl': round(realized_pnl, 2) if realized_pnl is not None else None,
             'realizedPnlPct': round(realized_pnl_pct, 2) if realized_pnl_pct is not None else None,
         })
-    trade_log = list(reversed(enriched[-200:]))
+    trade_log_limit = 200
+    trade_log = list(reversed(enriched[-trade_log_limit:]))
     closed_total = wins + losses
     trade_stats = {
         'wins': wins,
         'losses': losses,
         'closedTrades': closed_total,
+        'totalTrades': len(enriched),
+        'tradesShown': len(trade_log),
         'winRatePct': round((wins / closed_total) * 100, 1) if closed_total else None,
         'realizedPnl': round(realized_total, 2),
         'bestTrade': best_trade,
