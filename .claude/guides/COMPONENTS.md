@@ -170,6 +170,7 @@ Sortable, scannable data table for signals, screener results, and any tabular fi
 | `caption` | string \| null | `null` | Accessible `<caption>` for screen readers |
 | `rowKey` | string \| function \| null | `null` | React key: field name, `(row, i) => key` function, or falls back to index |
 | `onRowClick` | `(row, index) => void` \| null | `null` | Called when a row is clicked. Adds pointer cursor style to rows via inline style. |
+| `onRowDoubleClick` | `(row, index) => void` \| null | `null` | Called when a row is double-clicked. Used by Recommendations + Watchlist for ticker navigation. |
 
 ### ColumnDef Shape
 
@@ -316,10 +317,14 @@ Multi-panel chart stack with technical indicators, signal overlays, expand/info 
 | Prop | Type | Description |
 |------|------|-------------|
 | `ticker` | string | Active ticker symbol |
-| `startDate` | string | `YYYY-MM-DD` chart start |
-| `endDate` | string | `YYYY-MM-DD` chart end |
+| `fetchStart` | string | `YYYY-MM-DD` upper-bound start for the wider data fetch (App pre-fetches ~1y, then slices) |
+| `fetchEnd` | string | `YYYY-MM-DD` upper-bound end for the data fetch |
+| `startDate` | string | `YYYY-MM-DD` visible chart start (subset of fetch range) |
+| `endDate` | string | `YYYY-MM-DD` visible chart end |
 | `strategy` | string \| null | Active strategy key or `null` for raw chart |
-| `onSignals` | function | `(signals) => void` — lifts signals to parent (`App.js`) |
+| `onRangePerformance` | `(perf \| null) => void` | Reports `{ up, pct }` for the visible range to the parent |
+| `refreshKey` | number | Incrementing key to force a fresh fetch (POSTs to bust the server cache) |
+| `onSignals` | function | `(signals) => void` — **currently dead**: declared and wired internally, but App.js never passes a handler. Lift is a no-op until App.js opts in. |
 
 ### Chart Layout (top to bottom)
 
@@ -400,19 +405,21 @@ S&P 500 batch screener tab. Fetches `/api/recommendations`, displays a filterabl
 
 ### CSS Classes
 
+The actual CSS file uses the short `rec-*` prefix (NOT `recommendations__*`). Key classes:
+
 ```
-recommendations
-recommendations__header
-recommendations__filter-bar
-recommendations__filter-input
-recommendations__strategy-select
-recommendations__table
-recommendations__detail-panel
-recommendations__detail-header
-recommendations__detail-signals
-recommendations__loading
-recommendations__nav-btn
+rec-header
+rec-filter-bar
+rec-strategy-bar
+rec-detail
+rec-loading-banner
+rec-loading-spinner
+rec-table
+rec-buy-score-cell
+rec-nav-btn
 ```
+
+See `Recommendations.css` for the full list.
 
 ---
 
@@ -434,14 +441,14 @@ Displays analyst coverage data: price targets, recommendation trends, upgrades/d
 
 ---
 
-## Backtester
+## Backtester (ORPHANED)
 
 **File**: `components/Backtester.js` + `Backtester.css`
-**Import**: `import Backtester from './components/Backtester'`
+**Status**: **Not imported anywhere.** App.js does not render it; recent commit "made backtesting admin only" did not include re-wiring it into the AdminPanel. The `/api/backtest/<ticker>` endpoint is still live on the backend.
 
-Strategy backtesting panel with equity curve chart, trade history table, and performance summary metrics. Fetches backtest data via `/api/backtest/<ticker>` internally.
+The CSS file also contains the only `@media (max-width: …)` blocks in the entire frontend bundle — a violation of the desktop-only rule. Either delete the component or re-import it under AdminPanel and strip the media queries.
 
-### Props
+### Original Props (preserved for when it is re-wired)
 
 | Prop | Type | Description |
 |------|------|-------------|
@@ -449,6 +456,131 @@ Strategy backtesting panel with equity curve chart, trade history table, and per
 | `strategy` | string | Strategy key (e.g. `bollinger-bands`) |
 | `startDate` | string | `YYYY-MM-DD` backtest start |
 | `endDate` | string | `YYYY-MM-DD` backtest end |
+
+---
+
+## Watchlist
+
+**File**: `components/Watchlist.js` + `Watchlist.css`
+
+User watchlist tab — add/remove tickers, click-to-navigate to Stock Analysis. Fetches `/api/user/watchlists` and `/api/user/watchlists/<id>/data` (bulk price/change/volatility refresh).
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `onNavigateToStock` | `(ticker) => void` | Switch the parent App to the Stock Analysis tab with the given ticker |
+| `onWatchlistChange` | `(items) => void` | Notify the parent when the watchlist contents change (used to sync the "+ Watchlist" button state on the analysis tab) |
+
+---
+
+## CustomEtfPanel
+
+**File**: `components/CustomEtfPanel.js` + `CustomEtfPanel.css`
+
+Custom ETF simulator UI. Strategy sidebar (one row per registered strategy), positions table, trade history, equity curve chart, rebalance button (admin-only). Includes a `NextRebalanceTimer` sub-component that ticks every second to display countdown to the next 9:30 ET auto-rebalance window.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `onNavigateToStock` | `(ticker) => void` | Switch App to the Stock Analysis tab with the given ticker |
+
+---
+
+## MarkovMethod
+
+**File**: `components/MarkovMethod.js`
+
+Markov regime analysis UI for the active ticker. Renders the current regime, the 3×3 transition matrix, stationary distribution, and 1/3/5/10-step forecasts. Used as a sub-tab inside Stock Analysis.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `ticker` | string | Active ticker symbol |
+| `start` | string | `YYYY-MM-DD` window start |
+| `end` | string | `YYYY-MM-DD` window end |
+
+---
+
+## MarkovBacktestPanel
+
+**File**: `components/MarkovBacktestPanel.js`
+
+Admin-launched long-running backtest of the Markov-regime ETF strategy across the full S&P 500. Submits a job via `/api/custom-etf/markov-regime/backtest`, polls `/api/custom-etf/backtest/<job_id>` every 2 s. Displays portfolio metrics + win/loss + drawdown when complete.
+
+No required props.
+
+---
+
+## MarkovExplainPanel
+
+**File**: `components/MarkovExplainPanel.js`
+
+Static explanation card describing the Markov regime classification approach. No props.
+
+---
+
+## InsiderTransactions
+
+**File**: `components/InsiderTransactions.js`
+
+Renders insider buy/sell history (from `stockInfo.insiderTransactions`) and a 90-day net summary.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `transactions` | array | Insider transaction rows from `/api/stock-info` |
+| `net90d` | number | Net shares bought minus sold in the last 90 days |
+| `net90dValue` | number | Dollar value of the 90-day net |
+
+---
+
+## InstitutionalHoldings
+
+**File**: `components/InstitutionalHoldings.js`
+
+Renders the institutional holders table (from `stockInfo.institutionalHolders`) plus a "major holders" summary.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `holders` | array | Per-institution holdings |
+| `major` | object | Aggregate breakdown (insider %, institutional %, etc.) |
+| `totalCount` | number | Total institutional holders disclosed |
+
+---
+
+## AccountPanel
+
+**File**: `components/AccountPanel.js` + `AccountPanel.css`
+
+Profile + email update form. Uses `useAuth()` for the current user; PATCHes `/api/auth/me`. No props.
+
+---
+
+## AdminPanel
+
+**File**: `components/AdminPanel.js` + `AdminPanel.css`
+
+Admin-only user-management table. Grant/revoke admin (PATCH `/api/admin/users/<id>/role`); delete user with a typed-confirm modal (`DeleteConfirmModal`, defined inline). No props.
+
+---
+
+## ApiMonitorPanel
+
+**File**: `components/ApiMonitorPanel.js`
+
+Admin-only yfinance queue metrics recorder. Start a 5- or 10-minute capture, poll every 3 s, display per-minute snapshots (calls, successes, failures, timeouts, cache hits/misses, queue depth, per-endpoint counts). Calls `/api/admin/metrics/start/<minutes>`, `/api/admin/metrics/status`, `/api/admin/metrics/clear`. No props.
+
+---
+
+## AuthPage
+
+**File**: `components/AuthPage.js` + `AuthPage.css`
+
+Login / register form with toggle. Used by App.js's auth gate when no user is logged in. No props.
+
+---
+
+## AboutPage
+
+**File**: `components/AboutPage.js`
+
+Static personal-bio page. No props.
 
 ---
 

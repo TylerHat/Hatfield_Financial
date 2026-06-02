@@ -443,11 +443,13 @@ Returns progress updates during the batch S&P 500 data fetch.
 ```json
 {
   "status": "fetching",
-  "fetched": 250,
-  "total": 503,
-  "pct": 49.7
+  "progress": 250,
+  "stocks": 232,
+  "total": 503
 }
 ```
+
+**Note:** field names are `progress` / `stocks` / `total` (not `fetched` / `pct` as in earlier docs).
 
 ---
 
@@ -601,6 +603,106 @@ Health check endpoint. No auth required.
 ```json
 { "status": "ok" }
 ```
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require `Authorization: Bearer <token>` with `is_admin = true` on the user. Wrong-role returns `403`.
+
+### GET `/api/admin/users`
+List all users (sorted by creation date ascending).
+**Response (200):** `{ "users": [ { id, username, email, is_admin, created_at, last_login_at }, ... ] }`
+
+### DELETE `/api/admin/users/<id>`
+Delete a user and cascade their watchlists, portfolio holdings, settings. Cannot delete yourself (`400`) or another admin (`403`). Rate-limited 10/min.
+
+### PATCH `/api/admin/users/<id>/role`
+Grant or revoke admin. Body `{ "is_admin": bool }`. Cannot change your own role. Rate-limited 10/min.
+
+### POST `/api/admin/metrics/start/<minutes>`
+Start a yfinance-queue metrics recording. `minutes` must be `5` or `10`. Captures per-minute snapshots of call/success/failure/timeout/cache-hit counts + per-endpoint counts.
+**Response:** `{ "status": "started" | "already_recording", "starts_at": <epoch> }`
+
+### GET `/api/admin/metrics/status`
+Return the in-progress recording state and any captured snapshots so far.
+
+### POST `/api/admin/metrics/clear`
+Wipe recorded data. Returns `{ "status": "cleared" }`.
+
+---
+
+## Custom ETF Endpoints
+
+Reads available to any logged-in user; writes are admin-only or use the internal-secret header. Auto-rebalance has a 24h cooldown unless `force=true` is set.
+
+### GET `/api/custom-etf/strategies`
+List all registered strategies (id, name, description, buy/sell thresholds, max positions, starting capital).
+
+### GET `/api/custom-etf/summary`
+Headline stats for every strategy — drives the multi-ETF comparison sidebar.
+
+### GET `/api/custom-etf/<strategy_id>/state`
+Full portfolio state: positions, trades, equity series, summary metrics.
+
+### GET `/api/custom-etf/<strategy_id>/rankings`
+Score every Recommendations row against the strategy, return ranked list.
+
+### POST `/api/custom-etf/<strategy_id>/rebalance` (admin)
+Run a single rebalance pass. Body `{ "force": true }` bypasses the 24h cooldown.
+
+### POST `/api/custom-etf/<strategy_id>/reset` (admin)
+Wipe portfolio state and restart from `starting_capital`.
+
+### POST `/api/custom-etf/auto-rebalance-all`
+Rebalance every registered strategy. Called by the ETF Rebalance Lambda. Requires `X-Internal-Secret` header matching `INTERNAL_API_SECRET` env, OR admin auth.
+
+### POST `/api/custom-etf/markov-regime/backtest` (admin)
+Submit a long-running Markov-regime portfolio backtest job. Returns `{ "job_id": "..." }`.
+
+### GET `/api/custom-etf/backtest/<job_id>`
+Poll job status. Response: `{ "status": "running" | "complete" | "failed", "progress": 0-100, "result": {...} | null, "error": str | null }`.
+
+---
+
+## Markov Endpoint
+
+### GET `/api/markov/<ticker>`
+Per-ticker Markov regime analysis. Query params: `start`, `end` (defaults to last 365 days). Returns current regime label, 3×3 transition matrix, stationary distribution, and N-step forecasts (1, 3, 5, 10 bars).
+
+**Errors:** `404` no data, `422` insufficient history (need at least `LOOKBACK + 1` bars).
+
+---
+
+## User Watchlist Data (Bulk)
+
+### GET `/api/user/watchlists/<id>/data`
+Returns the watchlist with each item enriched with current price, percent change, ATR, and other live fields. Rate-limited 10/min. Used by the Watchlist tab to render the table without per-row fetches.
+
+### GET `/api/user/watchlists/<id>/data/<ticker>`
+Single-ticker enriched view of a watchlist row. Useful for refresh-one-row UX.
+
+---
+
+## PATCH `/api/auth/me`
+
+Update the current user's email and/or password. Requires `Authorization: Bearer <token>`. Rate-limited 10/min.
+**Body** (any subset): `{ "email": str, "current_password": str, "new_password": str }`
+
+---
+
+## Debug Endpoint (no auth)
+
+### GET `/api/debug/yfinance/<ticker>`
+
+Returns raw yfinance dump (info dict, history columns/dtypes, sample rows) for diagnostic purposes. **No auth required — information disclosure surface, should be gated or removed in production.**
+
+---
+
+## Out-of-band Notes
+
+- The Recommendations response includes Markov fields not yet listed in the spec above: `markovRegime` (`Bull` | `Sideways` | `Bear`), `markovBull3d`, `markovBull5d`, `markovBear5d`. All `number | null`.
+- The `/api/stock-info` response returns many more fields than this spec enumerates — including company overview (`longBusinessSummary`, `fullTimeEmployees`, `website`, `city`, `state`, `country`), share/float counts (`sharesOutstanding`, `floatShares`), ISS governance risks (`auditRisk`, `boardRisk`, `compensationRisk`, `shareHolderRightsRisk`, `overallRisk`), split history (`lastSplitFactor`, `lastSplitDate`), and the insider/institutional payloads (`insiderTransactions`, `insiderNet90d`, `insiderNet90dValue`, `institutionalHolders`, `institutionalMajor`, `institutionalCount`). When adding new analysis cards, treat all of these as optional / nullable.
 
 ---
 

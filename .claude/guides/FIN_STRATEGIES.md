@@ -25,7 +25,7 @@ Conviction thresholds: **HIGH** ≥ 60 · **MEDIUM** ≥ 30 · **LOW** < 30
 ## Mean Reversion
 **Key**: `mean-reversion` · **Warmup**: 280 days
 
-**Indicators**: 20-day trailing high, drawdown from that high, 200-day MA (trend filter)
+**Indicators**: 20-day rolling-max high (currently **includes today's close** — no `shift(1)`, unlike 52-Week Breakout which does shift), drawdown from that high, 200-day MA (trend filter)
 
 **Signal logic**
 - **BUY**: Drawdown ≥ 10% from 20-day high AND price above MA200 (uptrend filter) → dip-buying in uptrend
@@ -34,6 +34,8 @@ Conviction thresholds: **HIGH** ≥ 60 · **MEDIUM** ≥ 30 · **LOW** < 30
 State machine: only one BUY allowed per drawdown episode; SELL resets it.
 
 **Score**: `abs(drawdown_pct) × 500`, capped at 100
+
+> ⚠️ The 20-day high not being shifted is a known mild look-ahead. See OPTIMIZATION_FINDINGS.md (Financial Bugs).
 
 ---
 
@@ -213,6 +215,22 @@ Score blend: **valuation 50%** (forwardPE + FCF yield via `buy_score` curves),
 clamped −10% → +50%), **quality 10%** (ROE + debt + gross margin). Uses the
 `prepare()` hook to cache the strong_buy-universe mean upside each rebalance.
 See `undervalued_strong_buy.py`.
+
+### Markov Regime — Conviction-Weighted Bull
+**ID**: `markov-regime` · **Buy ≥** 65 · **Sell ≤** 50 · **Max** 10 · **Slippage** 5 bps · **Starting capital** $100k
+
+Per-ticker Markov regime classifier (Bull / Sideways / Bear) with a 3×3 transition
+matrix forecast. The Recommendations prewarm computes `markovRegime`, `markovBull3d`,
+`markovBull5d`, `markovBear5d` for every S&P 500 row. Score blend:
+**P(Bull in 5d) 50%**, **P(Bull in 3d) 30%**, **current regime is Bull 10%**,
+**(1 − P(Bear in 5d)) 10%** → clamped 0-100.
+
+Eligibility gates: `currentPrice` present, Markov fields present, current regime ≠ Bear,
+`markovBear5d < 0.35`. Position sizing is non-uniform — `weight()` returns
+`max(1.0, 1.0 + (bull_5d − 0.5) × 10)` so a 90% bull forecast gets ~5× the dollar
+allocation of a marginal 55% pick. The only registered strategy that uses non-equal
+weighting today. See `markov_regime.py` and `services/markov/analyze.py` for the
+regime classification math.
 
 ---
 
