@@ -347,6 +347,12 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
                     vs SPY {fmtPct(vsSpy)}
                   </div>
                 )}
+                {s.closedTrades > 0 && (
+                  <div className="cetf-rail__meta">
+                    {s.wins}W / {s.losses}L
+                    {s.winRatePct != null && ` · ${s.winRatePct.toFixed(0)}% win rate`}
+                  </div>
+                )}
                 <div className="cetf-rail__meta">
                   {s.holdingsCount}/{s.maxPositions} held
                   {s.lastRebalanceAt && ' · ' + new Date(s.lastRebalanceAt).toLocaleDateString()}
@@ -421,6 +427,35 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
               label="Total Return"
               value={fmtPct(port.totalReturnPct)}
               accent={port.totalReturnPct >= 0 ? 'pos' : 'neg'}
+            />
+            <SummaryCard
+              label="Win Rate"
+              value={state.tradeStats?.winRatePct == null
+                ? '—'
+                : `${state.tradeStats.winRatePct.toFixed(1)}%`}
+              sub={state.tradeStats?.closedTrades
+                ? `${state.tradeStats.wins}W / ${state.tradeStats.losses}L · ${fmtMoney(state.tradeStats.realizedPnl)} realized`
+                : 'No closed trades yet'}
+              accent={state.tradeStats?.winRatePct == null
+                ? ''
+                : state.tradeStats.winRatePct >= 50 ? 'pos' : 'neg'}
+            />
+            <SummaryCard
+              label="Best Win / Worst Loss"
+              value={(state.tradeStats?.bestTrade || state.tradeStats?.worstTrade) ? (
+                <>
+                  <span className="pos">
+                    {state.tradeStats.bestTrade ? fmtPct(state.tradeStats.bestTrade.pnlPct) : '—'}
+                  </span>
+                  {' / '}
+                  <span className="neg">
+                    {state.tradeStats.worstTrade ? fmtPct(state.tradeStats.worstTrade.pnlPct) : '—'}
+                  </span>
+                </>
+              ) : '—'}
+              sub={(state.tradeStats?.bestTrade || state.tradeStats?.worstTrade)
+                ? `${state.tradeStats.bestTrade?.ticker || '—'} (${fmtMoney(state.tradeStats.bestTrade?.pnl)}) · ${state.tradeStats.worstTrade?.ticker || '—'} (${fmtMoney(state.tradeStats.worstTrade?.pnl)})`
+                : 'No closed trades yet'}
             />
             <SummaryCard label="Holdings" value={`${holdings.length} / ${cfg.maxPositions}`} />
             <SummaryCard
@@ -526,6 +561,8 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
                       <th className="num">Shares</th>
                       <th className="num">Price</th>
                       <th className="num">Value</th>
+                      <th className="num">P&amp;L $</th>
+                      <th className="num">P&amp;L %</th>
                       <th className="num">Score</th>
                       <th>Reason</th>
                       <th className="num">Cash After</th>
@@ -542,6 +579,12 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
                         <td className="num">{t.shares.toFixed(3)}</td>
                         <td className="num">{fmtMoney(t.price)}</td>
                         <td className="num">{fmtMoney(t.value)}</td>
+                        <td className={`num ${t.realizedPnl == null ? '' : t.realizedPnl >= 0 ? 'pos' : 'neg'}`}>
+                          {t.realizedPnl == null ? '—' : fmtMoney(t.realizedPnl)}
+                        </td>
+                        <td className={`num ${t.realizedPnlPct == null ? '' : t.realizedPnlPct >= 0 ? 'pos' : 'neg'}`}>
+                          {t.realizedPnlPct == null ? '—' : fmtPct(t.realizedPnlPct)}
+                        </td>
                         <td className="num"><ScoreBadge score={t.score} /></td>
                         <td><span className="cetf-reason">{t.reason || '—'}</span></td>
                         <td className="num">{fmtMoney(t.cashAfter)}</td>
