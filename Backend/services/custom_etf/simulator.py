@@ -22,6 +22,62 @@ from .strategies.base import EtfStrategy
 logger = logging.getLogger(__name__)
 
 
+def _closed_trade_stats(portfolio_id: int) -> dict:
+    """Walk every trade for the portfolio oldest → newest, maintaining a
+    running weighted-average cost basis per ticker, and aggregate realized
+    P&L stats from each SELL. Used by both summarize() and serialize_state().
+    """
+    trades = (EtfTrade.query
+              .filter_by(portfolio_id=portfolio_id)
+              .order_by(EtfTrade.executed_at.asc()).all())
+    cost_basis = {}
+    wins = losses = 0
+    realized_total = 0.0
+    best = None  # {'ticker', 'pnl', 'pnlPct', 'executedAt'}
+    worst = None
+    for t in trades:
+        if t.action == 'BUY':
+            cb = cost_basis.get(t.ticker, {'shares': 0.0, 'avg_cost': 0.0})
+            new_shares = cb['shares'] + t.shares
+            if new_shares > 0:
+                cb['avg_cost'] = (cb['shares'] * cb['avg_cost'] + t.shares * t.price) / new_shares
+            cb['shares'] = new_shares
+            cost_basis[t.ticker] = cb
+        elif t.action == 'SELL':
+            cb = cost_basis.get(t.ticker)
+            if cb and cb['avg_cost']:
+                pnl = (t.price - cb['avg_cost']) * t.shares
+                pnl_pct = (t.price / cb['avg_cost'] - 1) * 100
+                realized_total += pnl
+                if pnl > 0:
+                    wins += 1
+                else:
+                    losses += 1
+                trade_summary = {
+                    'ticker': t.ticker,
+                    'pnl': round(pnl, 2),
+                    'pnlPct': round(pnl_pct, 2),
+                    'executedAt': t.executed_at.isoformat(),
+                }
+                if best is None or pnl > best['pnl']:
+                    best = trade_summary
+                if worst is None or pnl < worst['pnl']:
+                    worst = trade_summary
+                cb['shares'] = max(0.0, cb['shares'] - t.shares)
+                if cb['shares'] <= 1e-9:
+                    cost_basis.pop(t.ticker, None)
+    total = wins + losses
+    return {
+        'wins': wins,
+        'losses': losses,
+        'closedTrades': total,
+        'winRatePct': round((wins / total) * 100, 1) if total else None,
+        'realizedPnl': round(realized_total, 2),
+        'bestTrade': best,
+        'worstTrade': worst,
+    }
+
+
 def get_or_create_portfolio(strategy: EtfStrategy) -> EtfPortfolio:
     portfolio = EtfPortfolio.query.filter_by(strategy_id=strategy.config.id).first()
     if portfolio is None:
@@ -247,6 +303,8 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
         spy_return_pct = ((spy_latest / spy_baseline) - 1) * 100
         vs_spy_pct = total_return_pct - spy_return_pct
 
+    stats = _closed_trade_stats(portfolio.id)
+
     return {
         'id': cfg.id,
         'name': cfg.name,
@@ -262,6 +320,13 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
         'holdingsCount': len(portfolio.positions),
         'lastRebalanceAt': portfolio.last_rebalance_at.isoformat()
             if portfolio.last_rebalance_at else None,
+        'wins': stats['wins'],
+        'losses': stats['losses'],
+        'closedTrades': stats['closedTrades'],
+        'winRatePct': stats['winRatePct'],
+        'realizedPnl': stats['realizedPnl'],
+        'bestTrade': stats['bestTrade'],
+        'worstTrade': stats['worstTrade'],
     }
 
 
@@ -324,21 +389,75 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
             'spyValue': spy_value,
         })
 
-    trades = (EtfTrade.query
-              .filter_by(portfolio_id=portfolio.id)
-              .order_by(EtfTrade.executed_at.desc())
-              .limit(200).all())
-    trade_log = [{
-        'ticker': t.ticker,
-        'action': t.action,
-        'shares': round(t.shares, 4),
-        'price': t.price,
-        'value': round(t.shares * t.price, 2),
-        'score': t.score,
-        'reason': t.reason,
-        'cashAfter': t.cash_after,
-        'executedAt': t.executed_at.isoformat(),
-    } for t in trades]
+    # Walk trades oldest → newest to maintain a running avg cost per ticker so
+    # we can attach realized P&L to each SELL. Then slice the last 200 and
+    # reverse for the desc-ordered UI.
+    all_trades = (EtfTrade.query
+                  .filter_by(portfolio_id=portfolio.id)
+                  .order_by(EtfTrade.executed_at.asc()).all())
+    cost_basis = {}  # ticker → {'shares': float, 'avg_cost': float}
+    enriched = []
+    wins = losses = 0
+    realized_total = 0.0
+    best_trade = None
+    worst_trade = None
+    for t in all_trades:
+        realized_pnl = None
+        realized_pnl_pct = None
+        if t.action == 'BUY':
+            cb = cost_basis.get(t.ticker, {'shares': 0.0, 'avg_cost': 0.0})
+            new_shares = cb['shares'] + t.shares
+            if new_shares > 0:
+                cb['avg_cost'] = (cb['shares'] * cb['avg_cost'] + t.shares * t.price) / new_shares
+            cb['shares'] = new_shares
+            cost_basis[t.ticker] = cb
+        elif t.action == 'SELL':
+            cb = cost_basis.get(t.ticker)
+            if cb and cb['avg_cost']:
+                realized_pnl = (t.price - cb['avg_cost']) * t.shares
+                realized_pnl_pct = (t.price / cb['avg_cost'] - 1) * 100
+                realized_total += realized_pnl
+                if realized_pnl > 0:
+                    wins += 1
+                else:
+                    losses += 1
+                trade_summary = {
+                    'ticker': t.ticker,
+                    'pnl': round(realized_pnl, 2),
+                    'pnlPct': round(realized_pnl_pct, 2),
+                    'executedAt': t.executed_at.isoformat(),
+                }
+                if best_trade is None or realized_pnl > best_trade['pnl']:
+                    best_trade = trade_summary
+                if worst_trade is None or realized_pnl < worst_trade['pnl']:
+                    worst_trade = trade_summary
+                cb['shares'] = max(0.0, cb['shares'] - t.shares)
+                if cb['shares'] <= 1e-9:
+                    cost_basis.pop(t.ticker, None)
+        enriched.append({
+            'ticker': t.ticker,
+            'action': t.action,
+            'shares': round(t.shares, 4),
+            'price': t.price,
+            'value': round(t.shares * t.price, 2),
+            'score': t.score,
+            'reason': t.reason,
+            'cashAfter': t.cash_after,
+            'executedAt': t.executed_at.isoformat(),
+            'realizedPnl': round(realized_pnl, 2) if realized_pnl is not None else None,
+            'realizedPnlPct': round(realized_pnl_pct, 2) if realized_pnl_pct is not None else None,
+        })
+    trade_log = list(reversed(enriched[-200:]))
+    closed_total = wins + losses
+    trade_stats = {
+        'wins': wins,
+        'losses': losses,
+        'closedTrades': closed_total,
+        'winRatePct': round((wins / closed_total) * 100, 1) if closed_total else None,
+        'realizedPnl': round(realized_total, 2),
+        'bestTrade': best_trade,
+        'worstTrade': worst_trade,
+    }
 
     return {
         'strategy': cfg.to_dict(),
@@ -355,4 +474,5 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
         'holdings': holdings,
         'equitySeries': equity_series,
         'trades': trade_log,
+        'tradeStats': trade_stats,
     }
