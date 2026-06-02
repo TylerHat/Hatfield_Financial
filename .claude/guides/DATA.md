@@ -7,7 +7,7 @@ Documents yfinance behavior, known quirks, and defensive patterns already establ
 ## Data Source
 
 All market data comes from **Yahoo Finance via the `yfinance` Python library**. No API key required.
-Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info 30-min, SPY 10-min, earnings 1-hr, analyst 30-min). User data is stored in SQLite (local) or PostgreSQL (prod).
+Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info **10-min**, SPY 10-min, earnings 1-hr, analyst 30-min). All yfinance HTTP calls funnel through a single-worker priority queue (`YFinanceQueue`) with min inter-call interval `0.3 s` and starvation promotion after 30 s. User data is stored in SQLite (local + prod-on-EFS; the RDS Postgres module exists but is not wired up).
 
 ---
 
@@ -62,21 +62,17 @@ def safe_float(key, decimals=2):
 - `marketCap` can be very large — format with `fmt_large()` helper
 - `recommendationKey` uses underscores (e.g. `'strong_buy'`) — replace with spaces and title-case for display
 
-### `stock.calendar` — Earnings Calendar (primary)
-
-- Returns a dict (newer yfinance) or DataFrame (older versions) with an `'Earnings Date'` key
-- Dict format: `{'Earnings Date': [Timestamp, ...]}` — list of `pd.Timestamp` objects
-- DataFrame format: columns include `'Earnings Date'`
-- **Unreliable**: format varies across yfinance versions; can raise exceptions or return empty
-- Always wrap in `try/except` with fallback to `get_earnings_dates()`
-
-### `stock.get_earnings_dates()` — Earnings Calendar (fallback)
+### `stock.get_earnings_dates()` — Earnings Calendar (primary)
 
 - Returns a DataFrame of upcoming and recent earnings dates
 - **Unreliable**: can raise exceptions, return `None`, or return an empty DataFrame
 - Always wrap in `try/except` and check `if earnings is not None and not earnings.empty`
 - Timezone of `earnings.index` may differ from `hist.index` — align before comparison (see `post_earnings_drift.py`)
-- Used as fallback in `stock_info.py` when `stock.calendar` fails to yield an earnings date
+- Accessed via `data_fetcher.get_earnings_dates(ticker, limit, priority)` with a 1-hour TTL. **Cache key currently ignores `limit`** — first caller wins; mixing `limit=4` and `limit=20` across callers will share a single cached DataFrame.
+
+### `stock.calendar` (not used)
+
+The previous design also fell back to `stock.calendar`, but the current code path uses only `get_earnings_dates()`. The `stock.calendar` field format varies across yfinance versions and is fragile; if you need to re-add it, wrap in `try/except` and verify the format.
 
 ---
 
@@ -170,11 +166,12 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 ## Known Limitations
 
 - **No real-time data**: yfinance returns delayed/end-of-day prices for most tickers
-- **Crypto tickers**: supported (see `CRYPTO_TICKERS` in `sp500.py`), but earnings data is unavailable
+- **Crypto tickers**: yfinance accepts `BTC-USD`-style symbols and the watchlist / portfolio columns now accommodate 20-char tickers (per the prod migration), but earnings/analyst data is unavailable for crypto. `sp500.py` only contains the S&P 500 list plus a fallback list — there is no `CRYPTO_TICKERS` constant.
 - **International tickers**: may work with exchange suffixes (e.g. `ASML.AS`) but timezone handling becomes more complex
 - **Earnings dates**: only reliable for ~2 years of history; far-future dates may be estimates
 - **`info` dict instability**: yfinance occasionally changes field names across library versions — if a field goes missing, `safe_float()` returns `None` gracefully
-- **Caching**: in-memory tiered TTL via `data_fetcher.py`; not persistent across restarts
+- **Negative caching**: `get_ticker_info` skips caching when the response is falsy → every request re-fetches Yahoo for permanently-bad tickers. Cost-relevant.
+- **Caching**: in-memory tiered TTL via `data_fetcher.py`. Not persistent across restarts. The Recommendations payload is the exception — it is mirrored to S3 by the precompute Lambda (`S3_CACHE_BUCKET` env) in prod.
 
 ---
 

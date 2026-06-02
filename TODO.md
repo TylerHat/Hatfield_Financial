@@ -41,13 +41,3 @@ Each entry: Reward (1-10 investor value) / Effort (1-10 implementation cost) / S
 **yfinance data**: `info['sector']` (already fetched in batch); `momentum` (already computed in `_build_stock_data`). Need to add `sector` to the returned dict.
 **Reward**: 8 | **Effort**: 3 | **Score**: 2.67
 **Implementation notes**: In `_build_stock_data()`, add `'sector': info.get('sector', 'Unknown')` to the returned dict. Return it in the `/api/recommendations` response. Frontend aggregates sector data client-side, renders a heatmap-style grid (CSS grid, color-coded by average momentum) above the stock table. No extra API calls needed.
-
-
-# Add ways to analyse Crypto and ETFs, 
-### Make a new main section to analyse cryto popularity and review functions to predict high volitility. 
-this may be a high cost due to analyzing the news for swings
-ETFs might be best to review but will need to have some yfinance queries to see high volume/interest
-
-# Make a strat on this video https://www.youtube.com/watch?v=ZVMTeDBmSrI
-- github https://github.com/jackson-video-resources/markov-hedge-fund-method
-
