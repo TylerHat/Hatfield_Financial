@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -483,7 +483,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     cadence = cadence if cadence in ('weekly', 'daily') else 'weekly'
     years = years if years in (1, 3) else 1
 
-    end_date = pd.Timestamp(datetime.utcnow().date())
+    end_date = pd.Timestamp(datetime.now(timezone.utc).date())
     start_date = end_date - pd.DateOffset(years=years)
     period = _YEARS_TO_PERIOD.get(years, '5y')
 
