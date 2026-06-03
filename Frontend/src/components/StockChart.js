@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -33,6 +33,10 @@ function buildSignalArray(dates, signals, type) {
   });
   return dates.map((d) => (lookup[d] !== undefined ? lookup[d] : null));
 }
+
+// Strategies that get an RSI context panel beneath the chart. Module-level
+// so the Set is built once at import time, not rebuilt every render.
+const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
 
 export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals, onRangePerformance, refreshKey = 0 }) {
   const [stockData, setStockData] = useState(null);
@@ -210,43 +214,64 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     earnings_dates: _earnings_dates,
   } = stockData;
 
-  // Slice the fetched 1-year series down to the visible filter range (in memory).
-  let _startIdx = _dates.findIndex((d) => d >= startDate);
-  if (_startIdx === -1) _startIdx = _dates.length;
-  let _endIdx = _dates.findIndex((d) => d > endDate);
-  if (_endIdx === -1) _endIdx = _dates.length;
-  const _slice = (a) => (Array.isArray(a) ? a.slice(_startIdx, _endIdx) : a);
-
-  const dates = _slice(_dates);
-  const close = _slice(_close);
-  const volume = _slice(_volume);
-  const ma20 = _slice(_ma20);
-  const ma50 = _slice(_ma50);
-  const macd = _slice(_macd);
-  const macd_signal = _slice(_macd_signal);
-  const macd_hist = _slice(_macd_hist);
-  const rsi = _slice(_rsi);
-  const bb_upper = _slice(_bb_upper);
-  const bb_lower = _slice(_bb_lower);
-  const vol_ma20 = _slice(_vol_ma20);
-  const atr = _slice(_atr);
-  const stoch_k = _slice(_stoch_k);
-  const stoch_d = _slice(_stoch_d);
-  const obv = _slice(_obv);
-  const obv_signal = _slice(_obv_signal);
-  const earnings_dates = Array.isArray(_earnings_dates)
-    ? _earnings_dates.filter((d) => d >= startDate && d <= endDate)
-    : _earnings_dates;
+  // Slice the fetched 1-year series down to the visible filter range (in
+  // memory). Memoized on [stockData, startDate, endDate] so the 17 array
+  // slices + 17 sliced arrays aren't rebuilt every time a state change
+  // (strategy switch, info popover, expanded chart, etc.) triggers a
+  // re-render.
+  const sliced = useMemo(() => {
+    let _startIdx = _dates.findIndex((d) => d >= startDate);
+    if (_startIdx === -1) _startIdx = _dates.length;
+    let _endIdx = _dates.findIndex((d) => d > endDate);
+    if (_endIdx === -1) _endIdx = _dates.length;
+    const _slice = (a) => (Array.isArray(a) ? a.slice(_startIdx, _endIdx) : a);
+    return {
+      dates: _slice(_dates),
+      close: _slice(_close),
+      volume: _slice(_volume),
+      ma20: _slice(_ma20),
+      ma50: _slice(_ma50),
+      macd: _slice(_macd),
+      macd_signal: _slice(_macd_signal),
+      macd_hist: _slice(_macd_hist),
+      rsi: _slice(_rsi),
+      bb_upper: _slice(_bb_upper),
+      bb_lower: _slice(_bb_lower),
+      vol_ma20: _slice(_vol_ma20),
+      atr: _slice(_atr),
+      stoch_k: _slice(_stoch_k),
+      stoch_d: _slice(_stoch_d),
+      obv: _slice(_obv),
+      obv_signal: _slice(_obv_signal),
+      earnings_dates: Array.isArray(_earnings_dates)
+        ? _earnings_dates.filter((d) => d >= startDate && d <= endDate)
+        : _earnings_dates,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockData, startDate, endDate]);
+  const {
+    dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi,
+    bb_upper, bb_lower, vol_ma20, atr, stoch_k, stoch_d, obv, obv_signal,
+    earnings_dates,
+  } = sliced;
 
   // Only show signals whose date falls inside the visible range.
-  const visibleSignals = signals.filter((s) => s.date >= startDate && s.date <= endDate);
+  const visibleSignals = useMemo(
+    () => signals.filter((s) => s.date >= startDate && s.date <= endDate),
+    [signals, startDate, endDate],
+  );
 
   // Strategies where RSI context panel adds value
-  const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
   const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
 
-  const buyData = buildSignalArray(dates, visibleSignals, 'BUY');
-  const sellData = buildSignalArray(dates, visibleSignals, 'SELL');
+  const buyData = useMemo(
+    () => buildSignalArray(dates, visibleSignals, 'BUY'),
+    [dates, visibleSignals],
+  );
+  const sellData = useMemo(
+    () => buildSignalArray(dates, visibleSignals, 'SELL'),
+    [dates, visibleSignals],
+  );
 
   // ── Price chart ──────────────────────────────────────────────────────────────
   const priceData = {
@@ -332,11 +357,14 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         fill: false,
         order: 5,
       }] : []),
-      // Earnings date markers — vertical spikes at earnings dates
+      // Earnings date markers — vertical spikes at earnings dates.
+      // Use the dates.map index `i` directly instead of dates.indexOf(d),
+      // which made this an O(n²) scan for a sub-second chart that re-runs
+      // every render.
       ...(() => {
         if (!earnings_dates || earnings_dates.length === 0) return [];
         const earningsSet = new Set(earnings_dates);
-        const earningsData = dates.map((d) => earningsSet.has(d) ? close[dates.indexOf(d)] : null);
+        const earningsData = dates.map((d, i) => (earningsSet.has(d) ? close[i] : null));
         const hasAny = earningsData.some((v) => v !== null);
         if (!hasAny) return [];
         return [{

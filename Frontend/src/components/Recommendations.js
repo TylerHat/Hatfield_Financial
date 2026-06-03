@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
@@ -63,6 +63,18 @@ function formatTimeAgo(isoOrTimestamp) {
   const hrs = Math.floor(mins / 60);
   if (hrs === 1) return '1 hour ago';
   return `${hrs} hours ago`;
+}
+
+// Self-contained "Updated X mins ago" badge. Owning its own 30s tick here
+// (instead of in the parent Recommendations component) means only this
+// little span re-renders every 30s — not the entire 500-row tab tree.
+function TimeAgoLabel({ ts }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((v) => v + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{formatTimeAgo(ts)}</>;
 }
 
 const NONE_STRATEGY = { value: 'none', label: 'None' };
@@ -423,7 +435,6 @@ export default function Recommendations({ onNavigateToStock }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
-  const tickRef = useRef(null);
 
   const etfScoreColumn = {
     key: 'etfScore',
@@ -474,11 +485,8 @@ export default function Recommendations({ onNavigateToStock }) {
     ..._STATIC_COLUMNS,
   ];
 
-  // Re-render the "X mins ago" label every 30s
-  useEffect(() => {
-    tickRef.current = setInterval(() => setLastUpdated((v) => v), 30000);
-    return () => clearInterval(tickRef.current);
-  }, []);
+  // (The "X mins ago" tick lives inside <TimeAgoLabel> at the module top
+  // so it doesn't force-rerender the whole tab tree every 30 seconds.)
 
   // Fetch recommendations on mount with localStorage cache
   useEffect(() => {
@@ -654,21 +662,30 @@ export default function Recommendations({ onNavigateToStock }) {
     }
   }, [onNavigateToStock]);
 
-  // Compute filter counts
-  const counts = {};
-  counts.all = stocks.length;
-  FILTERS.slice(1).forEach((f) => {
-    counts[f.key] = stocks.filter((s) => s.recommendationKey === f.key).length;
-  });
+  // Compute filter counts (one pass over `stocks`, not one per filter)
+  const counts = useMemo(() => {
+    const out = { all: stocks.length };
+    for (const f of FILTERS.slice(1)) out[f.key] = 0;
+    for (const s of stocks) {
+      if (s.recommendationKey && out[s.recommendationKey] !== undefined) {
+        out[s.recommendationKey] += 1;
+      }
+    }
+    return out;
+  }, [stocks]);
 
   // Apply filter
-  const filteredStocks = filter === 'all'
-    ? stocks
-    : stocks.filter((s) => s.recommendationKey === filter);
+  const filteredStocks = useMemo(
+    () => (filter === 'all' ? stocks : stocks.filter((s) => s.recommendationKey === filter)),
+    [stocks, filter],
+  );
 
-  // Add _rowClass, buyScore, and (when a Custom ETF strategy is active) etfScore/etfRank
+  // Build the rows array — computeBuyScore is ~10 lookups + arithmetic per
+  // row, so on a 500-stock universe this is ~5000 ops per render. useMemo
+  // keeps it stable across re-renders that only touch unrelated state
+  // (filter chip, search box, expanded-row toggling…).
   const strategyActive = selectedStrategy !== 'none';
-  const rows = filteredStocks.map((s) => {
+  const rows = useMemo(() => filteredStocks.map((s) => {
     const r = rankings.byTicker[s.ticker];
     return {
       ...s,
@@ -678,14 +695,21 @@ export default function Recommendations({ onNavigateToStock }) {
       etfHeld: r?.held ?? false,
       _rowClass: s.ticker === expandedTicker ? 'rec-row--selected' : '',
     };
-  });
+  }), [filteredStocks, rankings.byTicker, expandedTicker]);
 
   // Get expanded stock data
-  const expandedStock = expandedTicker ? stocks.find((s) => s.ticker === expandedTicker) : null;
-  const expandedRank = expandedTicker ? rankings.byTicker[expandedTicker] : null;
-  const activeStrategyMeta = strategyActive
-    ? etfStrategies.find((es) => es.id === selectedStrategy)
-    : null;
+  const expandedStock = useMemo(
+    () => (expandedTicker ? stocks.find((s) => s.ticker === expandedTicker) : null),
+    [expandedTicker, stocks],
+  );
+  const expandedRank = useMemo(
+    () => (expandedTicker ? rankings.byTicker[expandedTicker] : null),
+    [expandedTicker, rankings.byTicker],
+  );
+  const activeStrategyMeta = useMemo(
+    () => (strategyActive ? etfStrategies.find((es) => es.id === selectedStrategy) : null),
+    [strategyActive, etfStrategies, selectedStrategy],
+  );
 
   return (
     <div className="rec-tab">
@@ -697,7 +721,7 @@ export default function Recommendations({ onNavigateToStock }) {
             {stocks.length} stocks loaded
             {lastUpdated && (
               <span style={{ marginLeft: 8, color: '#8b949e' }}>
-                · Updated {formatTimeAgo(lastUpdated)}
+                · Updated <TimeAgoLabel ts={lastUpdated} />
                 {refreshing && <span className="rec-loading-spinner" style={{ marginLeft: 6, width: 12, height: 12 }} />}
               </span>
             )}
