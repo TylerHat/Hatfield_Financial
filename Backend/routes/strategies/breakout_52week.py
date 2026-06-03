@@ -7,6 +7,24 @@ from data_fetcher import get_ohlcv
 bk_bp = Blueprint('breakout_52week', __name__)
 
 
+def _estimate_bars_per_year(hist) -> int:
+    """Infer the ticker's trading-days-per-year from the bar density of
+    the fetched history. Returns 365 for assets with >= ~330 bars/year
+    (crypto), else 252 (US equities). Falls back to 252 when there isn't
+    enough history to estimate.
+    """
+    if hist is None or hist.empty or len(hist) < 30:
+        return 252
+    try:
+        span_days = (hist.index[-1] - hist.index[0]).days
+        if span_days <= 0:
+            return 252
+        density = len(hist) / span_days * 365.0
+    except Exception:
+        return 252
+    return 365 if density >= 330 else 252
+
+
 @bk_bp.route('/api/strategy/52-week-breakout/<ticker>')
 def breakout_52week(ticker):
     try:
@@ -24,10 +42,17 @@ def breakout_52week(ticker):
                 'signals': []
             }), 404
 
-        # Rolling 252-day high and low (52-week)
+        # Rolling 52-week high and low — number of bars depends on the
+        # ticker's trading calendar. US equities trade ~252 days/year, so
+        # the conventional 52-week window is 252 bars. Crypto trades 24/7
+        # (yfinance returns ~365 bars/year for `-USD` symbols), so 252
+        # bars there is only ~36 weeks. Detect the symbol's cadence from
+        # the bar density of the fetched series itself — robust to
+        # whatever naming convention yfinance lands on.
+        bars_per_year = _estimate_bars_per_year(hist)
         # Use shift(1) so today's close doesn't influence today's breakout threshold
-        hist['High52'] = hist['Close'].shift(1).rolling(252).max()
-        hist['Low52'] = hist['Close'].shift(1).rolling(252).min()
+        hist['High52'] = hist['Close'].shift(1).rolling(bars_per_year).max()
+        hist['Low52'] = hist['Close'].shift(1).rolling(bars_per_year).min()
 
         # 20-day average volume for confirmation. shift(1) so today's volume
         # isn't part of the average today's volume is then compared against
