@@ -1,13 +1,9 @@
 flask
 flask-cors
 flask-sqlalchemy
-flask-migrate
 PyJWT
 flask-limiter
 yfinance>=1.2.2
-requests-cache
-requests-ratelimiter
-pyrate-limiter<3.0
 pandas
 numpy
 gunicorn

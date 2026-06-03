@@ -22,7 +22,7 @@
 
 ## Backend Rules (Flask)
 
-- No provider logic inside routes — routes call `data_fetcher` helpers only (currently violated in `routes/stock_info.py` debug endpoint)
+- No provider logic inside routes — routes call `data_fetcher` helpers only.
 - All yfinance access goes through `data_fetcher.py` (priority queue + tiered cache). Do not call `yf.Ticker(...)` from a route.
 - Services handle: input validation, caching, normalization, error mapping
 - Cache TTLs are tuned per data type (see DATA.md). Add new helpers there, not in routes.

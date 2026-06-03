@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 

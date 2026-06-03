@@ -35,12 +35,11 @@ BULL_5D_MIN_FLOOR = 0.30    # sanity floor — don't pick anything below this ev
 BEAR_5D_BUY_CAP = 0.35
 MIN_TRANSITIONS = 10        # need this many observed transitions before signals fire
 
-# Map years → yfinance period string. Period needs to cover backtest window
-# PLUS ~1.5 years of warmup so the matrix has enough history at bar 0.
-_YEARS_TO_PERIOD = {
-    1: '5y',
-    3: '5y',
-}
+# yfinance period covering the backtest window PLUS ~1.5 years of warmup so
+# the transition matrix has enough history at bar 0. Both the 1-year and
+# 3-year UI options need the same '5y' window — there's no per-years
+# distinction to make.
+_BACKTEST_FETCH_PERIOD = '5y'
 
 
 def _row_normalise(counts):
@@ -510,7 +509,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
 
     end_date = pd.Timestamp(datetime.now(timezone.utc).date())
     start_date = end_date - pd.DateOffset(years=years)
-    period = _YEARS_TO_PERIOD.get(years, '5y')
+    period = _BACKTEST_FETCH_PERIOD
 
     def _cb(pct, msg):
         set_progress(job_id, pct, msg)
