@@ -16,33 +16,45 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from data_fetcher import get_ohlcv, PRIORITY_MEDIUM
 from models import db, EtfPortfolio, EtfPosition, EtfTrade, EtfEquitySnapshot
 from .strategies.base import EtfStrategy
+import data_fetcher
 
 logger = logging.getLogger(__name__)
 
 
-def _last_known_close(ticker: str) -> float | None:
-    """Fetch the most recent close for a ticker that has dropped out of the
-    recommendation universe. Returns None if no data can be retrieved.
+def _fetch_exit_price(ticker: str) -> float | None:
+    """Best-effort current price for a ticker that's dropped out of the
+    recommendations universe. Tries .info first (currentPrice / regularMarket-
+    Price — freshest quote, often already cached) and falls back to the most
+    recent OHLCV close. Returns None if both fail (e.g. delisted).
 
     Used by EXIT_UNIVERSE sells so we don't book a fake $0 P&L by selling at
     cost basis when the ticker actually moved between buy and exit.
     """
     try:
-        end = datetime.now(timezone.utc)
-        # Pull ~2 weeks so we tolerate weekends/halts and still return a close
-        hist = get_ohlcv(ticker, end - timedelta(days=14), end, priority=PRIORITY_MEDIUM)
+        info = data_fetcher.get_ticker_info(ticker, priority=data_fetcher.PRIORITY_LOW)
+        if info:
+            price = info.get('currentPrice') or info.get('regularMarketPrice')
+            if price and price > 0:
+                return float(price)
     except Exception as exc:
-        logger.warning('EXIT_UNIVERSE %s: get_ohlcv failed: %s', ticker, exc)
-        return None
-    if hist is None or hist.empty or 'Close' not in hist.columns:
-        return None
-    close = hist['Close'].dropna()
-    if close.empty:
-        return None
-    return float(close.iloc[-1])
+        logger.debug('EXIT_UNIVERSE %s: get_ticker_info failed: %s', ticker, exc)
+
+    try:
+        end = datetime.now(timezone.utc)
+        hist = data_fetcher.get_ohlcv(ticker, end - timedelta(days=14), end,
+                                      priority=data_fetcher.PRIORITY_LOW)
+        if hist is not None and not hist.empty and 'Close' in hist.columns:
+            close = hist['Close'].dropna()
+            if not close.empty:
+                last_close = float(close.iloc[-1])
+                if last_close > 0:
+                    return last_close
+    except Exception as exc:
+        logger.debug('EXIT_UNIVERSE %s: get_ohlcv failed: %s', ticker, exc)
+
+    return None
 
 
 def _closed_trade_stats(portfolio_id: int) -> dict:
@@ -167,11 +179,11 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
         row = universe.get(ticker)
         if row is None:
             # Out-of-universe: the recommendations snapshot has no current
-            # quote for this ticker. Fetch a fresh last close so the realized
-            # P&L reflects the actual market move since entry. Apply slippage
-            # symmetrically with SCORE_DROP sells. Fall back to cost basis
-            # only when no price can be retrieved (delisted, etc.).
-            fresh = _last_known_close(ticker)
+            # quote for this ticker. Fetch a fresh quote (.info → OHLCV) so
+            # the realized P&L reflects the actual market move since entry.
+            # Apply slippage symmetrically with SCORE_DROP sells. Fall back
+            # to cost basis only when no price can be retrieved (delisted).
+            fresh = _fetch_exit_price(ticker)
             if fresh is not None:
                 sell_price = fresh * (1 - slippage)
             else:
