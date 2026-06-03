@@ -4,46 +4,12 @@ import pandas as pd
 from datetime import datetime, date, timedelta, timezone
 from flask import Blueprint, jsonify, request
 
-import yfinance as yf
 from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, get_insider_transactions, get_institutional_holders, clear_cache, clear_ticker_cache, PRIORITY_HIGH
 from services.indicators import compute_rsi as shared_compute_rsi, macd_strength
 
 logger = logging.getLogger(__name__)
 
 stock_info_bp = Blueprint('stock_info', __name__)
-logger.info(f'stock_info blueprint created: {stock_info_bp}')
-
-
-@stock_info_bp.route('/api/debug/yfinance/<ticker>')
-def debug_yfinance(ticker):
-    """Temporary debug endpoint — returns raw yfinance DataFrame info for insider/institutional data."""
-    ticker = ticker.upper()
-    stock = yf.Ticker(ticker)
-    out = {}
-
-    for prop in ('insider_transactions', 'institutional_holders', 'major_holders'):
-        try:
-            df = getattr(stock, prop)
-            if df is None:
-                out[prop] = {'status': 'None returned'}
-            elif hasattr(df, 'empty') and df.empty:
-                out[prop] = {'status': 'empty DataFrame'}
-            else:
-                sample = []
-                for _, row in df.head(3).iterrows():
-                    sample.append({str(k): str(v) for k, v in row.items()})
-                out[prop] = {
-                    'status': 'ok',
-                    'columns': list(df.columns),
-                    'index_name': str(df.index.name),
-                    'dtypes': {str(k): str(v) for k, v in df.dtypes.items()},
-                    'rows': len(df),
-                    'sample': sample,
-                }
-        except Exception as exc:
-            out[prop] = {'status': 'error', 'error': str(exc)}
-
-    return jsonify(out)
 
 
 # Backwards-compat shim: this module's `compute_rsi` previously used

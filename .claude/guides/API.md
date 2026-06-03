@@ -691,14 +691,6 @@ Update the current user's email and/or password. Requires `Authorization: Bearer
 
 ---
 
-## Debug Endpoint (no auth)
-
-### GET `/api/debug/yfinance/<ticker>`
-
-Returns raw yfinance dump (info dict, history columns/dtypes, sample rows) for diagnostic purposes. **No auth required — information disclosure surface, should be gated or removed in production.**
-
----
-
 ## Out-of-band Notes
 
 - The Recommendations response includes Markov fields not yet listed in the spec above: `markovRegime` (`Bull` | `Sideways` | `Bear`), `markovBull3d`, `markovBull5d`, `markovBear5d`. All `number | null`.
