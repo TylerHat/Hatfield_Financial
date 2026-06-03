@@ -92,6 +92,12 @@ def validate_registration(username, password):
     if not password or len(password) < 8:
         return 'Password must be at least 8 characters'
 
+    # Cap upper bound so a megabyte-sized password can't tie up the
+    # bcrypt/pbkdf2 hasher (intentional DoS vector). 128 is well beyond
+    # any realistic passphrase.
+    if len(password) > 128:
+        return 'Password must be 128 characters or less'
+
     if not re.search(r'[A-Z]', password):
         return 'Password must contain at least one uppercase letter'
 

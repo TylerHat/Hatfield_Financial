@@ -56,16 +56,14 @@ def ma_confluence(ticker):
 
             # Bullish confluence: price > MA20 > MA50 > MA200
             bullish_now = close > ma20 and ma20 > ma50 and ma50 > ma200
-            # Previous day NOT in bullish confluence (crossover moment detection)
-            prev_close_val = float(prev['Close'])
-            prev_ma20_val = float(prev['MA20'])
-            prev_ma50_val = float(prev['MA50'])
-            prev_ma200_val = float(prev['MA200'])
-            bullish_prev = prev_close_val > prev_ma20_val and prev_ma20_val > prev_ma50_val and prev_ma50_val > prev_ma200_val
+            # Previous day's MA stack (crossover moment detection)
+            prev_ma50 = float(prev['MA50'])
+            prev_ma200 = float(prev['MA200'])
+            bullish_prev = prev_close > prev_ma20 and prev_ma20 > prev_ma50 and prev_ma50 > prev_ma200
 
             # Bearish confluence: price < MA20 < MA50 < MA200
             bearish_now = close < ma20 and ma20 < ma50 and ma50 < ma200
-            bearish_prev = prev_close_val < prev_ma20_val and prev_ma20_val < prev_ma50_val and prev_ma50_val < prev_ma200_val
+            bearish_prev = prev_close < prev_ma20 and prev_ma20 < prev_ma50 and prev_ma50 < prev_ma200
 
             if bullish_now and not bullish_prev:
                 # Score: based on MA separation (wider = stronger)

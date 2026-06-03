@@ -6,7 +6,11 @@ Weights and curves must stay in sync with the JS implementation. If the JS
 formula changes, mirror the change here.
 """
 
+import logging
+
 from .base import EtfStrategy, StrategyConfig
+
+logger = logging.getLogger(__name__)
 
 
 def _pe_score(pe):
@@ -60,8 +64,13 @@ def _gross_margin_score(g):
 
 
 def _avg(values):
+    """Average of non-None values. Returns the neutral midpoint 50 if every
+    input is None, and logs the fallback so a ticker with universally
+    missing data is visible in logs (rather than silently scoring as
+    "neutral" alongside genuinely-neutral tickers)."""
     v = [x for x in values if x is not None]
     if not v:
+        logger.debug('_avg: all inputs were None — returning neutral 50')
         return 50
     return sum(v) / len(v)
 

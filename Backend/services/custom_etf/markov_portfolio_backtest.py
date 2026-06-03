@@ -150,13 +150,19 @@ def _walk_forward_markov(
         regime = classify_regimes(close)
         n = len(regime)
 
-        cum_counts = np.zeros((n + 1, 3, 3), dtype=int)
+        # Build per-bar transition events (n, 3, 3) and cumulate along axis 0.
+        # int16 caps at 32k transitions — comfortably above the worst-case
+        # ~1250 bars × 1 transition per cell. Drops memory ~4x vs the
+        # platform-default int64 (45MB → ~11MB across 500 tickers) and
+        # replaces the O(n²) per-step copy in the original loop with a
+        # single O(n) cumsum.
+        events = np.zeros((n + 1, 3, 3), dtype=np.int16)
         for j in range(1, n):
-            cum_counts[j + 1] = cum_counts[j]
             prev_r = regime[j - 1]
             curr_r = regime[j]
             if prev_r != -1 and curr_r != -1:
-                cum_counts[j + 1, prev_r, curr_r] += 1
+                events[j + 1, prev_r, curr_r] = 1
+        cum_counts = np.cumsum(events, axis=0, dtype=np.int16)
 
         # Make index tz-naive so comparison with start/end pd.Timestamp works.
         idx = hist.index

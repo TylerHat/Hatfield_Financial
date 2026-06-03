@@ -22,6 +22,12 @@ def relative_strength(ticker):
         if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
 
+        if spy_hist is None or spy_hist.empty:
+            return jsonify({
+                'error': 'SPY benchmark data unavailable — relative strength cannot be computed.',
+                'signals': [],
+            }), 503
+
         # Align on common dates
         combined = pd.DataFrame({
             'stock': hist['Close'],
