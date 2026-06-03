@@ -35,9 +35,10 @@ def get_stock_data(ticker):
         hist['MA20'] = hist['Close'].rolling(20).mean()
         hist['MA50'] = hist['Close'].rolling(50).mean()
 
-        # Bollinger Bands (20-period, 2 std dev)
-        hist['BB_Upper'] = hist['MA20'] + 2 * hist['Close'].rolling(20).std()
-        hist['BB_Lower'] = hist['MA20'] - 2 * hist['Close'].rolling(20).std()
+        # Bollinger Bands (20-period, 2 std dev) — compute std once, reuse
+        std20 = hist['Close'].rolling(20).std()
+        hist['BB_Upper'] = hist['MA20'] + 2 * std20
+        hist['BB_Lower'] = hist['MA20'] - 2 * std20
 
         # Volume moving average (20-day)
         hist['Vol_MA20'] = hist['Volume'].rolling(20).mean()

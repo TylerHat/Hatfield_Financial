@@ -32,7 +32,13 @@ def register():
     # Final uniqueness is enforced by the DB constraint + IntegrityError catch
     # below — two simultaneous registrations can otherwise both pass the pre-
     # flight and race into a 500 at commit time.
-    if User.query.filter_by(username=username).first():
+    #
+    # Username compare is case-insensitive ("Bob" vs "bob" shouldn't both
+    # register). The DB column itself is still case-sensitive at the
+    # constraint level, so a same-username-different-case race can still
+    # slip through; closing that requires a `lower(username)` unique index
+    # which is a migration — out of scope for this PR.
+    if User.query.filter(db.func.lower(User.username) == username.lower()).first():
         return jsonify({'error': 'Username already taken'}), 409
 
     if email and User.query.filter_by(email=email).first():
@@ -66,7 +72,7 @@ def login():
     if not username or not password:
         return jsonify({'error': 'Username and password are required'}), 400
 
-    user = User.query.filter_by(username=username).first()
+    user = User.query.filter(db.func.lower(User.username) == username.lower()).first()
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid username or password'}), 401
 

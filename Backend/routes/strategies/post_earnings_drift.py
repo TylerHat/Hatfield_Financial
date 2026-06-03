@@ -27,26 +27,32 @@ def post_earnings_drift(ticker):
         signals = []
 
         if earnings is not None and not earnings.empty:
-            # Normalize timezone for comparison
+            # Normalize timezone for comparison. Use hist.index.tz directly
+            # (a pytz / DatetimeTZDtype object) — `str(hist_tz)` is
+            # unreliable for non-standard tz objects.
+            #
+            # ALSO: never mutate `earnings.index` in place — `earnings`
+            # comes straight from the data_fetcher cache, so re-assigning
+            # its index pollutes the cached DataFrame for every subsequent
+            # request. Operate on a local copy and re-index that.
             hist_tz = hist.index.tz
             if hist_tz is not None:
-                start_ts = pd.Timestamp(start).tz_localize(str(hist_tz))
-                end_ts = pd.Timestamp(end).tz_localize(str(hist_tz))
+                start_ts = pd.Timestamp(start).tz_localize(hist_tz)
+                end_ts = pd.Timestamp(end).tz_localize(hist_tz)
             else:
                 start_ts = pd.Timestamp(start)
                 end_ts = pd.Timestamp(end)
 
-            # Align earnings timezone to hist
-            if earnings.index.tz is not None and hist_tz is None:
-                earnings.index = earnings.index.tz_localize(None)
-            elif earnings.index.tz is None and hist_tz is not None:
-                earnings.index = earnings.index.tz_localize(str(hist_tz))
+            earnings_idx = earnings.index
+            if earnings_idx.tz is not None and hist_tz is None:
+                earnings_idx = earnings_idx.tz_localize(None)
+            elif earnings_idx.tz is None and hist_tz is not None:
+                earnings_idx = earnings_idx.tz_localize(hist_tz)
 
-            earnings_in_range = earnings[
-                (earnings.index >= start_ts) & (earnings.index <= end_ts)
-            ]
+            mask = (earnings_idx >= start_ts) & (earnings_idx <= end_ts)
+            earnings_in_range_index = earnings_idx[mask]
 
-            for earn_date in earnings_in_range.index:
+            for earn_date in earnings_in_range_index:
                 # Days in hist after the earnings date
                 post = hist[hist.index > earn_date]
                 pre = hist[hist.index <= earn_date]

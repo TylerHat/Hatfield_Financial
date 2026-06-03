@@ -45,7 +45,7 @@ def mean_reversion(ticker):
             drawdown_pct = float(row['Drawdown'])
 
             # MA200 trend filter — skip BUY signals in downtrends
-            ma200 = row.get('MA200') if hasattr(row, 'get') else row['MA200']
+            ma200 = row.get('MA200')
             in_uptrend = not pd.isna(ma200) and float(row['Close']) > float(ma200)
 
             # Drawdown ≥ 10% from 20-day high + price above MA200 → BUY

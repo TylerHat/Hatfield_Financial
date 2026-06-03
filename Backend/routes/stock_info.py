@@ -181,7 +181,11 @@ def get_stock_info(ticker):
             volatility_status = 'Normal Volatility'
 
         # ── Volume ────────────────────────────────────────────────────────────
-        avg_volume = float(hist['Volume'].rolling(20).mean().iloc[-1])
+        # rolling(20).mean().iloc[-1] is NaN when hist has < 20 bars.
+        # Explicit guard so downstream conditionals don't rely on NaN being
+        # falsy.
+        _avg_vol_raw = hist['Volume'].rolling(20).mean().iloc[-1]
+        avg_volume = float(_avg_vol_raw) if not pd.isna(_avg_vol_raw) else 0.0
         curr_volume = float(hist['Volume'].iloc[-1])
         vol_relative = round(curr_volume / avg_volume * 100) if avg_volume > 0 else 100
         recent_avg = float(hist['Volume'].iloc[-5:].mean())
@@ -263,22 +267,31 @@ def get_stock_info(ticker):
                 pass
 
         # ── Relative Strength vs SPY ─────────────────────────────────────────
+        # Align the stock and SPY series to their common trading days before
+        # taking returns. iloc[-22] / iloc[-63] on each series independently
+        # would compare different calendar windows for crypto (365 trading
+        # days/yr) vs US stocks (~252), producing a misleading "relative
+        # strength" number.
         rel_strength_data = {}
         try:
             spy_hist = get_spy_period('3mo', priority=PRIORITY_HIGH)
-            if spy_hist is not None and not spy_hist.empty and len(hist) >= 63 and len(spy_hist) >= 63:
-                stock_1m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-22]) - 1) * 100
-                spy_1m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-22]) - 1) * 100
-                stock_3m = (float(hist['Close'].iloc[-1]) / float(hist['Close'].iloc[-63]) - 1) * 100
-                spy_3m = (float(spy_hist['Close'].iloc[-1]) / float(spy_hist['Close'].iloc[-63]) - 1) * 100
-                rel_strength_data = {
-                    'relStrength1M': round(stock_1m - spy_1m, 2),
-                    'relStrength3M': round(stock_3m - spy_3m, 2),
-                    'stock1MReturn': round(stock_1m, 2),
-                    'spy1MReturn': round(spy_1m, 2),
-                    'stock3MReturn': round(stock_3m, 2),
-                    'spy3MReturn': round(spy_3m, 2),
-                }
+            if spy_hist is not None and not spy_hist.empty:
+                common_idx = hist.index.intersection(spy_hist.index)
+                if len(common_idx) >= 63:
+                    stock_aligned = hist['Close'].reindex(common_idx)
+                    spy_aligned = spy_hist['Close'].reindex(common_idx)
+                    stock_1m = (float(stock_aligned.iloc[-1]) / float(stock_aligned.iloc[-22]) - 1) * 100
+                    spy_1m = (float(spy_aligned.iloc[-1]) / float(spy_aligned.iloc[-22]) - 1) * 100
+                    stock_3m = (float(stock_aligned.iloc[-1]) / float(stock_aligned.iloc[-63]) - 1) * 100
+                    spy_3m = (float(spy_aligned.iloc[-1]) / float(spy_aligned.iloc[-63]) - 1) * 100
+                    rel_strength_data = {
+                        'relStrength1M': round(stock_1m - spy_1m, 2),
+                        'relStrength3M': round(stock_3m - spy_3m, 2),
+                        'stock1MReturn': round(stock_1m, 2),
+                        'spy1MReturn': round(spy_1m, 2),
+                        'stock3MReturn': round(stock_3m, 2),
+                        'spy3MReturn': round(spy_3m, 2),
+                    }
         except Exception:
             pass
 

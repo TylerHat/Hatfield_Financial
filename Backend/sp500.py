@@ -6,8 +6,10 @@ an in-memory 24-hour cache and a static fallback list.
 import logging
 import threading
 import time
+from io import StringIO
 
 import pandas as pd
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,11 @@ logger = logging.getLogger(__name__)
 _cached_tickers = None
 _cache_timestamp = 0.0
 _cache_lock = threading.Lock()
+# Separate lock that serialises concurrent Wikipedia fetches so two cold
+# threads don't both round-trip on a cache miss.
+_fetch_lock = threading.Lock()
 _CACHE_TTL = 86400  # 24 hours
+_FETCH_TIMEOUT_S = 15  # network bound for the Wikipedia GET
 
 # ── Static fallback (current as of early 2025, delisted tickers removed) ──────
 _FALLBACK_TICKERS = [
@@ -73,10 +79,21 @@ _FALLBACK_TICKERS = [
 
 
 def _fetch_sp500_from_wikipedia():
-    """Scrape current S&P 500 tickers from Wikipedia. Returns list or None."""
+    """Scrape current S&P 500 tickers from Wikipedia. Returns list or None.
+
+    Uses an explicit ``requests.get`` with a timeout (``pd.read_html`` itself
+    has no timeout knob) and feeds the response HTML into pandas through
+    ``StringIO`` so a stalled network never hangs the call.
+    """
     try:
         url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-        tables = pd.read_html(url)
+        resp = requests.get(
+            url,
+            timeout=_FETCH_TIMEOUT_S,
+            headers={'User-Agent': 'Hatfield-Financial/1.0 (+https://hatfield-financial.com)'},
+        )
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text))
         tickers = tables[0]['Symbol'].str.strip().tolist()
         if not (400 <= len(tickers) <= 600):
             logger.warning('Wikipedia returned %d tickers — outside expected range, ignoring', len(tickers))
@@ -99,14 +116,21 @@ def get_sp500_tickers():
         if _cached_tickers is not None and (time.time() - _cache_timestamp) < _CACHE_TTL:
             return _cached_tickers
 
-    # Fetch outside the lock to avoid blocking other threads
-    tickers = _fetch_sp500_from_wikipedia()
-
-    if tickers:
+    # Serialise the network fetch via _fetch_lock so two cold threads don't
+    # both round-trip on the same cache miss. The first acquirer fetches and
+    # populates the cache; later acquirers re-check the cache before fetching.
+    with _fetch_lock:
         with _cache_lock:
-            _cached_tickers = tickers
-            _cache_timestamp = time.time()
-        return tickers
+            if _cached_tickers is not None and (time.time() - _cache_timestamp) < _CACHE_TTL:
+                return _cached_tickers
+
+        tickers = _fetch_sp500_from_wikipedia()
+
+        if tickers:
+            with _cache_lock:
+                _cached_tickers = tickers
+                _cache_timestamp = time.time()
+            return tickers
 
     # Fallback — do NOT cache so we retry Wikipedia on next call
     logger.info('Using static fallback ticker list (%d tickers)', len(_FALLBACK_TICKERS))

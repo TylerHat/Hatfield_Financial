@@ -232,7 +232,24 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
         # Allocatable dollars: target one slot-equivalent of total equity per
         # candidate (so opening fewer than max_positions doesn't overload one
         # name), capped by 99% of cash to leave a buffer for slippage.
-        raw_weights = [max(strategy.weight(row), 0.0) or 1.0 for row in candidates]
+        #
+        # weight() ≤ 0 falls back to baseline 1.0 to avoid zeroing out a
+        # position the strategy already passed score() for. Log the
+        # fallback so a buggy weight() doesn't silently masquerade as
+        # equal-weight conviction.
+        raw_weights = []
+        for row in candidates:
+            raw_w = strategy.weight(row)
+            clamped = max(raw_w, 0.0)
+            if clamped <= 0:
+                logger.warning(
+                    'strategy %s returned non-positive weight (%.4f) for %s — '
+                    'clamping to baseline 1.0; check the weight() implementation '
+                    'if this is unexpected',
+                    cfg.id, raw_w, row.get('ticker'),
+                )
+                clamped = 1.0
+            raw_weights.append(clamped)
         total_weight = sum(raw_weights) or float(len(candidates))
         target_total = min(
             (total_equity / cfg.max_positions) * len(candidates),
