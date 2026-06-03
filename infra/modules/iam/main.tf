@@ -45,6 +45,29 @@ resource "aws_iam_role_policy" "ecs_s3_cache_read" {
   })
 }
 
+# Allow `aws ecs execute-command` to open an SSM session into the container.
+# Required by the enable_execute_command flag on the ECS service.
+resource "aws_iam_role_policy" "ecs_exec_ssm" {
+  name = "${var.app_name}-ecs-exec-ssm"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # ── GitHub Actions Deploy User ────────────────────────────────────────────────
 # Least-privilege IAM user for CI/CD: ECR push, ECS deploy, S3 sync, CF invalidate
 
