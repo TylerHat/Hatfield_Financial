@@ -98,11 +98,12 @@ resource "aws_ecs_task_definition" "backend" {
 # WARNING: desired_count must stay at 1 — SQLite on EFS does not support
 # concurrent writers. Scaling to 2+ tasks will cause database corruption.
 resource "aws_ecs_service" "backend" {
-  name            = "${var.app_name}-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = "${var.app_name}-service"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.backend.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
+  enable_execute_command = true # `aws ecs execute-command` shell access for one-off scripts
 
   network_configuration {
     subnets          = var.public_subnet_ids
