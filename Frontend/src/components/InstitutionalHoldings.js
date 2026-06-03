@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
+import InfoPopover from './InfoPopover';
 
 function fmtValue(v) {
   if (v == null) return 'N/A';
@@ -21,39 +22,6 @@ function SummaryCard({ label, value }) {
     <div className="inst-summary-card">
       <span className="inst-summary-label">{label}</span>
       <span className="inst-summary-value">{value ?? 'N/A'}</span>
-    </div>
-  );
-}
-
-function InfoPopover({ children }) {
-  const [show, setShow] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!show) return;
-    function handleClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setShow(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [show]);
-
-  return (
-    <div className="panel-info-wrap" ref={ref}>
-      <button
-        className="panel-info-btn"
-        onClick={() => setShow(s => !s)}
-        aria-label="More information"
-        title="What is this?"
-      >
-        i
-      </button>
-      {show && (
-        <div className="panel-info-popover">
-          <button className="chart-info-close" onClick={() => setShow(false)}>✕</button>
-          <div className="chart-info-content">{children}</div>
-        </div>
-      )}
     </div>
   );
 }

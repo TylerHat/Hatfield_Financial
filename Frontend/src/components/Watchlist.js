@@ -2,47 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
+import { recVariant, macdVariant, trendVariant, volVariant, priceActionVariant } from '../utils/colorVariants';
 import './Watchlist.css';
-
-/* ── Variant helpers (same logic as Recommendations) ──────────────────────── */
-
-function recVariant(recKey) {
-  if (!recKey) return 'gray';
-  if (recKey === 'strong_buy' || recKey === 'buy') return 'green';
-  if (recKey === 'hold') return 'blue';
-  if (recKey === 'sell' || recKey === 'strong_sell') return 'red';
-  return 'gray';
-}
-
-function macdVariant(status) {
-  if (!status) return 'gray';
-  if (status.includes('BULLISH')) return 'green';
-  if (status.includes('BEARISH')) return 'red';
-  return 'gray';
-}
-
-function trendVariant(trend) {
-  if (!trend) return 'gray';
-  if (trend.includes('Uptrend') || trend.includes('Bullish')) return 'green';
-  if (trend.includes('Downtrend') || trend.includes('Bearish')) return 'red';
-  return 'yellow';
-}
-
-function volVariant(vol) {
-  if (!vol) return 'gray';
-  if (vol.includes('HIGH')) return 'red';
-  if (vol.includes('LOW')) return 'green';
-  return 'yellow';
-}
-
-function priceActionVariant(pa) {
-  if (!pa) return 'gray';
-  if (pa === 'Overbought') return 'red';
-  if (pa === 'Oversold') return 'green';
-  if (pa === 'Trending') return 'blue';
-  if (pa === 'Consolidating') return 'yellow';
-  return 'gray';
-}
 
 /* ── Column definitions ───────────────────────────────────────────────────── */
 

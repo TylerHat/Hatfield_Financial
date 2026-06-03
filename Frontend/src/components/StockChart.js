@@ -11,7 +11,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import { apiFetch } from '../api';
+import { apiFetch, API_BASE } from '../api';
 
 ChartJS.register(
   CategoryScale,
@@ -82,7 +82,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
       })
       .catch(() => {
         if (cancelled) return;
-        setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
+        setError(`Could not connect to the backend. Make sure the Flask server is running at ${API_BASE}.`);
         setLoading(false);
       });
     return () => { cancelled = true; };
@@ -126,7 +126,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
       })
       .catch(() => {
         if (cancelled) return;
-        setStrategyError('Could not load strategy signals. Make sure the Flask server is running on port 5000.');
+        setStrategyError(`Could not load strategy signals. Make sure the Flask server is running at ${API_BASE}.`);
         setSignals([]);
         setStrategyLoading(false);
       });
