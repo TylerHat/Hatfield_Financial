@@ -53,6 +53,10 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
   // Fetch full 1-year window once per ticker; all filtering happens in memory below.
   useEffect(() => {
     if (!ticker) return;
+    // Cancellation guard: ticker/strategy switching faster than the
+    // network can return would otherwise let an older response overwrite
+    // the newer ticker's state.
+    let cancelled = false;
     setLoading(true);
     setError(null);
     setStockData(null);
@@ -64,6 +68,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     apiFetch(`/api/stock/${ticker}?${params}`, { method })
       .then((res) => res.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) {
           setError(data.error);
         } else {
@@ -72,9 +77,11 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         setLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setError('Could not connect to the backend. Make sure the Flask server is running on port 5000.');
         setLoading(false);
       });
+    return () => { cancelled = true; };
   }, [ticker, fetchStart, fetchEnd, refreshKey]);
 
   // Fetch strategy signals whenever ticker, strategy, or date range changes
@@ -86,6 +93,10 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
       if (onSignals) onSignals([]);
       return;
     }
+    // Cancellation guard: prevents a stale signal payload from overwriting
+    // the newer ticker/strategy's signals and re-emitting them upward via
+    // onSignals.
+    let cancelled = false;
 
     setStrategyLoading(true);
     setStrategyError(null);
@@ -94,6 +105,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     apiFetch(`/api/strategy/${strategy}/${ticker}?${params}`)
       .then((res) => res.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) {
           setStrategyError(data.error);
           setSignals([]);
@@ -115,10 +127,12 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         setStrategyLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setStrategyError('Could not load strategy signals. Make sure the Flask server is running on port 5000.');
         setSignals([]);
         setStrategyLoading(false);
       });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, strategy, fetchStart, fetchEnd, stockData]);
 
@@ -1424,7 +1438,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
                 {[...visibleSignals].reverse().map((s, i) => (
                   <tr key={i} className={s.type === 'BUY' ? 'buy-row' : 'sell-row'}>
                     <td>{s.date}</td>
-                    <td>${s.price.toFixed(2)}</td>
+                    <td>{s.price != null ? `$${s.price.toFixed(2)}` : '—'}</td>
                     <td>
                       <span className={`signal-badge ${s.type.toLowerCase()}`}>
                         {s.type}
