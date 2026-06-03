@@ -21,6 +21,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "sp500_cache" {
     id     = "cleanup-old-versions"
     status = "Enabled"
 
+    # Empty filter = "apply to every object in the bucket". See the same
+    # block in modules/cdn/main.tf for why this is required.
+    filter {}
+
     noncurrent_version_expiration {
       noncurrent_days = 7
     }
