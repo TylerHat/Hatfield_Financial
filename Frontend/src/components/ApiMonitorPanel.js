@@ -77,23 +77,39 @@ export default function ApiMonitorPanel() {
       return;
     }
 
-    const interval = setInterval(async () => {
+    // Chained-setTimeout (NOT setInterval): apiFetch can retry 429s with 3s
+    // delays × 3 = 9s — longer than the 3s tick. setInterval would stack
+    // overlapping in-flight requests; setTimeout schedules the next poll
+    // only after the current one settles.
+    let cancelled = false;
+    let timerId = null;
+
+    async function poll() {
       try {
         const res = await apiFetch(`/api/admin/metrics/status?t=${Date.now()}`);
         const data = await res.json();
+        if (cancelled) return;
         if (res.ok) {
           setStatus(data);
-          // Stop polling if recording is done
           if (data.done && !data.recording) {
             setPolling(false);
+            return;
           }
         }
       } catch (err) {
-        // Continue polling even if error
+        // Swallow and keep polling
       }
-    }, 3000); // Poll every 3 seconds
+      if (!cancelled) {
+        timerId = setTimeout(poll, 3000);
+      }
+    }
 
-    return () => clearInterval(interval);
+    timerId = setTimeout(poll, 3000);
+
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+    };
   }, [polling, status?.done, status?.recording]);
 
   // Determine status message

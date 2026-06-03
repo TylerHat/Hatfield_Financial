@@ -109,14 +109,27 @@ function NextRebalanceTimer() {
     return () => clearInterval(id);
   }, []);
 
-  const next = useMemo(nextAutoRebalance, [Math.floor(now / 60000)]); // recompute each minute
+  // Both `next` and the formatted `whenET` string change only at minute
+  // boundaries. Keying both memos on Math.floor(now/60000) means the 1s
+  // tick only rebuilds `remaining` and the countdown text — no more
+  // calling toLocaleString 60× per minute for the same output.
+  const minuteKey = Math.floor(now / 60000);
+  const { next, whenET } = useMemo(() => {
+    const n = nextAutoRebalance();
+    if (!n) return { next: null, whenET: null };
+    return {
+      next: n,
+      whenET: n.toLocaleString(undefined, {
+        timeZone: 'America/New_York',
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit',
+      }),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minuteKey]);
+
   if (!next) return null;
   const remaining = next.getTime() - now;
-  const whenET = next.toLocaleString(undefined, {
-    timeZone: 'America/New_York',
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit',
-  });
 
   return (
     <span className="cetf-next-run" title={`Auto-rebalance fires at 9:30 AM ET, MON-FRI. Next: ${whenET} ET`}>

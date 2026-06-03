@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
@@ -340,7 +340,9 @@ export default function Watchlist({ onNavigateToStock, onWatchlistChange }) {
     });
   }, [watchlist, fetchData, onWatchlistChange]);
 
-  const columns = buildColumns(handleRemove);
+  // Memoize so the columns reference is stable across renders — otherwise
+  // DataTable's sort logic re-runs on every parent re-render.
+  const columns = useMemo(() => buildColumns(handleRemove), [handleRemove]);
 
   // Use skeleton rows while enriched data is still loading
   const displayRows = (dataLoading && stocks.length === 0 && watchlist?.items?.length > 0)
