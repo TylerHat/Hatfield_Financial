@@ -14,12 +14,41 @@ etf_equity_snapshots tables.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from models import db, EtfPortfolio, EtfPosition, EtfTrade, EtfEquitySnapshot
 from .strategies.base import EtfStrategy
+import data_fetcher
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_exit_price(ticker: str) -> float | None:
+    """Best-effort current price for a ticker that's dropped out of the
+    recommendations universe. Tries .info first (cheap when cached), falls
+    back to the most recent OHLCV close. Returns None if both fail.
+    """
+    try:
+        info = data_fetcher.get_ticker_info(ticker, priority=data_fetcher.PRIORITY_LOW)
+        if info:
+            price = info.get('currentPrice') or info.get('regularMarketPrice')
+            if price and price > 0:
+                return float(price)
+    except Exception as e:
+        logger.debug('get_ticker_info failed for exit-universe %s: %s', ticker, e)
+
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=10)
+        hist = data_fetcher.get_ohlcv(ticker, start, end, priority=data_fetcher.PRIORITY_LOW)
+        if hist is not None and not hist.empty:
+            last_close = float(hist['Close'].iloc[-1])
+            if last_close > 0:
+                return last_close
+    except Exception as e:
+        logger.debug('get_ohlcv failed for exit-universe %s: %s', ticker, e)
+
+    return None
 
 
 def _closed_trade_stats(portfolio_id: int) -> dict:
@@ -143,8 +172,16 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
     for ticker, pos in list(held.items()):
         row = universe.get(ticker)
         if row is None:
-            # Out-of-universe: liquidate at last known cost basis (no fresh quote available)
-            sell_price = pos.avg_cost
+            # Out-of-universe: ticker isn't in this snapshot, so fetch a real
+            # quote independently. Falls back to avg_cost only if both .info
+            # and OHLCV lookups fail (delisted, etc.) so realized P&L isn't
+            # silently zeroed out.
+            quote = _fetch_exit_price(ticker)
+            if quote is not None:
+                sell_price = quote * (1 - slippage)
+            else:
+                logger.warning('No exit quote for %s — falling back to avg_cost (P&L will be ~0)', ticker)
+                sell_price = pos.avg_cost
             reason = 'EXIT_UNIVERSE'
             score = None
         elif row['score'] <= cfg.sell_threshold:
