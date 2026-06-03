@@ -76,6 +76,10 @@ def _upside_to_score(shrunk_upside: float) -> float:
 
 
 class UndervaluedStrongBuyStrategy(EtfStrategy):
+    # Same forward-looking analyst inputs as analyst_conviction —
+    # backtest leaks hindsight. See base.EtfStrategy.historical_backtest_safe.
+    historical_backtest_safe = False
+
     config = StrategyConfig(
         id='undervalued-strong-buy-top10',
         name='Undervalued Strong Buy — Top 10',

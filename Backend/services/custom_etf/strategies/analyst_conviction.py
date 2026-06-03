@@ -54,6 +54,14 @@ def _score_from_upside(shrunk_upside: float) -> int:
 
 
 class AnalystConvictionStrategy(EtfStrategy):
+    # Forward-looking inputs (targetUpsidePct, numberOfAnalysts,
+    # recommendationKey) — yfinance only serves these for today's
+    # snapshot. A naive historical backtest would apply *today's*
+    # consensus to past dates, leaking ~5-15% of measured return.
+    # Marking the strategy unsafe for backtest so a future engine can
+    # detect and refuse.
+    historical_backtest_safe = False
+
     config = StrategyConfig(
         id='analyst-conviction-top10',
         name='Analyst Conviction — Top 10',

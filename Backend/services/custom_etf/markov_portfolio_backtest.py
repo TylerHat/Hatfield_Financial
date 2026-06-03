@@ -439,6 +439,24 @@ def _walk_forward_markov(
     logger.info('Markov walk-forward done in %.1fs: return=%.1f%%, trades=%d, win_rate=%.1f%%',
                 elapsed, total_return, num_trades, win_rate)
 
+    # Structural caveats the consumer should surface to the user. The UI
+    # currently hard-codes the survivorship-bias banner; making this the
+    # source of truth means future caveats (e.g. analyst-strategy hindsight
+    # once we wire those into a backtest) land automatically.
+    caveats = [
+        {
+            'id': 'survivorship-bias',
+            'severity': 'note',
+            'title': 'Survivorship-bias note',
+            'message': (
+                "Uses today's S&P 500 constituents. Stocks that were "
+                'delisted before today are excluded from older windows, '
+                'mildly inflating measured returns over multi-year tests. '
+                'Not fixable without a point-in-time membership table.'
+            ),
+        },
+    ]
+
     return {
         'summary': {
             'startingCapital': STARTING_CAPITAL,
@@ -468,6 +486,7 @@ def _walk_forward_markov(
         'equityCurve': equity_curve,
         'trades': trades,
         'openPositions': open_positions,
+        'caveats': caveats,
         'params': {
             'cadence': cadence,
             'startDate': start_date.strftime('%Y-%m-%d'),

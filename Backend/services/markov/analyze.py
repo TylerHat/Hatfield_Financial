@@ -22,6 +22,12 @@ BEAR_PCT = 5.0
 STATIONARY_POWER = 50
 MIN_HOLD = 4
 
+# Below this many observed transitions, the row-normalized transition
+# matrix is dominated by noise and forecasts are unreliable. Callers see
+# this surfaced as the `transitionsObserved` field on analyze_markov's
+# return + a `lowConfidence` boolean when the count is below the floor.
+MIN_TRANSITIONS_FOR_CONFIDENCE = 40
+
 # Internal regime codes: 0=Side, 1=Bull, 2=Bear (matches Pine spec §3).
 REGIME_FULL = {0: 'Sideways', 1: 'Bull', 2: 'Bear'}
 
@@ -178,6 +184,13 @@ def analyze_markov(close, dates=None, lookback=LOOKBACK, bull_pct=BULL_PCT,
         forecast                 : {'1d': {'bull','bear','side'}, ...}
         transitions              : list of debounced flip dicts (if dates given)
         bars_analyzed            : int (count of non-warmup bars)
+        transitions_observed     : int (count of bar-to-bar transitions
+                                   between non-warmup regimes used to
+                                   build the transition matrix)
+        low_confidence           : bool — True when transitions_observed
+                                   is below MIN_TRANSITIONS_FOR_CONFIDENCE.
+                                   Forecasts on a tiny sample are noisy;
+                                   callers should surface this to the user.
     """
     regime = classify_regimes(close, lookback, bull_pct, bear_pct)
 
@@ -193,6 +206,14 @@ def analyze_markov(close, dates=None, lookback=LOOKBACK, bull_pct=BULL_PCT,
     forecast = forecast_from_regime(P_internal, current, forecast_horizons)
     transitions = debounced_flips(regime, dates, min_hold) if dates is not None else []
 
+    # Count actual valid transitions between consecutive non-warmup bars
+    # — the input to build_transition_matrix. The transition matrix is
+    # row-normalized, so 3 observations split 1/1/1 across a row reads
+    # as 33%/33%/33% with the same authority as 100 observations split
+    # 33/33/34. Surface the raw count so the consumer can weight trust.
+    valid_regime = regime[regime != -1]
+    transitions_observed = max(0, len(valid_regime) - 1)
+
     return {
         'current_regime': current_name,
         'current_regime_code': current if current != -1 else None,
@@ -202,4 +223,6 @@ def analyze_markov(close, dates=None, lookback=LOOKBACK, bull_pct=BULL_PCT,
         'forecast': forecast,
         'transitions': transitions,
         'bars_analyzed': int((regime != -1).sum()),
+        'transitions_observed': int(transitions_observed),
+        'low_confidence': transitions_observed < MIN_TRANSITIONS_FOR_CONFIDENCE,
     }

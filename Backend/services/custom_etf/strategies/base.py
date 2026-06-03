@@ -40,6 +40,17 @@ class StrategyConfig:
 class EtfStrategy(ABC):
     config: StrategyConfig
 
+    # True when the strategy only consumes fields that are point-in-time
+    # reconstructable from price/volume data alone (which is what yfinance
+    # serves us historically). False when the strategy depends on
+    # forward-looking analyst consensus data — `targetUpsidePct`,
+    # `numberOfAnalysts`, `recommendationKey` — that yfinance only ever
+    # returns at the "today" snapshot. A historical backtest using those
+    # values on past dates leaks ~5-15% of hindsight into measured
+    # returns. A future backtest engine should refuse / warn for any
+    # strategy with this flag set to False.
+    historical_backtest_safe: bool = True
+
     @abstractmethod
     def score(self, row: dict):
         """Return a 0-100 score for the recommendation row, or None if the

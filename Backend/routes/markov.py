@@ -63,6 +63,8 @@ def get_markov_analysis(ticker):
                 'min_hold': MIN_HOLD,
             },
             'bars_analyzed': result['bars_analyzed'],
+            'transitions_observed': result['transitions_observed'],
+            'low_confidence': result['low_confidence'],
             'date_range': {
                 'start': hist.index[0].strftime('%Y-%m-%d'),
                 'end': hist.index[-1].strftime('%Y-%m-%d'),

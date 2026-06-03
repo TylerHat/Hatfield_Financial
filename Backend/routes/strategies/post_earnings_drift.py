@@ -52,6 +52,15 @@ def post_earnings_drift(ticker):
             mask = (earnings_idx >= start_ts) & (earnings_idx <= end_ts)
             earnings_in_range_index = earnings_idx[mask]
 
+            # No dedup pass on `earnings_in_range_index`: yfinance very
+            # occasionally returns the same earnings date twice (e.g. when
+            # a company announces a restatement that triggers a separate
+            # filing). This route is stateless — each invocation rebuilds
+            # signals from scratch — so a duplicate produces a duplicate
+            # signal in the response rather than persisting anywhere. If
+            # this route ever becomes write-through (e.g. caching emitted
+            # signals into a DB) the loop below must dedup by `earn_date`
+            # first to avoid double-counting.
             for earn_date in earnings_in_range_index:
                 # Days in hist after the earnings date
                 post = hist[hist.index > earn_date]
