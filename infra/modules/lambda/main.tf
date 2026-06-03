@@ -121,7 +121,11 @@ resource "aws_lambda_function" "recommendations" {
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.lambda_recommendations.repository_url}:latest"
   timeout       = 600
-  memory_size   = 2048
+  # 1024 MB covers the 500-ticker precompute comfortably; CloudWatch
+  # showed the prior 2048 MB rarely exceeded ~700 MB. Step back up if a
+  # future S&P expansion or a heavier indicator overruns. Cuts ~$3-7/mo
+  # vs running at 2048 MB on the every-20-minute schedule.
+  memory_size = 1024
 
   reserved_concurrent_executions = 1
 
@@ -138,6 +142,20 @@ resource "aws_lambda_function" "recommendations" {
   lifecycle {
     ignore_changes = [image_uri]
   }
+}
+
+# Explicit log group with retention. AWS auto-creates Lambda log groups
+# on first invocation with retention=Never Expire, accumulating CloudWatch
+# storage forever. Declaring the resource here pins retention to 14 days.
+#
+# NOTE on first-time apply: if the Lambda has already run before this
+# resource is added, AWS already owns a log group with the same name.
+# Run once: `terraform import module.lambda.aws_cloudwatch_log_group.recommendations /aws/lambda/${app_name}-recommendations-precompute`
+# before `terraform apply` to adopt the existing group.
+resource "aws_cloudwatch_log_group" "recommendations" {
+  name              = "/aws/lambda/${aws_lambda_function.recommendations.function_name}"
+  retention_in_days = 14
+  tags              = { Name = "${var.app_name}-recommendations-precompute-logs" }
 }
 
 # ── EventBridge Schedule (every 20 minutes) ──────────────────────────────────
@@ -218,6 +236,15 @@ resource "aws_lambda_function" "etf_rebalance" {
   }
 
   tags = { Name = "${var.app_name}-etf-rebalance" }
+}
+
+# Explicit log group with retention (see note on aws_cloudwatch_log_group.recommendations).
+# Import on first apply if the Lambda has already run:
+#   terraform import module.lambda.aws_cloudwatch_log_group.etf_rebalance /aws/lambda/${app_name}-etf-rebalance
+resource "aws_cloudwatch_log_group" "etf_rebalance" {
+  name              = "/aws/lambda/${aws_lambda_function.etf_rebalance.function_name}"
+  retention_in_days = 14
+  tags              = { Name = "${var.app_name}-etf-rebalance-logs" }
 }
 
 # ── EventBridge Scheduler (timezone-aware, beats classic cron) ───────────────

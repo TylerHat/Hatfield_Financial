@@ -23,6 +23,23 @@ resource "aws_s3_bucket_versioning" "frontend" {
   }
 }
 
+# Without a lifecycle rule, every `aws s3 sync` from the CI pipeline keeps
+# the prior version of each replaced asset forever. The Lambda cache bucket
+# already has one; this matches it. 30 days of rollback headroom is plenty
+# for a frontend deploy.
+resource "aws_s3_bucket_lifecycle_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    id     = "cleanup-old-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
 # ── CloudFront Origin Access Control ─────────────────────────────────────────
 resource "aws_cloudfront_origin_access_control" "frontend" {
   name                              = "${var.app_name}-oac"
@@ -65,8 +82,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     compress               = true
 
     # AWS-managed CachingOptimized policy (OAC handles S3 request signing — no origin request policy needed)
-    cache_policy_id             = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-    response_headers_policy_id  = aws_cloudfront_response_headers_policy.frontend.id
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend.id
   }
 
   # Return index.html for any 404 so React Router handles routing client-side

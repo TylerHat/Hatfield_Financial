@@ -12,12 +12,20 @@ resource "aws_cloudwatch_log_group" "ecs" {
 }
 
 # ── ECS Task Definition ───────────────────────────────────────────────────────
+# CPU/memory sizing notes:
+#   - 256 CPU (0.25 vCPU) / 512 MB is the smallest Fargate combo. Backend
+#     traffic is light (single ECS task, SQLite-bounded to desired_count=1)
+#     and the heavy work runs in the precompute Lambda, so the previous
+#     512/1024 was oversized. Roughly halves the Fargate bill (~$15/mo).
+#   - If CloudWatch shows CPU > 60% sustained or memory > 70%, step back
+#     up to 512/1024 — Fargate Spot can also absorb the cost difference
+#     if predictable.
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.app_name}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
   execution_role_arn       = var.ecs_task_execution_role_arn
   task_role_arn            = var.ecs_task_execution_role_arn
 
