@@ -20,7 +20,7 @@ def delete_user(user_id):
     if user_id == g.current_user_id:
         return jsonify({'error': 'Cannot delete your own account'}), 400
 
-    target = User.query.get(user_id)
+    target = db.session.get(User, user_id)
     if target is None:
         return jsonify({'error': 'User not found'}), 404
 
@@ -39,7 +39,7 @@ def update_user_role(user_id):
     if user_id == g.current_user_id:
         return jsonify({'error': 'You cannot change your own admin status'}), 400
 
-    target = User.query.get(user_id)
+    target = db.session.get(User, user_id)
     if target is None:
         return jsonify({'error': 'User not found'}), 404
 

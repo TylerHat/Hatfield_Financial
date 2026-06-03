@@ -22,7 +22,11 @@ def get_markov_analysis(ticker):
         start_str = request.args.get('start')
 
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
-        start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=365)
+        # 730d default (≈2 years of trading) gives the 3×3 transition matrix
+        # ~500 valid bars after the LOOKBACK warmup — enough for stable
+        # row-normalised probabilities. 365d alone was too noisy for the
+        # display matrix on lower-volatility names.
+        start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=730)
 
         hist = get_ohlcv(ticker, start, end, priority=PRIORITY_HIGH)
 

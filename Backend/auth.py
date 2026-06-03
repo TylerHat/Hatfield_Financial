@@ -22,7 +22,9 @@ def decode_token(token):
     """Decode and validate a JWT token. Returns payload dict or None."""
     try:
         return jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+    except jwt.InvalidTokenError:
+        # InvalidTokenError is the base of ExpiredSignatureError, ImmatureSignatureError,
+        # InvalidSignatureError, etc. — one catch covers all token-validity failures.
         return None
 
 
@@ -39,7 +41,10 @@ def login_required(f):
         if payload is None:
             return jsonify({'error': 'Invalid or expired token'}), 401
 
-        g.current_user_id = payload['user_id']
+        user_id = payload.get('user_id')
+        if user_id is None:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        g.current_user_id = user_id
         return f(*args, **kwargs)
     return decorated
 
@@ -47,7 +52,7 @@ def login_required(f):
 def admin_required(f):
     """Decorator that requires a valid Bearer token from an admin user.
     Sets g.current_user_id and g.current_user."""
-    from models import User  # local import to avoid circular dependency
+    from models import db, User  # local import to avoid circular dependency
 
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -60,7 +65,11 @@ def admin_required(f):
         if payload is None:
             return jsonify({'error': 'Invalid or expired token'}), 401
 
-        user = User.query.get(payload['user_id'])
+        user_id = payload.get('user_id')
+        if user_id is None:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+
+        user = db.session.get(User, user_id)
         if user is None:
             return jsonify({'error': 'User not found'}), 401
         if not user.is_admin:
