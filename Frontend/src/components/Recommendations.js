@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../api';
 import DataTable from './DataTable';
 import Badge from './Badge';
+import { recVariant, macdVariant, trendVariant, volVariant, priceActionVariant } from '../utils/colorVariants';
 import './Recommendations.css';
 
 const LS_KEY = 'hf_recommendations_cache';
@@ -88,45 +89,10 @@ const FILTERS = [
   { key: 'strong_sell', label: 'Strong Sell' },
 ];
 
-function recVariant(recKey) {
-  if (!recKey) return 'gray';
-  if (recKey === 'strong_buy') return 'green';
-  if (recKey === 'buy') return 'green';
-  if (recKey === 'hold') return 'blue';
-  if (recKey === 'sell') return 'red';
-  if (recKey === 'strong_sell') return 'red';
-  return 'gray';
-}
-
-function macdVariant(status) {
-  if (!status) return 'gray';
-  if (status.includes('BULLISH')) return 'green';
-  if (status.includes('BEARISH')) return 'red';
-  return 'gray';
-}
-
-function trendVariant(trend) {
-  if (!trend) return 'gray';
-  if (trend.includes('Uptrend') || trend.includes('Bullish')) return 'green';
-  if (trend.includes('Downtrend') || trend.includes('Bearish')) return 'red';
-  return 'yellow';
-}
-
-function volVariant(vol) {
-  if (!vol) return 'gray';
-  if (vol.includes('HIGH')) return 'red';
-  if (vol.includes('LOW')) return 'green';
-  return 'yellow';
-}
-
-function priceActionVariant(pa) {
-  if (!pa) return 'gray';
-  if (pa === 'Overbought') return 'red';
-  if (pa === 'Oversold') return 'green';
-  if (pa === 'Trending') return 'blue';
-  if (pa === 'Consolidating') return 'yellow';
-  return 'gray';
-}
+// Variant helpers live in utils/colorVariants.js — see the import at the
+// top of this file. The duplicates that used to live here drifted slightly
+// from Watchlist.js (e.g. expanded `||` into separate `if`s); the shared
+// module is now the single source of truth.
 
 // ── Buy Score helpers ───────────────────────────────────────────────
 // All sub-scores return 0–100. Missing data resolves to 50 (neutral) so
