@@ -16,7 +16,8 @@ def relative_strength(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        hist = get_ohlcv(ticker, user_start, end)
+        # 10-day MA on RS ratio needs ~20 bars of warmup.
+        hist = get_ohlcv(ticker, user_start, end, warmup_days=20)
         spy_hist = get_spy_history(user_start - timedelta(days=20), end)
 
         if hist is None or hist.empty:
