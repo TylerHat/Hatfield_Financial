@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 
 import yfinance as yf
 from data_fetcher import get_ticker_info, get_spy_period, get_ohlcv, get_earnings_dates as cached_get_earnings_dates, get_insider_transactions, get_institutional_holders, clear_cache, clear_ticker_cache, PRIORITY_HIGH
+from services.indicators import compute_rsi as shared_compute_rsi, macd_strength
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +46,12 @@ def debug_yfinance(ticker):
     return jsonify(out)
 
 
-def compute_rsi(prices, period=14):
-    delta = prices.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
-    avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+# Backwards-compat shim: this module's `compute_rsi` previously used
+# `ewm(com=period-1)`, which disagreed with Wilder's smoothing used
+# everywhere else in the codebase by ~2-5 RSI points. All callers now go
+# through services.indicators.compute_rsi (Wilder). Kept as a thin alias in
+# case any in-flight code still imports it from here.
+compute_rsi = shared_compute_rsi
 
 
 def compute_consolidation(hist, window=20):
@@ -156,7 +155,17 @@ def get_stock_info(ticker):
             macd_status = 'BULLISH'
         else:
             macd_status = 'BEARISH'
-        macd_momentum = 'STRONG MOMENTUM' if abs(macd_val - signal_val) > 0.5 else 'WEAK MOMENTUM'
+        # Unit-free momentum strength: today's |MACD - Signal| against its
+        # own 30-day rolling-mean magnitude (so the threshold translates
+        # across instruments). Same formula the macd_crossover signal score
+        # already used internally — now both sides agree on what "STRONG"
+        # means.
+        macd_strength_series = macd_strength(macd - macd_sig)
+        latest_strength = macd_strength_series.iloc[-1]
+        if pd.isna(latest_strength):
+            macd_momentum = 'WEAK MOMENTUM'
+        else:
+            macd_momentum = 'STRONG MOMENTUM' if float(latest_strength) >= 1.2 else 'WEAK MOMENTUM'
 
         # ── Volatility (ATR 14-day) ────────────────────────────────────────────
         high_low = hist['High'] - hist['Low']

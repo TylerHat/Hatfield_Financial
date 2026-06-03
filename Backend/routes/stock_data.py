@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 from data_fetcher import get_ohlcv, get_ticker_info, get_earnings_dates, clear_cache, clear_ticker_cache, PRIORITY_HIGH
+from services.indicators import compute_rsi
 
 stock_data_bp = Blueprint('stock_data', __name__)
 
@@ -43,14 +44,8 @@ def get_stock_data(ticker):
         # Volume moving average (20-day)
         hist['Vol_MA20'] = hist['Volume'].rolling(20).mean()
 
-        # RSI (14) — Wilder's exponential smoothing
-        delta = hist['Close'].diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean()
-        rs = avg_gain / avg_loss.replace(0, float('nan'))
-        hist['RSI'] = 100 - (100 / (1 + rs))
+        # RSI (14) — Wilder's exponential smoothing via the shared helper.
+        hist['RSI'] = compute_rsi(hist['Close'])
 
         # ATR (14) — Average True Range
         high_low = hist['High'] - hist['Low']

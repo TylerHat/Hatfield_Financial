@@ -4,18 +4,9 @@ from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 from data_fetcher import get_ohlcv, get_spy_history
+from services.indicators import compute_rsi as _compute_rsi
 
 backtest_bp = Blueprint('backtest', __name__)
-
-
-def _compute_rsi(close, period=14):
-    delta = close.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, float('nan'))
-    return 100 - (100 / (1 + rs))
 
 
 def _get_signals_bollinger(hist, user_start):

@@ -28,6 +28,7 @@ from data_fetcher import (
 )
 from sp500 import get_sp500_tickers
 from services.markov import analyze_markov
+from services.indicators import compute_rsi as _compute_rsi
 
 logger = logging.getLogger(__name__)
 
@@ -80,17 +81,6 @@ def _safe_float(val, decimals=2):
         return round(f, decimals)
     except Exception:
         return None
-
-
-def _compute_rsi(close_series, period=14):
-    """Compute RSI from a close price series (Wilder's formula)."""
-    delta = close_series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, float('nan'))
-    return 100 - (100 / (1 + rs))
 
 
 def _get_ticker_info(ticker, priority=PRIORITY_LOW):

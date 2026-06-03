@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 
 from data_fetcher import get_ohlcv
+from services.indicators import macd_strength
 
 macd_bp = Blueprint('macd_crossover', __name__)
 
@@ -28,9 +29,11 @@ def macd_crossover(ticker):
         hist['Signal'] = hist['MACD'].ewm(span=9, adjust=False).mean()
         hist['Hist'] = hist['MACD'] - hist['Signal']
 
-        # Score: strength of crossover relative to recent histogram range
-        recent_hist_range = hist['Hist'].abs().rolling(30).mean()
-        hist['NormHist'] = hist['Hist'].abs() / recent_hist_range.replace(0, float('nan'))
+        # Score: strength of crossover relative to recent histogram range.
+        # Now goes through the shared services.indicators.macd_strength so
+        # the analysis tab's "STRONG MOMENTUM" badge uses the exact same
+        # formula as this signal score.
+        hist['NormHist'] = macd_strength(hist['Hist'])
 
         # Trim to the user-requested window after indicators are computed
         cutoff = pd.Timestamp(user_start).tz_localize('UTC')
