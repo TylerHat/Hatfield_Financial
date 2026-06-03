@@ -14,12 +14,35 @@ etf_equity_snapshots tables.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from data_fetcher import get_ohlcv, PRIORITY_MEDIUM
 from models import db, EtfPortfolio, EtfPosition, EtfTrade, EtfEquitySnapshot
 from .strategies.base import EtfStrategy
 
 logger = logging.getLogger(__name__)
+
+
+def _last_known_close(ticker: str) -> float | None:
+    """Fetch the most recent close for a ticker that has dropped out of the
+    recommendation universe. Returns None if no data can be retrieved.
+
+    Used by EXIT_UNIVERSE sells so we don't book a fake $0 P&L by selling at
+    cost basis when the ticker actually moved between buy and exit.
+    """
+    try:
+        end = datetime.now(timezone.utc)
+        # Pull ~2 weeks so we tolerate weekends/halts and still return a close
+        hist = get_ohlcv(ticker, end - timedelta(days=14), end, priority=PRIORITY_MEDIUM)
+    except Exception as exc:
+        logger.warning('EXIT_UNIVERSE %s: get_ohlcv failed: %s', ticker, exc)
+        return None
+    if hist is None or hist.empty or 'Close' not in hist.columns:
+        return None
+    close = hist['Close'].dropna()
+    if close.empty:
+        return None
+    return float(close.iloc[-1])
 
 
 def _closed_trade_stats(portfolio_id: int) -> dict:
@@ -143,8 +166,20 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
     for ticker, pos in list(held.items()):
         row = universe.get(ticker)
         if row is None:
-            # Out-of-universe: liquidate at last known cost basis (no fresh quote available)
-            sell_price = pos.avg_cost
+            # Out-of-universe: the recommendations snapshot has no current
+            # quote for this ticker. Fetch a fresh last close so the realized
+            # P&L reflects the actual market move since entry. Apply slippage
+            # symmetrically with SCORE_DROP sells. Fall back to cost basis
+            # only when no price can be retrieved (delisted, etc.).
+            fresh = _last_known_close(ticker)
+            if fresh is not None:
+                sell_price = fresh * (1 - slippage)
+            else:
+                logger.warning(
+                    'EXIT_UNIVERSE %s: no fresh quote — recording sale at avg_cost (P&L will read $0)',
+                    ticker,
+                )
+                sell_price = pos.avg_cost
             reason = 'EXIT_UNIVERSE'
             score = None
         elif row['score'] <= cfg.sell_threshold:

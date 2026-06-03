@@ -119,12 +119,8 @@ def refresh_stock_data(ticker):
         # Clear the cached yf.Ticker object for fresh data
         clear_ticker_cache(ticker)
 
-        # Fetch fresh data
-        end_str = request.args.get('end')
-        start_str = request.args.get('start')
-        end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
-        start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
-
+        # get_stock_data reads start/end from request.args itself, so we just
+        # forward the request after invalidating the caches above.
         return get_stock_data(ticker)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

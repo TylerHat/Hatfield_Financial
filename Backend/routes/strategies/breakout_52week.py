@@ -58,8 +58,21 @@ def breakout_52week(ticker):
             vol_ratio = vol / vol_ma if vol_ma > 0 else 0
             vol_confirmed = vol_ratio >= 1.2
 
-            # BUY: close breaks above the rolling 52-week high on above-average volume
-            if close > high52 and prev_close <= float(prev['High52']) if not pd.isna(prev['High52']) else False:
+            prev_high52 = prev['High52']
+            prev_low52 = prev['Low52']
+            buy_cross = (
+                not pd.isna(prev_high52)
+                and close > high52
+                and prev_close <= float(prev_high52)
+            )
+            sell_cross = (
+                not pd.isna(prev_low52)
+                and close < low52
+                and prev_close >= float(prev_low52)
+            )
+
+            # BUY: close breaks above the rolling 52-week high on above-average volume.
+            if buy_cross:
                 if vol_confirmed:
                     breakout_pct = (close - high52) / high52 * 100 if high52 > 0 else 0
                     score = min(100, int(breakout_pct * 20 + (vol_ratio - 1.2) * 30))
@@ -77,8 +90,8 @@ def breakout_52week(ticker):
                         ),
                     })
 
-            # SELL: close breaks below the rolling 52-week low on above-average volume
-            elif close < low52 and prev_close >= float(prev['Low52']) if not pd.isna(prev['Low52']) else False:
+            # SELL: close breaks below the rolling 52-week low on above-average volume.
+            elif sell_cross:
                 if vol_confirmed:
                     breakdown_pct = (low52 - close) / low52 * 100 if low52 > 0 else 0
                     score = min(100, int(breakdown_pct * 20 + (vol_ratio - 1.2) * 30))
