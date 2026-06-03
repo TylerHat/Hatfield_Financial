@@ -100,7 +100,11 @@ class YFinanceQueue:
 
     _CALL_INTERVAL   = 0.3    # seconds between calls (~200 calls/min, was 0.6 to handle burst traffic)
     _PROMOTE_AFTER_S = 30.0   # promote after this many seconds waiting
-    _SUBMIT_TIMEOUT  = 20.0   # max seconds a caller blocks (Yahoo Finance is slow in prod, need buffer)
+    # Worker bounds how long the yfinance call itself may run; caller bound is
+    # strictly larger so the worker has time to record completion (or a hang)
+    # before the caller raises TimeoutError on the wait event.
+    _WORKER_CALL_TIMEOUT = 20.0
+    _SUBMIT_TIMEOUT      = 30.0
 
     def __init__(self):
         self._pq               = queue.PriorityQueue()
@@ -191,9 +195,27 @@ class YFinanceQueue:
             self._recorded_data  = []
             self._record_target  = 0
 
+    def record_endpoint_call(self, endpoint_type):
+        """Increment the per-endpoint counter under the record lock.
+
+        Cache-hit paths (no queue submission) call this from caller threads;
+        the worker reads/clears the same dict under the same lock, so plain
+        dict mutation from many callers would otherwise risk RuntimeError or
+        lost updates.
+        """
+        if not endpoint_type:
+            return
+        with self._record_lock:
+            self._min_endpoint_calls[endpoint_type] = (
+                self._min_endpoint_calls.get(endpoint_type, 0) + 1
+            )
+
     def _run(self):
         """Worker loop — executes queued functions with rate-limiting."""
         while True:
+            # Pre-declare so the outer except can safely signal the caller
+            # even if dequeue or unpack fails.
+            event = None
             try:
                 item = self._pq.get()
                 # Unpack: may have endpoint_type (7 elements) or not (6 elements for backwards compat)
@@ -204,23 +226,17 @@ class YFinanceQueue:
                     endpoint_type = None
 
                 # ── Starvation prevention ──────────────────────────────────
+                # If this item has waited too long, bump its priority by one
+                # and re-enqueue. The PriorityQueue itself will then re-dequeue
+                # the highest-priority item — no manual peek/swap (which races
+                # with concurrent producers and can leave the worker holding
+                # the wrong item).
                 waited = time.time() - enqueue_ts
                 if priority > PRIORITY_HIGH and waited > self._PROMOTE_AFTER_S:
                     promoted = max(PRIORITY_HIGH, priority - 1)
                     logger.debug('Promoting item (waited %.1fs): %d→%d', waited, priority, promoted)
-                    priority = promoted
-                    # Re-insert at promoted priority if there are higher-pri items ahead
-                    if not self._pq.empty():
-                        try:
-                            nxt = self._pq.get_nowait()
-                            if nxt[0] < priority:
-                                self._pq.put((priority, seq, fn, event, holder, enqueue_ts, endpoint_type))
-                                self._pq.put(nxt)
-                                continue
-                            else:
-                                self._pq.put(nxt)
-                        except queue.Empty:
-                            pass
+                    self._pq.put((promoted, seq, fn, event, holder, enqueue_ts, endpoint_type))
+                    continue
 
                 # ── Rate gate ──────────────────────────────────────────────
                 now = time.time()
@@ -231,7 +247,10 @@ class YFinanceQueue:
                 # ── Call accounting ────────────────────────────────────────
                 now = time.time()
                 if now - self._call_count_reset >= 60:
-                    # ── capture snapshot if recording ────────────────────────
+                    # Snapshot capture + log + reset all touch the per-minute
+                    # counters that caller threads also mutate (via
+                    # record_endpoint_call). Do them under one record_lock so
+                    # iteration / reassignment cannot race with caller writes.
                     with self._record_lock:
                         if self._recording and not self._recording_done:
                             # Capture if recording started before or at this minute boundary
@@ -253,21 +272,21 @@ class YFinanceQueue:
                                     self._recording      = False
                                     self._recording_done = True
 
-                    # ── log + reset ────────────────────────────────────────
-                    if self._call_count > 0:
-                        endpoints_str = ', '.join(f'{k}={v}' for k, v in sorted(self._min_endpoint_calls.items()))
-                        if endpoints_str:
-                            endpoints_str = f' ({endpoints_str})'
-                        logger.info('yfinance calls in last minute: %d (ok=%d fail=%d timeout=%d)%s',
-                                    self._call_count, self._min_successes, self._min_failures, self._min_timeouts, endpoints_str)
-                    self._call_count    = 0
-                    self._call_count_reset = now
-                    self._min_successes = 0
-                    self._min_failures  = 0
-                    self._min_timeouts  = 0
-                    self._min_cache_hits   = 0
-                    self._min_cache_misses = 0
-                    self._min_endpoint_calls = {}
+                        # ── log + reset ────────────────────────────────────
+                        if self._call_count > 0:
+                            endpoints_str = ', '.join(f'{k}={v}' for k, v in sorted(self._min_endpoint_calls.items()))
+                            if endpoints_str:
+                                endpoints_str = f' ({endpoints_str})'
+                            logger.info('yfinance calls in last minute: %d (ok=%d fail=%d timeout=%d)%s',
+                                        self._call_count, self._min_successes, self._min_failures, self._min_timeouts, endpoints_str)
+                        self._call_count    = 0
+                        self._call_count_reset = now
+                        self._min_successes = 0
+                        self._min_failures  = 0
+                        self._min_timeouts  = 0
+                        self._min_cache_hits   = 0
+                        self._min_cache_misses = 0
+                        self._min_endpoint_calls = {}
                 self._call_count += 1
                 self._last_call = time.time()
 
@@ -285,17 +304,17 @@ class YFinanceQueue:
 
                 _t = threading.Thread(target=_run, daemon=True)
                 _t.start()
-                _t.join(timeout=self._SUBMIT_TIMEOUT)
+                _t.join(timeout=self._WORKER_CALL_TIMEOUT)
 
                 try:
                     if _t.is_alive():
                         # fn() is still hanging — move on, do not block the worker
                         self._min_timeouts += 1
                         holder['exc'] = TimeoutError(
-                            f'yfinance call hung for {self._SUBMIT_TIMEOUT}s, worker moving on'
+                            f'yfinance call hung for {self._WORKER_CALL_TIMEOUT}s, worker moving on'
                         )
                         logger.warning('yfinance call hung after %ss (%s) — worker unblocked',
-                                       self._SUBMIT_TIMEOUT, endpoint_type or 'unknown')
+                                       self._WORKER_CALL_TIMEOUT, endpoint_type or 'unknown')
                     elif 'exc' in _fn_exc:
                         self._min_failures += 1
                         holder['exc'] = _fn_exc['exc']
@@ -303,16 +322,20 @@ class YFinanceQueue:
                         holder['result'] = _fn_result.get('val')
                         self._min_successes += 1
                     if endpoint_type:
-                        self._min_endpoint_calls[endpoint_type] = self._min_endpoint_calls.get(endpoint_type, 0) + 1
+                        # Use the same lock-taking helper as caller-side cache
+                        # hits so writes from this worker thread and the many
+                        # caller threads do not race on the dict.
+                        self.record_endpoint_call(endpoint_type)
                 finally:
                     event.set()
 
             except Exception as outer:
                 logger.error('YFinanceQueue worker error: %s', outer, exc_info=True)
-                try:
-                    event.set()
-                except Exception:
-                    pass
+                if event is not None:
+                    try:
+                        event.set()
+                    except Exception:
+                        pass
 
 
 # Module-level singleton
@@ -413,8 +436,7 @@ def get_ohlcv(ticker, start, end, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _OHLCV_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_ohlcv'] = _yf_queue._min_endpoint_calls.get('get_ohlcv', 0) + 1
+        _yf_queue.record_endpoint_call('get_ohlcv')
         return cached
 
     fetch_start = start - timedelta(days=_MAX_WARMUP_DAYS)
@@ -445,8 +467,7 @@ def get_ticker_info(ticker, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _INFO_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_ticker_info'] = _yf_queue._min_endpoint_calls.get('get_ticker_info', 0) + 1
+        _yf_queue.record_endpoint_call('get_ticker_info')
         return cached
 
     stock = _get_ticker(ticker)
@@ -477,8 +498,7 @@ def get_earnings_dates(ticker, limit=20, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _EARNINGS_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_earnings_dates'] = _yf_queue._min_endpoint_calls.get('get_earnings_dates', 0) + 1
+        _yf_queue.record_endpoint_call('get_earnings_dates')
         return cached
 
     stock = _get_ticker(ticker)
@@ -509,8 +529,7 @@ def get_spy_history(start, end, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _SPY_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_spy_history'] = _yf_queue._min_endpoint_calls.get('get_spy_history', 0) + 1
+        _yf_queue.record_endpoint_call('get_spy_history')
         return cached
 
     spy = _get_ticker('SPY')
@@ -536,8 +555,7 @@ def get_spy_period(period='3mo', priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _SPY_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_spy_period'] = _yf_queue._min_endpoint_calls.get('get_spy_period', 0) + 1
+        _yf_queue.record_endpoint_call('get_spy_period')
         return cached
 
     spy = _get_ticker('SPY')
@@ -568,8 +586,7 @@ def get_analyst_data(ticker, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _ANALYST_TTL)
     if cached is not None:
-        # Track endpoint even on cache hit
-        _yf_queue._min_endpoint_calls['get_analyst_data'] = _yf_queue._min_endpoint_calls.get('get_analyst_data', 0) + 1
+        _yf_queue.record_endpoint_call('get_analyst_data')
         return cached
 
     stock = _get_ticker(ticker)
@@ -668,9 +685,7 @@ def get_insider_transactions(ticker, limit=10, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _INSIDER_TTL)
     if cached is not None:
-        _yf_queue._min_endpoint_calls['get_insider_transactions'] = (
-            _yf_queue._min_endpoint_calls.get('get_insider_transactions', 0) + 1
-        )
+        _yf_queue.record_endpoint_call('get_insider_transactions')
         return cached
 
     stock = _get_ticker(ticker)
@@ -760,9 +775,7 @@ def get_institutional_holders(ticker, limit=15, priority=PRIORITY_MEDIUM):
 
     cached = _cache_get(key, _INSTITUTIONAL_TTL)
     if cached is not None:
-        _yf_queue._min_endpoint_calls['get_institutional_holders'] = (
-            _yf_queue._min_endpoint_calls.get('get_institutional_holders', 0) + 1
-        )
+        _yf_queue.record_endpoint_call('get_institutional_holders')
         return cached
 
     stock = _get_ticker(ticker)
@@ -1013,7 +1026,6 @@ def clear_ticker_cache(symbol=None):
     from Yahoo Finance. Necessary for 24/7 assets like crypto where cached
     Ticker objects hold stale .info data.
     """
-    global _ticker_objects
     with _ticker_lock:
         if symbol is None:
             _ticker_objects.clear()
