@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time as dtime, timedelta
 
 from app import app
 from models import db, EtfEquitySnapshot
@@ -22,11 +22,14 @@ logger = logging.getLogger('backfill_spy_prices')
 
 def _build_spy_close_lookup(min_date: date, max_date: date) -> dict[date, float]:
     """Pull SPY's daily close for the inclusive window and return a date→close map."""
-    start = (min_date - timedelta(days=7)).isoformat()
-    end = (max_date + timedelta(days=2)).isoformat()
+    # get_spy_history expects datetime objects (calls .strftime internally);
+    # the previous isoformat strings raised AttributeError, defeating the
+    # whole backfill.
+    start = datetime.combine(min_date - timedelta(days=7), dtime.min)
+    end = datetime.combine(max_date + timedelta(days=2), dtime.min)
     hist = get_spy_history(start, end, priority=PRIORITY_MEDIUM)
     if hist is None or hist.empty:
-        raise RuntimeError(f'SPY history fetch returned empty for {start}..{end}')
+        raise RuntimeError(f'SPY history fetch returned empty for {start.date()}..{end.date()}')
     closes: dict[date, float] = {}
     for ts, row in hist['Close'].items():
         d = ts.date() if hasattr(ts, 'date') else ts

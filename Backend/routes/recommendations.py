@@ -40,6 +40,22 @@ _CACHE_TTL = 1200  # 20 minutes
 # Lock to prevent multiple simultaneous fetches
 _fetch_lock = threading.Lock()
 _fetching = False
+# Wall-clock ts when _fetching was set True; used to detect zombie state if
+# the worker thread crashes before reaching `finally`. Reset to None when
+# _fetching becomes False.
+_fetching_started_at = None
+# Hard ceiling on how long a fetch may run before we consider _fetching
+# stale and reset it. Should comfortably exceed worst-case _fetch_all_data().
+_FETCH_MAX_RUNTIME_S = 900  # 15 minutes
+
+# When S3_CACHE_BUCKET is configured we normally defer to Lambda for
+# precompute and return 202 if S3 is empty. But if Lambda is failing,
+# serving 202 forever is worse than one local fetch. Track the most
+# recent successful S3 read; if it's been longer than this threshold,
+# fall through to a local fetch instead of serving 202.
+_S3_STALE_AFTER_S = 900  # 15 minutes
+_last_s3_success_ts = None
+_s3_state_lock = threading.Lock()
 
 # Progress tracking for progressive loading
 _progress_lock = threading.Lock()
@@ -394,12 +410,20 @@ def _fetch_all_data():
             continue
 
         # 2b: Fetch .info concurrently
+        # Each future internally enqueues onto YFinanceQueue (single worker,
+        # 0.3s rate gate, up to 30s per submit), so a chunk-of-50's tail
+        # futures legitimately wait 30+ seconds. The previous 5s timeout
+        # abandoned those futures while the queue work still ran — wasted
+        # API calls and duplicate fetches on retry. Use a bound that
+        # comfortably covers the worst-case (50 × 0.3s queue gate + ~20s
+        # call) plus a safety margin.
         info_map = {}
+        _FUTURE_TIMEOUT = 60
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {executor.submit(_get_ticker_info, t): t for t in chunk}
             for future in as_completed(futures):
                 try:
-                    t, info = future.result(timeout=5)
+                    t, info = future.result(timeout=_FUTURE_TIMEOUT)
                     if info:
                         info_map[t] = info
                 except Exception as e:
@@ -441,7 +465,13 @@ def _fetch_all_data():
 
 
 def _read_s3_cache():
-    """Try reading pre-computed results from S3. Returns dict or None."""
+    """Try reading pre-computed results from S3. Returns dict or None.
+
+    On a fresh, non-stale hit, records `_last_s3_success_ts` so callers can
+    tell how long it's been since Lambda last published a usable snapshot
+    (see `_lambda_is_healthy`).
+    """
+    global _last_s3_success_ts
     bucket = os.environ.get('S3_CACHE_BUCKET')
     if not bucket:
         return None
@@ -456,17 +486,55 @@ def _read_s3_cache():
             return None
         data = json.loads(resp['Body'].read())
         logger.info('S3 cache hit — %d stocks, %.0fs old', data.get('count', 0), age_seconds)
+        with _s3_state_lock:
+            _last_s3_success_ts = time.time()
         return data
     except Exception as e:
         logger.debug('S3 cache read failed: %s', e)
         return None
 
 
+# Process startup baseline; used as the "last known good" anchor when we've
+# never read S3 yet, so a Lambda that has been failing since boot still
+# eventually triggers a local fallback.
+_process_start_ts = time.time()
+
+
+def _lambda_should_be_bypassed():
+    """True when Lambda is configured but hasn't produced a fresh S3 snapshot
+    in `_S3_STALE_AFTER_S` seconds, indicating the precompute is failing and
+    we should fall back to a local fetch rather than serve 202 forever.
+    """
+    if not os.environ.get('S3_CACHE_BUCKET'):
+        return False
+    with _s3_state_lock:
+        anchor = _last_s3_success_ts or _process_start_ts
+    return (time.time() - anchor) > _S3_STALE_AFTER_S
+
+
+def _maybe_reset_zombie_fetch():
+    """If _fetching has been True for longer than _FETCH_MAX_RUNTIME_S, the
+    background worker thread crashed before reaching its `finally`. Reset the
+    flag so subsequent requests can make progress. Caller must hold _fetch_lock.
+    """
+    global _fetching, _fetching_started_at
+    if _fetching and _fetching_started_at is not None:
+        runtime = time.time() - _fetching_started_at
+        if runtime > _FETCH_MAX_RUNTIME_S:
+            logger.warning(
+                'Resetting zombie _fetching=True after %.0fs (max %ds) — '
+                'background worker likely crashed before clearing flag',
+                runtime, _FETCH_MAX_RUNTIME_S,
+            )
+            _fetching = False
+            _fetching_started_at = None
+
+
 def prewarm_cache():
     """Pre-warm the recommendations cache in a background thread.
     Called from app.py on server start so the first user doesn't wait 60s.
     Checks S3 first (Lambda pre-compute), falls back to local fetch."""
-    global _fetching
+    global _fetching, _fetching_started_at
 
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
     if cached:
@@ -480,17 +548,22 @@ def prewarm_cache():
         logger.info('Prewarm from S3 — %d stocks cached', s3_data.get('count', 0))
         return
 
-    # When Lambda is configured, don't do a local fetch — just wait for
-    # S3 to be populated.  This avoids doubling Yahoo API calls.
-    if os.environ.get('S3_CACHE_BUCKET'):
+    # When Lambda is configured AND has produced a fresh snapshot recently,
+    # skip the local fetch and wait for the next Lambda cycle. Otherwise
+    # fall through — serving 202 forever when Lambda is silently broken is
+    # worse than burning one local fetch.
+    if os.environ.get('S3_CACHE_BUCKET') and not _lambda_should_be_bypassed():
         logger.info('Prewarm skipped — Lambda is configured but S3 cache not yet available')
         return
+    if _lambda_should_be_bypassed():
+        logger.warning('Prewarm falling through to local fetch — Lambda appears to be failing (no fresh S3 in %ds)', _S3_STALE_AFTER_S)
 
     with _fetch_lock:
         cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
         if cached:
             return
         _fetching = True
+        _fetching_started_at = time.time()
 
     logger.info('Prewarm started (local fetch)')
     t0 = time.time()
@@ -510,11 +583,12 @@ def prewarm_cache():
     finally:
         with _fetch_lock:
             _fetching = False
+            _fetching_started_at = None
 
 
 @recommendations_bp.route('/api/recommendations')
 def get_recommendations():
-    global _fetching
+    global _fetching, _fetching_started_at
 
     # 1. Check in-memory cache
     cached = _cache.get(_CACHE_KEY, _CACHE_TTL)
@@ -528,17 +602,24 @@ def get_recommendations():
         _cache.set(_CACHE_KEY, s3_data)
         return jsonify(s3_data)
 
-    # 3. When Lambda is configured, don't start a heavy local fetch —
-    #    return loading status and let the frontend poll until Lambda populates S3.
-    if os.environ.get('S3_CACHE_BUCKET'):
+    # 3. When Lambda is configured and producing fresh snapshots, defer to
+    #    it (return 202; frontend polls). If Lambda hasn't published a
+    #    fresh S3 file in _S3_STALE_AFTER_S, treat it as broken and fall
+    #    through to a local fetch instead of returning 202 forever.
+    if os.environ.get('S3_CACHE_BUCKET') and not _lambda_should_be_bypassed():
         logger.info('Lambda configured but S3 not ready — returning 202')
         return jsonify({
             'status': 'loading',
             'message': 'Recommendations are being computed. Please try again shortly.',
         }), 202
+    if _lambda_should_be_bypassed():
+        logger.warning('Falling through to local fetch — Lambda appears to be failing (no fresh S3 in %ds)', _S3_STALE_AFTER_S)
 
-    # 4. Prevent multiple simultaneous local fetches
+    # 4. Prevent multiple simultaneous local fetches. Also reset zombie
+    #    _fetching=True if the previous fetch exceeded the max runtime
+    #    (background thread likely crashed before clearing the flag).
     with _fetch_lock:
+        _maybe_reset_zombie_fetch()
         if _fetching:
             logger.info('Fetch in progress — returning 202')
             return jsonify({
@@ -546,7 +627,7 @@ def get_recommendations():
                 'message': 'S&P 500 data is currently being fetched. Please try again in a moment.',
             }), 202
 
-    # 5. Fall back to local computation (no Lambda configured)
+    # 5. Fall back to local computation (no Lambda or Lambda failing)
     logger.info('Cache miss — starting on-demand fetch')
     try:
         with _fetch_lock:
@@ -556,6 +637,7 @@ def get_recommendations():
                 return jsonify(cached)
 
             _fetching = True
+            _fetching_started_at = time.time()
 
         stocks, failed, total = _fetch_all_data()
 
@@ -580,6 +662,7 @@ def get_recommendations():
     finally:
         with _fetch_lock:
             _fetching = False
+            _fetching_started_at = None
 
 
 @recommendations_bp.route('/api/recommendations/progress')
