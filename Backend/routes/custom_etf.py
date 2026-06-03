@@ -56,10 +56,13 @@ def _load_recommendations():
         if hist is None or hist.empty:
             # Fallback: explicit date-range fetch. Different code path, different
             # cache key — more likely to succeed when the period fetch is failing.
-            end = datetime.now(timezone.utc).date() + timedelta(days=1)
+            # get_spy_history expects datetime objects (calls .strftime
+            # internally); passing isoformat strings used to throw
+            # AttributeError silently swallowed by the bare except below,
+            # leaving spy_price NULL.
+            end = datetime.now(timezone.utc) + timedelta(days=1)
             start = end - timedelta(days=10)
-            hist = get_spy_history(start.isoformat(), end.isoformat(),
-                                   priority=PRIORITY_MEDIUM)
+            hist = get_spy_history(start, end, priority=PRIORITY_MEDIUM)
         if hist is not None and not hist.empty:
             spy_price = float(hist['Close'].iloc[-1])
         else:
