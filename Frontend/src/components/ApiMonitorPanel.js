@@ -10,7 +10,7 @@ export default function ApiMonitorPanel() {
   // Load metrics status from backend
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiFetch(`/api/admin/metrics/status?t=${Date.now()}`);
+      const res = await apiFetch('/api/admin/metrics/status', { skipCache: true });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Failed to load metrics');
@@ -86,7 +86,7 @@ export default function ApiMonitorPanel() {
 
     async function poll() {
       try {
-        const res = await apiFetch(`/api/admin/metrics/status?t=${Date.now()}`);
+        const res = await apiFetch('/api/admin/metrics/status', { skipCache: true });
         const data = await res.json();
         if (cancelled) return;
         if (res.ok) {

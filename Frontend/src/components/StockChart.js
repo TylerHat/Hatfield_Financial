@@ -38,7 +38,7 @@ function buildSignalArray(dates, signals, type) {
 // so the Set is built once at import time, not rebuilt every render.
 const RSI_PANEL_STRATEGIES = new Set(['bollinger-bands', 'mean-reversion', 'rsi', 'macd-crossover']);
 
-export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onSignals, onRangePerformance, refreshKey = 0 }) {
+export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, startDate, endDate, onRangePerformance, refreshKey = 0 }) {
   const [stockData, setStockData] = useState(null);
   const [signals, setSignals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -94,12 +94,10 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
       setSignals([]);
       setStrategyError(null);
       signalReasonRef.current = {};
-      if (onSignals) onSignals([]);
       return;
     }
-    // Cancellation guard: prevents a stale signal payload from overwriting
-    // the newer ticker/strategy's signals and re-emitting them upward via
-    // onSignals.
+    // Cancellation guard prevents a stale signal payload from overwriting
+    // the newer ticker/strategy's signals.
     let cancelled = false;
 
     setStrategyLoading(true);
@@ -113,13 +111,9 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         if (data.error) {
           setStrategyError(data.error);
           setSignals([]);
-          if (onSignals) onSignals([]);
         } else {
           const sigs = data.signals || [];
           setSignals(sigs);
-
-          // Lift signals to parent (App.js) so other tabs can consume them.
-          if (onSignals) onSignals(sigs);
 
           // Build date → {reason, type, conviction, score} lookup for tooltips
           const lookup = {};
@@ -137,7 +131,6 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         setStrategyLoading(false);
       });
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, strategy, fetchStart, fetchEnd, stockData]);
 
   // Compute range performance and lift to parent
@@ -1464,7 +1457,7 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
               </thead>
               <tbody>
                 {[...visibleSignals].reverse().map((s, i) => (
-                  <tr key={i} className={s.type === 'BUY' ? 'buy-row' : 'sell-row'}>
+                  <tr key={`${s.date}-${s.type}-${i}`} className={s.type === 'BUY' ? 'buy-row' : 'sell-row'}>
                     <td>{s.date}</td>
                     <td>{s.price != null ? `$${s.price.toFixed(2)}` : '—'}</td>
                     <td>

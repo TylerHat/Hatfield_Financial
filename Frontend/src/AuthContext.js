@@ -46,9 +46,22 @@ export function AuthProvider({ children }) {
       });
   }, [token, logout]);
 
-  // Listen for 401 events from apiFetch
+  // Listen for 401 events from apiFetch. api.js no longer touches
+  // localStorage directly — it dispatches an `hf_auth_expired` event with
+  // the token that triggered the 401 in `detail.token`. We check that
+  // against the currently-stored token before clearing: if the user has
+  // already re-authenticated (e.g. login race), the fresh token in
+  // localStorage will differ from the failed one and we leave it alone.
   useEffect(() => {
-    const handleExpired = () => {
+    const handleExpired = (event) => {
+      const failedToken = event?.detail?.token;
+      const currentToken = localStorage.getItem('hf_token');
+      if (failedToken && currentToken && failedToken !== currentToken) {
+        // User already has a newer token — the 401 was for the old session.
+        return;
+      }
+      localStorage.removeItem('hf_token');
+      localStorage.removeItem('hf_user');
       setToken(null);
       setUser(null);
     };
