@@ -12,7 +12,6 @@ import math
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -62,12 +61,10 @@ _s3_state_lock = threading.Lock()
 _progress_lock = threading.Lock()
 _progress_current = 0
 _progress_total = 0
-_partial_results = []
 
 # Chunked fetching config
 _CHUNK_SIZE = 50
 _CHUNK_DELAY = 0.5  # seconds between chunks
-_MAX_WORKERS = 8
 
 
 def _safe_float(val, decimals=2):
@@ -377,14 +374,13 @@ def _fetch_all_data():
         spy_1m_return = None
 
     # ── Step 2: Process tickers in batched download + build cycles ─────
-    global _progress_current, _progress_total, _partial_results
+    global _progress_current, _progress_total
     stocks = []
     failed = 0
 
     with _progress_lock:
         _progress_current = 0
         _progress_total = len(tickers)
-        _partial_results = []
 
     for chunk_start in range(0, len(tickers), _CHUNK_SIZE):
         chunk = tickers[chunk_start:chunk_start + _CHUNK_SIZE]
@@ -399,25 +395,24 @@ def _fetch_all_data():
             failed += len(chunk)
             continue
 
-        # 2b: Fetch .info concurrently
-        # Each future internally enqueues onto YFinanceQueue (single worker,
-        # 0.3s rate gate, up to 30s per submit), so a chunk-of-50's tail
-        # futures legitimately wait 30+ seconds. The previous 5s timeout
-        # abandoned those futures while the queue work still ran — wasted
-        # API calls and duplicate fetches on retry. Use a bound that
-        # comfortably covers the worst-case (50 × 0.3s queue gate + ~20s
-        # call) plus a safety margin.
+        # 2b: Fetch .info sequentially.
+        # The previous ThreadPoolExecutor(max_workers=8) added zero
+        # parallelism — every _get_ticker_info call enqueues onto the
+        # single-worker YFinanceQueue at PRIORITY_LOW with a 0.3s rate
+        # gate, so 8 concurrent threads just stack up behind one another
+        # waiting on the same lock. The pool added context-switching
+        # overhead, a 60s future.result deadline that occasionally
+        # abandoned in-flight queue work, and complicated reasoning for
+        # no measurable speed-up. A simple sequential loop is the same
+        # wall-clock time without the moving parts.
         info_map = {}
-        _FUTURE_TIMEOUT = 60
-        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-            futures = {executor.submit(_get_ticker_info, t): t for t in chunk}
-            for future in as_completed(futures):
-                try:
-                    t, info = future.result(timeout=_FUTURE_TIMEOUT)
-                    if info:
-                        info_map[t] = info
-                except Exception as e:
-                    logger.debug('Future result error: %s', e)
+        for t in chunk:
+            try:
+                _, info = _get_ticker_info(t)
+                if info:
+                    info_map[t] = info
+            except Exception as e:
+                logger.debug('Info fetch error for %s: %s', t, e)
 
         # 2c: Build stock records (info may be None — that's OK)
         for t in chunk:
@@ -440,7 +435,6 @@ def _fetch_all_data():
         # 2e: Update progress for progressive loading
         with _progress_lock:
             _progress_current = min(chunk_start + _CHUNK_SIZE, len(tickers))
-            _partial_results = list(stocks)
 
         logger.info('Chunk %d-%d done — %d stocks so far',
                      chunk_start, chunk_start + len(chunk), len(stocks))
@@ -673,16 +667,20 @@ def get_recommendations_progress():
         if not _fetching:
             return jsonify({
                 'status': 'idle',
-                'stocks': [],
                 'progress': 0,
                 'total': 0,
             })
 
-    # Return partial results from in-progress fetch
+    # In-progress fetch — return progress only, no stocks payload.
+    # The previous implementation echoed the full partial stocks list
+    # on every poll (the frontend polls every 1-5s during a fetch),
+    # which meant 500 × ~1KB × every-few-seconds of bandwidth just to
+    # update a progress bar. Frontend tolerates a missing `stocks` key
+    # on loading status — it just doesn't show partial rows until
+    # the fetch completes and the cache-warm response delivers them.
     with _progress_lock:
         return jsonify({
             'status': 'loading',
-            'stocks': list(_partial_results),
             'progress': _progress_current,
             'total': _progress_total,
         })

@@ -16,7 +16,8 @@ def bollinger_bands(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        hist = get_ohlcv(ticker, user_start, end)
+        # 20-day MA/STD + 20-day volume MA need ~40 bars of warmup.
+        hist = get_ohlcv(ticker, user_start, end, warmup_days=40)
 
         if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404

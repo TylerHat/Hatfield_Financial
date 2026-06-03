@@ -392,6 +392,30 @@ def _cache_set(key, data):
         _cache[key] = {'data': data, 'ts': time.time()}
 
 
+# Negative cache for tickers that legitimately return no data
+# (delisted, halted, ticker typo'd). Without this, every request to
+# `get_ticker_info('XYZ')` for an unknown XYZ hits Yahoo's rate limiter
+# fresh. Short TTL so a temporarily-bad ticker recovers quickly.
+_NEGATIVE_TTL = 60   # seconds — known-bad keys re-check after 1 min
+_negative_cache = {}  # key -> timestamp when marked bad
+
+
+def _is_known_bad(key, ttl=_NEGATIVE_TTL):
+    with _lock:
+        ts = _negative_cache.get(key)
+        if ts is None:
+            return False
+        if (time.time() - ts) < ttl:
+            return True
+        del _negative_cache[key]
+        return False
+
+
+def _mark_known_bad(key):
+    with _lock:
+        _negative_cache[key] = time.time()
+
+
 # ── Ticker object cache ─────────────────────────────────────────────────────
 # Reuse the same yf.Ticker object for the same symbol to avoid redundant
 # session setup and allow yfinance internal caching.
@@ -410,13 +434,19 @@ def _get_ticker(symbol):
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def get_ohlcv(ticker, start, end, priority=PRIORITY_MEDIUM):
+def get_ohlcv(ticker, start, end, priority=PRIORITY_MEDIUM, warmup_days=None):
     """
     Fetch OHLCV history for a single ticker with caching.
 
-    Always fetches with the maximum warmup (280 days before `start`) so that
-    any strategy can use the result without re-fetching.  The caller trims
-    to its own needed window.
+    Fetches `warmup_days` of pre-history before `start` so the caller's
+    indicator can stabilise. Defaults to ``_MAX_WARMUP_DAYS`` (280) for
+    backwards-compat — that's the right window for MA200 / 52-week /
+    mean-reversion strategies. Light strategies (RSI=60, BB=40, RS=20)
+    can pass a smaller value to cut Yahoo bandwidth ~30% per call.
+
+    The cache key includes the warmup so different callers don't
+    cross-contaminate. A 60-day-warmup caller and a 280-day-warmup
+    caller get separate entries.
 
     Parameters
     ----------
@@ -424,22 +454,25 @@ def get_ohlcv(ticker, start, end, priority=PRIORITY_MEDIUM):
     start : datetime   – the user-visible start date
     end : datetime     – the user-visible end date
     priority : int     – queue priority (PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW)
+    warmup_days : int  – pre-history days before `start` (default _MAX_WARMUP_DAYS)
 
     Returns
     -------
     pandas.DataFrame or None
     """
     ticker = ticker.upper()
+    if warmup_days is None:
+        warmup_days = _MAX_WARMUP_DAYS
     start_str = start.strftime('%Y-%m-%d')
     end_str = end.strftime('%Y-%m-%d')
-    key = f'ohlcv:{ticker}:{start_str}:{end_str}'
+    key = f'ohlcv:{ticker}:{start_str}:{end_str}:w{warmup_days}'
 
     cached = _cache_get(key, _OHLCV_TTL)
     if cached is not None:
         _yf_queue.record_endpoint_call('get_ohlcv')
         return cached
 
-    fetch_start = start - timedelta(days=_MAX_WARMUP_DAYS)
+    fetch_start = start - timedelta(days=warmup_days)
     stock = _get_ticker(ticker)
     hist = _queue_call(lambda: stock.history(start=fetch_start, end=end), priority=priority, endpoint_type='get_ohlcv')
 
@@ -470,12 +503,21 @@ def get_ticker_info(ticker, priority=PRIORITY_MEDIUM):
         _yf_queue.record_endpoint_call('get_ticker_info')
         return cached
 
+    # Negative-cache fast path: tickers that recently returned no data
+    # (delisted, halted, typo) skip the Yahoo round-trip for _NEGATIVE_TTL.
+    if _is_known_bad(key):
+        _yf_queue.record_endpoint_call('get_ticker_info')
+        return None
+
     stock = _get_ticker(ticker)
     # Use _fetch_with_retry to handle 404 "No fundamentals data" errors gracefully
     info = _fetch_with_retry(lambda: stock.info, f'{ticker} info', priority=priority, endpoint_type='get_ticker_info')
     if info:
         _cache_set(key, info)
         return info
+    # Cache the negative result so the next caller for this ticker doesn't
+    # also burn a Yahoo quota slot.
+    _mark_known_bad(key)
     return None
 
 
@@ -494,7 +536,12 @@ def get_earnings_dates(ticker, limit=20, priority=PRIORITY_MEDIUM):
     pandas.DataFrame or None
     """
     ticker = ticker.upper()
-    key = f'earnings:{ticker}'
+    # Include `limit` in the cache key so callers asking for different
+    # window sizes don't share a cached value. The previous bare
+    # f'earnings:{ticker}' key let stock_info (limit=4) and stock_data
+    # (limit=20) cross-contaminate — whichever wrote first served a
+    # wrong-size DataFrame to the other.
+    key = f'earnings:{ticker}:{limit}'
 
     cached = _cache_get(key, _EARNINGS_TTL)
     if cached is not None:
@@ -890,8 +937,13 @@ def get_institutional_holders(ticker, limit=15, priority=PRIORITY_MEDIUM):
 def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5, priority=PRIORITY_LOW):
     """Bulk OHLCV download for many tickers.
 
-    Returns ``{ticker: DataFrame}``.  Populates the per-ticker ``ohlcv:`` cache
-    entries used by ``get_ohlcv`` so later single-ticker reads hit the cache.
+    Returns ``{ticker: DataFrame}``. Used by the recommendations prewarm
+    pipeline which consumes the returned dict directly — it does NOT
+    seed the per-ticker date-range cache used by ``get_ohlcv``, because
+    that cache keys on ``(ticker, start_str, end_str)`` while a bulk
+    period fetch can't predict the start/end strings any future
+    per-ticker caller will use. (Prior versions wrote to
+    ``ohlcv_period:{t}:{period}``, which nothing ever read.)
 
     Parameters
     ----------
@@ -961,7 +1013,7 @@ def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5, prior
                 if df.empty:
                     continue
                 result[t] = df
-                _cache_set(f'ohlcv_period:{t}:{period}', df)
+                # No cache seed — see get_many_ohlcv docstring.
                 recovered += 1
             logger.info('get_many_ohlcv chunk %d-%d fallback recovered %d/%d tickers',
                         chunk_start, chunk_start + len(chunk), recovered, len(chunk))
@@ -979,11 +1031,10 @@ def get_many_ohlcv(tickers, period='10mo', chunk_size=50, chunk_delay=0.5, prior
             if df is None or df.empty:
                 continue
             result[t] = df
-
-            # Seed per-ticker OHLCV cache so get_ohlcv() hits it later.
-            # Use a period-scoped key to avoid colliding with date-ranged keys.
-            cache_key = f'ohlcv_period:{t}:{period}'
-            _cache_set(cache_key, df)
+            # No cache seed — see get_many_ohlcv docstring. The prior
+            # `ohlcv_period:{t}:{period}` key was never read by any
+            # consumer; populating it cost write-time work + memory for
+            # zero downstream benefit.
 
     return result
 

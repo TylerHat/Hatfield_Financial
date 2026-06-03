@@ -17,7 +17,8 @@ def rsi_strategy(ticker):
         end = datetime.strptime(end_str, '%Y-%m-%d') if end_str else datetime.today()
         user_start = datetime.strptime(start_str, '%Y-%m-%d') if start_str else end - timedelta(days=182)
 
-        hist = get_ohlcv(ticker, user_start, end)
+        # Wilder RSI stabilises after ~3× period bars; 60 is comfortable.
+        hist = get_ohlcv(ticker, user_start, end, warmup_days=60)
 
         if hist is None or hist.empty:
             return jsonify({'error': f'No price data found for "{ticker.upper()}". Verify the ticker symbol and try again.', 'signals': []}), 404
