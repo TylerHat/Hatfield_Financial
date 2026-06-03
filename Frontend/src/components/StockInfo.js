@@ -96,7 +96,9 @@ export default function StockInfo({ ticker, stockInfoData, stockInfoLoading, sto
   if (error) return <div className="info-error">{error}</div>;
   if (!info) return null;
 
-  const rsiPct = info.rsi !== null ? Math.min(Math.max(info.rsi, 0), 100) : null;
+  // `!= null` catches both null AND undefined; the previous `!== null`
+  // let undefined pass through and produce NaN via Math.min/Math.max.
+  const rsiPct = info.rsi != null ? Math.min(Math.max(info.rsi, 0), 100) : null;
 
   return (
     <div className="stock-info" style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>

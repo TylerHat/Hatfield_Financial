@@ -33,6 +33,41 @@ function formatAge(iso) {
   return years === 1 ? '1 year' : `${years} years`;
 }
 
+/** Lightweight confirm modal for non-destructive admin actions
+ *  (role grants/revokes). Uses the same admin-modal-* styles as
+ *  DeleteConfirmModal so the destructive and reversible flows feel
+ *  consistent. window.confirm is browser-styled and inconsistent
+ *  with the rest of the app. */
+function ConfirmModal({ title, message, confirmLabel, confirmVariant, onConfirm, onCancel, busy }) {
+  return (
+    <div className="admin-modal-backdrop" onClick={onCancel}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{title}</h3>
+        <p>{message}</p>
+        <div className="admin-modal__actions">
+          <button
+            type="button"
+            className="admin-btn admin-btn--cancel"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={`admin-btn admin-btn--${confirmVariant || 'secondary'}`}
+            onClick={onConfirm}
+            disabled={busy}
+            autoFocus
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DeleteConfirmModal({ user, onConfirm, onCancel, busy, error }) {
   const [typed, setTyped] = useState('');
   const canConfirm = typed === user.username && !busy;
@@ -93,6 +128,8 @@ export default function AdminPanel() {
   const [flash, setFlash] = useState(null);
   const [roleBusy, setRoleBusy] = useState(null); // user_id while PATCH in-flight
   const [roleError, setRoleError] = useState(null);
+  // Pending role change awaiting in-app confirmation. Null when no modal open.
+  const [pendingRoleChange, setPendingRoleChange] = useState(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -223,11 +260,7 @@ export default function AdminPanel() {
                           className="admin-btn admin-btn--secondary admin-btn--small"
                           disabled={roleBusy === u.id}
                           title="Grant admin privileges"
-                          onClick={() => {
-                            if (window.confirm(`Grant admin privileges to ${u.username}?`)) {
-                              handleRoleChange(u.id, true);
-                            }
-                          }}
+                          onClick={() => setPendingRoleChange({ user: u, grant: true })}
                         >
                           {roleBusy === u.id ? 'Saving…' : 'Grant Admin'}
                         </button>
@@ -238,11 +271,7 @@ export default function AdminPanel() {
                           className="admin-btn admin-btn--warning admin-btn--small"
                           disabled={roleBusy === u.id}
                           title="Revoke admin privileges"
-                          onClick={() => {
-                            if (window.confirm(`Revoke admin privileges from ${u.username}?`)) {
-                              handleRoleChange(u.id, false);
-                            }
-                          }}
+                          onClick={() => setPendingRoleChange({ user: u, grant: false })}
                         >
                           {roleBusy === u.id ? 'Saving…' : 'Revoke Admin'}
                         </button>
@@ -283,6 +312,30 @@ export default function AdminPanel() {
           }}
           busy={deleteBusy}
           error={deleteError}
+        />
+      )}
+
+      {pendingRoleChange && (
+        <ConfirmModal
+          title={pendingRoleChange.grant ? 'Grant admin privileges?' : 'Revoke admin privileges?'}
+          message={
+            pendingRoleChange.grant
+              ? `${pendingRoleChange.user.username} will gain full admin access, including user management and API monitoring.`
+              : `${pendingRoleChange.user.username} will lose admin access immediately on their next request.`
+          }
+          confirmLabel={pendingRoleChange.grant ? 'Grant Admin' : 'Revoke Admin'}
+          confirmVariant={pendingRoleChange.grant ? 'secondary' : 'warning'}
+          busy={roleBusy === pendingRoleChange.user.id}
+          onConfirm={async () => {
+            const { user: u, grant } = pendingRoleChange;
+            await handleRoleChange(u.id, grant);
+            setPendingRoleChange(null);
+          }}
+          onCancel={() => {
+            if (roleBusy !== pendingRoleChange.user.id) {
+              setPendingRoleChange(null);
+            }
+          }}
         />
       )}
     </div>

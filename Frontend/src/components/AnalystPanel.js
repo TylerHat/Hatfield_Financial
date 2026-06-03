@@ -164,7 +164,7 @@ function RecTrendTable({ trend }) {
         </thead>
         <tbody>
           {trend.slice(0, 4).map((row, i) => (
-            <tr key={i}>
+            <tr key={row.period ?? `period-${i}`}>
               <td>{periodLabels[i] || row.period}</td>
               <td className="ap-trend-green">{row.strongBuy ?? '-'}</td>
               <td className="ap-trend-green">{row.buy ?? '-'}</td>

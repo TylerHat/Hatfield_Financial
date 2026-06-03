@@ -37,7 +37,7 @@ export default function MarkovBacktestPanel() {
         // Cache-bust: apiFetch caches GET responses for 2 min and the polling
         // endpoint returns 200 with changing data — without ?t=... every poll
         // after the first would return stale cached progress forever.
-        const res = await apiFetch(`/api/custom-etf/backtest/${jobId}?t=${Date.now()}`);
+        const res = await apiFetch(`/api/custom-etf/backtest/${jobId}`, { skipCache: true });
         const data = await res.json();
         if (cancelled) return;
         if (!res.ok) {
@@ -326,7 +326,7 @@ export default function MarkovBacktestPanel() {
                 </thead>
                 <tbody>
                   {result.trades.map((t, i) => (
-                    <tr key={i} className={t.action === 'BUY' ? 'buy-row' : t.pnl > 0 ? 'win-row' : t.pnl < 0 ? 'loss-row' : ''}>
+                    <tr key={`${t.date}-${t.ticker}-${t.action}-${i}`} className={t.action === 'BUY' ? 'buy-row' : t.pnl > 0 ? 'win-row' : t.pnl < 0 ? 'loss-row' : ''}>
                       <td>{t.date}</td>
                       <td><strong>{t.ticker}</strong></td>
                       <td>

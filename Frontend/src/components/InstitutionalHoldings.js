@@ -183,7 +183,7 @@ export default function InstitutionalHoldings({ holders, major, totalCount }) {
                 </thead>
                 <tbody>
                   {sorted.map((row, i) => (
-                    <tr key={i}>
+                    <tr key={`${row.holder ?? 'unknown'}-${row.dateReported ?? i}`}>
                       <td className="insider-filer">{row.holder ?? 'N/A'}</td>
                       <td className="right">{fmtShares(row.shares)}</td>
                       <td className="right">{row.pctOut != null ? `${row.pctOut.toFixed(2)}%` : 'N/A'}</td>

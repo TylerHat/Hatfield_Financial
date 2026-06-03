@@ -108,6 +108,27 @@
   50%       { opacity: 0.4; }
 }
 
+/* ── Loading spinner ──────────────────────────────────────────────────────────
+   Used by the centered overlay spinner that appears when `loading` is true.
+   Animation lives here (not inlined per-render in StatCard.js) so we don't
+   re-inject a <style> tag into the DOM on every render. */
+.stat-card__spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(88, 166, 255, 0.2);
+  border-top: 2px solid #58a6ff;
+  border-radius: 50%;
+  animation: stat-card-spin 0.8s linear infinite;
+}
+
+@keyframes stat-card-spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
 /* ── StatCardGrid ──────────────────────────────────────────────────────────── */
 
 .stat-card-grid {

@@ -162,7 +162,7 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
   // ── Load summary list (lightweight, drives the sidebar) ───────────
   const loadSummaries = useCallback(async () => {
     try {
-      const res = await apiFetch(`/api/custom-etf/summary?t=${Date.now()}`);
+      const res = await apiFetch('/api/custom-etf/summary', { skipCache: true });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load strategies');
       setSummaries(data.strategies || []);
@@ -182,7 +182,7 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/custom-etf/${id}/state?t=${Date.now()}`);
+      const res = await apiFetch(`/api/custom-etf/${id}/state`, { skipCache: true });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load state');
       setState(data);
@@ -589,7 +589,7 @@ export default function CustomEtfPanel({ onNavigateToStock }) {
                   </thead>
                   <tbody>
                     {trades.map((t, i) => (
-                      <tr key={i}>
+                      <tr key={`${t.executedAt}-${t.ticker}-${t.action}-${i}`}>
                         <td>{fmtDateTime(t.executedAt)}</td>
                         <td>
                           <span className={`cetf-action cetf-action--${t.action.toLowerCase()}`}>{t.action}</span>

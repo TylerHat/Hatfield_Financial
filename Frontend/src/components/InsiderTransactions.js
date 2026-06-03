@@ -137,7 +137,7 @@ export default function InsiderTransactions({ transactions, net90d, net90dValue 
               {transactions.map((txn, i) => {
                 const { label, color } = transactionType(txn.text);
                 return (
-                  <tr key={i}>
+                  <tr key={`${txn.date ?? 'n'}-${txn.filer ?? 'u'}-${txn.shares ?? 0}-${i}`}>
                     <td className="insider-date">{txn.date ?? 'N/A'}</td>
                     <td className="insider-filer">{txn.filer ?? 'N/A'}</td>
                     <td>
