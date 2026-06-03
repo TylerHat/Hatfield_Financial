@@ -77,28 +77,40 @@ def _generate_rebalance_dates(start, end, cadence, trading_days_index):
     return out
 
 
-def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None:
-    """Run a Markov-regime portfolio backtest. Writes progress + final result
-    into the job tracker keyed by `job_id`.
+def _walk_forward_markov(
+    start_date: pd.Timestamp,
+    end_date: pd.Timestamp,
+    cadence: str,
+    period: str,
+    progress_cb=None,
+) -> dict:
+    """Walk-forward Markov portfolio simulation between two explicit dates.
+
+    Pure simulation — does not touch the job tracker or the live DB. Returns
+    the same result dict that `run_markov_portfolio_backtest` writes to the
+    job tracker (see bottom of file). Optional `progress_cb(pct, msg)` is
+    called at each phase so a caller can wire progress into a job UI; if
+    omitted, progress updates are silently dropped.
+
+    Reused by:
+      - `run_markov_portfolio_backtest` (UI-driven backtests)
+      - `scripts/backfill_markov_history` (one-off historical patch)
     """
     t_start = time.time()
     cadence = cadence if cadence in ('weekly', 'daily') else 'weekly'
-    years = years if years in (1, 3) else 1
+    if progress_cb is None:
+        progress_cb = lambda pct, msg: None  # noqa: E731 — tiny default sink
 
-    end_date = pd.Timestamp(datetime.utcnow().date())
-    start_date = end_date - pd.DateOffset(years=years)
-
-    set_progress(job_id, 2, 'Loading S&P 500 universe...')
+    progress_cb(2, 'Loading S&P 500 universe...')
     universe = get_sp500_tickers()
     if not universe:
         raise RuntimeError('Could not load S&P 500 ticker list')
 
-    period = _YEARS_TO_PERIOD.get(years, '5y')
-    set_progress(job_id, 5, f'Fetching {period} of OHLC for {len(universe)} tickers (may take a few minutes on a cold cache)...')
+    progress_cb(5, f'Fetching {period} of OHLC for {len(universe)} tickers (may take a few minutes on a cold cache)...')
 
     # Bulk OHLC fetch — uses the per-ticker cache, so reruns are fast.
     all_ohlc = get_many_ohlcv(universe, period=period, priority=PRIORITY_MEDIUM)
-    set_progress(job_id, 28, f'Fetched OHLC for {len(all_ohlc)} tickers — pulling SPY benchmark...')
+    progress_cb(28, f'Fetched OHLC for {len(all_ohlc)} tickers — pulling SPY benchmark...')
 
     # SPY benchmark — fetch the full window so we can mark-to-baseline at each
     # rebalance. The history endpoint expects timezone-naive datetimes covering
@@ -117,7 +129,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     else:
         logger.warning('SPY history unavailable — equity curve will omit benchmark')
 
-    set_progress(job_id, 30, f'Fetched OHLC for {len(all_ohlc)} tickers — pre-computing regimes...')
+    progress_cb(30, f'Fetched OHLC for {len(all_ohlc)} tickers — pre-computing regimes...')
 
     # Pre-compute per-ticker regime arrays + cumulative transition counts.
     # cum_counts[k+1] holds transitions observable through bar k (i.e., using
@@ -126,8 +138,8 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     bad_tickers = 0
     for i, ticker in enumerate(universe):
         if (i + 1) % 100 == 0:
-            set_progress(job_id, 30 + (i / len(universe)) * 15,
-                         f'Pre-computed {i+1}/{len(universe)} tickers')
+            progress_cb(30 + (i / len(universe)) * 15,
+                        f'Pre-computed {i+1}/{len(universe)} tickers')
 
         hist = all_ohlc.get(ticker)
         if hist is None or hist.empty or len(hist) <= LOOKBACK + 30:
@@ -173,7 +185,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     if not rebalance_dates:
         raise RuntimeError('No rebalance dates fall within the requested window')
 
-    set_progress(job_id, 47, f'Walking forward across {len(rebalance_dates)} rebalances ({cadence})...')
+    progress_cb(47, f'Walking forward across {len(rebalance_dates)} rebalances ({cadence})...')
 
     # ── Portfolio state ────────────────────────────────────────────────────
     cash = STARTING_CAPITAL
@@ -185,8 +197,8 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
     for k, rebal_date in enumerate(rebalance_dates):
         if (k + 1) % 5 == 0 or k == 0:
             pct = 47 + (k / len(rebalance_dates)) * 50
-            set_progress(job_id, pct,
-                         f'Rebalance {k+1}/{len(rebalance_dates)} ({rebal_date.strftime("%Y-%m-%d")})')
+            progress_cb(pct,
+                        f'Rebalance {k+1}/{len(rebalance_dates)} ({rebal_date.strftime("%Y-%m-%d")})')
 
         # Score the universe at this rebalance date.
         candidates = []   # list of (ticker, bull_5d, bear_5d, regime, price)
@@ -255,6 +267,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
                 'pnl': round(pnl, 2),
                 'pnlPct': round(pnl_pct, 2),
                 'status': 'CLOSED',
+                'cash_after': round(cash, 2),
             })
             del positions[ticker]
 
@@ -311,6 +324,7 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
                     'value': round(cost, 2),
                     'score': round(bull_5d * 100, 1),
                     'weight': round(w, 2),
+                    'cash_after': round(cash, 2),
                 })
 
         # Snapshot equity at this rebalance.
@@ -326,8 +340,12 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         total_value = cash + positions_value
 
         # SPY benchmark — normalise to STARTING_CAPITAL at the first rebalance
-        # so both lines share the same y-axis starting point.
+        # so both lines share the same y-axis starting point. spy_close is the
+        # raw SPY close on the rebalance date and is exposed alongside spyValue
+        # so callers persisting to EtfEquitySnapshot.spy_price get the real
+        # price (not the normalised line).
         spy_value = None
+        spy_close = None
         if spy_dates is not None and len(spy_dates) > 0:
             sidx = spy_dates.searchsorted(rebal_date, side='right') - 1
             if sidx >= 0:
@@ -343,9 +361,10 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
             'cash': round(cash, 2),
             'positionsValue': round(positions_value, 2),
             'spyValue': spy_value,
+            'spy_close': round(spy_close, 4) if spy_close is not None else None,
         })
 
-    set_progress(job_id, 97, 'Computing summary statistics...')
+    progress_cb(97, 'Computing summary statistics...')
 
     # ── Final mark-to-market for any open positions (unrealized) ──────────
     open_positions = []
@@ -411,10 +430,10 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         vs_spy = total_return - spy_return
 
     elapsed = time.time() - t_start
-    logger.info('Backtest %s done in %.1fs: return=%.1f%%, trades=%d, win_rate=%.1f%%',
-                job_id, elapsed, total_return, num_trades, win_rate)
+    logger.info('Markov walk-forward done in %.1fs: return=%.1f%%, trades=%d, win_rate=%.1f%%',
+                elapsed, total_return, num_trades, win_rate)
 
-    set_done(job_id, {
+    return {
         'summary': {
             'startingCapital': STARTING_CAPITAL,
             'finalValue': round(final_value, 2),
@@ -444,7 +463,6 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
         'trades': trades,
         'openPositions': open_positions,
         'params': {
-            'years': years,
             'cadence': cadence,
             'startDate': start_date.strftime('%Y-%m-%d'),
             'endDate': end_date.strftime('%Y-%m-%d'),
@@ -453,4 +471,25 @@ def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None
             'universeSize': len(universe),
         },
         'elapsedSeconds': round(elapsed, 1),
-    })
+    }
+
+
+def run_markov_portfolio_backtest(job_id: str, years: int, cadence: str) -> None:
+    """Run a Markov-regime portfolio backtest. Writes progress + final result
+    into the job tracker keyed by `job_id`. Thin wrapper around
+    `_walk_forward_markov` that maps the UI's `years` knob to explicit
+    start/end dates and wires `set_progress` / `set_done`.
+    """
+    cadence = cadence if cadence in ('weekly', 'daily') else 'weekly'
+    years = years if years in (1, 3) else 1
+
+    end_date = pd.Timestamp(datetime.utcnow().date())
+    start_date = end_date - pd.DateOffset(years=years)
+    period = _YEARS_TO_PERIOD.get(years, '5y')
+
+    def _cb(pct, msg):
+        set_progress(job_id, pct, msg)
+
+    result = _walk_forward_markov(start_date, end_date, cadence, period, progress_cb=_cb)
+    result['params']['years'] = years
+    set_done(job_id, result)
