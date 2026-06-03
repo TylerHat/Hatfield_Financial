@@ -166,8 +166,14 @@ def _simulate_trades(signals, hist, starting_capital):
         sig_type = sig['type']
 
         if sig_type == 'BUY' and cash > 0 and shares == 0:
-            shares = int(cash / sig_price)
-            if shares == 0:
+            # Use fractional shares — `int(cash / sig_price)` left dead cash
+            # in the account on every entry (e.g. $4 leftover from an $86
+            # share price at $10k capital), which over many trades
+            # depressed measured returns 1-3% annually. Most real-world
+            # brokerages now support fractional shares; the simulator
+            # should reflect that.
+            shares = cash / sig_price
+            if shares <= 0:
                 continue
             cost = shares * sig_price
             cash -= cost
@@ -184,7 +190,7 @@ def _simulate_trades(signals, hist, starting_capital):
                 'entryDate': entry_date,
                 'entryPrice': round(entry_price, 2),
                 'price': round(sig_price, 2),
-                'shares': shares,
+                'shares': round(shares, 6),
                 'value': round(value, 2),
                 'pnl': round(pnl, 2),
                 'pnlPct': round(pnl_pct, 2),
@@ -215,7 +221,7 @@ def _simulate_trades(signals, hist, starting_capital):
             'entryDate': entry_date,
             'entryPrice': round(entry_price, 2),
             'price': round(last_price, 2),
-            'shares': shares,
+            'shares': round(shares, 6),
             'value': round(value, 2),
             'pnl': round(pnl, 2),
             'pnlPct': round(pnl_pct, 2),
@@ -245,7 +251,8 @@ def _build_equity_curve(hist, signals, starting_capital):
         sig = signal_map.get(ds)
         if sig:
             if sig['type'] == 'BUY' and cash > 0 and shares == 0:
-                new_shares = int(cash / sig['price'])
+                # Fractional shares — see B1 in _execute_trades above.
+                new_shares = cash / sig['price']
                 if new_shares > 0:
                     cash -= new_shares * sig['price']
                     shares = new_shares
@@ -263,21 +270,37 @@ def _build_equity_curve(hist, signals, starting_capital):
 
 def _compute_summary(trades, equity_curve, starting_capital, unrealized_pnl, unrealized_pnl_pct, has_unrealized):
     closed = [t for t in trades if t['status'] == 'CLOSED']
+    # Three explicit buckets: wins (pnl > 0), losses (pnl < 0), and
+    # breakeven (pnl == 0). The previous implementation lumped breakeven
+    # in with losses, which biased win_rate down 1-2% and skewed every
+    # loss-derived statistic (avg_loss_pct, gross_loss, profit_factor).
     num_wins = sum(1 for t in closed if t['pnl'] > 0)
-    num_losses = sum(1 for t in closed if t['pnl'] <= 0)
+    num_losses = sum(1 for t in closed if t['pnl'] < 0)
+    num_breakeven = sum(1 for t in closed if t['pnl'] == 0)
     num_trades = len(closed)
 
-    win_rate = (num_wins / num_trades * 100) if num_trades > 0 else 0
+    # Industry-standard win_rate = wins / (wins + losses), breakeven
+    # excluded from the denominator so a strategy with no genuine losses
+    # but several pnl==0 exits still reads as 100%.
+    decisive_trades = num_wins + num_losses
+    win_rate = (num_wins / decisive_trades * 100) if decisive_trades > 0 else 0
 
     wins_pct = [t['pnlPct'] for t in closed if t['pnl'] > 0]
-    losses_pct = [t['pnlPct'] for t in closed if t['pnl'] <= 0]
+    losses_pct = [t['pnlPct'] for t in closed if t['pnl'] < 0]
 
     avg_win_pct = sum(wins_pct) / len(wins_pct) if wins_pct else 0
     avg_loss_pct = sum(losses_pct) / len(losses_pct) if losses_pct else 0
 
     gross_profit = sum(t['pnl'] for t in closed if t['pnl'] > 0)
-    gross_loss = abs(sum(t['pnl'] for t in closed if t['pnl'] <= 0))
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (float('inf') if gross_profit > 0 else 0)
+    gross_loss = abs(sum(t['pnl'] for t in closed if t['pnl'] < 0))
+    # profit_factor is undefined when gross_loss is zero. Return None +
+    # a `hasInfiniteProfitFactor` flag so the frontend can render "∞"
+    # (positive-no-losses) distinctly from "—" (no data / inconclusive).
+    has_infinite_profit_factor = gross_loss == 0 and gross_profit > 0
+    if gross_loss > 0:
+        profit_factor = gross_profit / gross_loss
+    else:
+        profit_factor = None  # serializes cleanly as JSON null
 
     best_trade = max((t['pnlPct'] for t in closed), default=0)
     worst_trade = min((t['pnlPct'] for t in closed), default=0)
@@ -308,9 +331,11 @@ def _compute_summary(trades, equity_curve, starting_capital, unrealized_pnl, unr
         'numTrades': num_trades,
         'numWins': num_wins,
         'numLosses': num_losses,
+        'numBreakeven': num_breakeven,
         'avgWinPct': round(avg_win_pct, 2),
         'avgLossPct': round(avg_loss_pct, 2),
-        'profitFactor': round(profit_factor, 2) if profit_factor != float('inf') else None,
+        'profitFactor': round(profit_factor, 2) if profit_factor is not None else None,
+        'hasInfiniteProfitFactor': has_infinite_profit_factor,
         'bestTrade': round(best_trade, 2),
         'worstTrade': round(worst_trade, 2),
         'maxDrawdown': round(max_drawdown, 2),
