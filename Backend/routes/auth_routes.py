@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, g
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from models import db, User
@@ -27,6 +28,10 @@ def register():
     if error:
         return jsonify({'error': error}), 400
 
+    # Pre-flight checks for a friendly error message on the common case.
+    # Final uniqueness is enforced by the DB constraint + IntegrityError catch
+    # below — two simultaneous registrations can otherwise both pass the pre-
+    # flight and race into a 500 at commit time.
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already taken'}), 409
 
@@ -39,7 +44,11 @@ def register():
         email=email,
     )
     db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'Username or email already in use'}), 409
 
     token = create_token(user.id)
     return jsonify({'token': token, 'user': user.to_dict()}), 201
@@ -71,7 +80,7 @@ def login():
 @auth_bp.route('/me', methods=['GET'])
 @login_required
 def me():
-    user = User.query.get(g.current_user_id)
+    user = db.session.get(User, g.current_user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
     return jsonify({'user': user.to_dict()})
@@ -80,7 +89,7 @@ def me():
 @auth_bp.route('/me', methods=['PATCH'])
 @login_required
 def update_me():
-    user = User.query.get(g.current_user_id)
+    user = db.session.get(User, g.current_user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
 

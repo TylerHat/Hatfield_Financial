@@ -1,7 +1,7 @@
 import math
 import logging
 import pandas as pd
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from flask import Blueprint, jsonify, request
 
 import yfinance as yf
@@ -347,18 +347,32 @@ def get_stock_info(ticker):
             valuation = 'Potentially Overvalued'
             val_detail = f'P/E of {pe:.1f}x is significantly above the market average of ~20x'
 
-        # ── Day change (open → current price, or prev close → current for crypto) ───
+        # ── Day change (open → current price, or prev close → current) ───
         price = safe_float('currentPrice') or safe_float('regularMarketPrice')
         day_change_pct = None
 
         if price and not hist.empty:
-            # Try to use today's opening price first (for stocks with market hours)
-            open_price = float(hist['Open'].iloc[-1]) if not pd.isna(hist['Open'].iloc[-1]) else None
+            # Use today's open ONLY if the latest bar in `hist` actually IS today's
+            # session. On weekends, holidays, or pre-market for a new session,
+            # hist.index[-1] is yesterday/Friday — comparing currentPrice to that
+            # bar's open would just re-report yesterday's intraday change.
+            today_utc = datetime.now(timezone.utc).date()
+            last_ts = hist.index[-1]
+            last_date = last_ts.date() if hasattr(last_ts, 'date') else None
 
-            # For crypto or when opening price isn't available, use previous day's close
+            open_price = None
+            if last_date == today_utc:
+                # Live session — use today's open
+                last_open = hist['Open'].iloc[-1]
+                if not pd.isna(last_open):
+                    open_price = float(last_open)
+
+            # Off-session (weekend, holiday, pre-market) OR open unavailable
+            # (crypto, missing data): compare to the latest available close.
             if not open_price or open_price == 0:
-                if len(hist) >= 2:
-                    open_price = float(hist['Close'].iloc[-2])  # Previous day's close
+                last_close = hist['Close'].iloc[-1]
+                if not pd.isna(last_close):
+                    open_price = float(last_close)
 
             if open_price and open_price > 0:
                 day_change_pct = round(((price - open_price) / open_price) * 100, 2)
@@ -514,7 +528,7 @@ def get_stock_info(ticker):
             else:
                 div_health = 'Unsustainable'
                 div_health_detail = f'Payout ratio of {payout_pct:.0f}% — exceeds earnings, may be cut'
-        elif info.get('dividendRate') and float(info.get('dividendRate', 0)) > 0:
+        elif (safe_float('dividendRate') or 0) > 0:
             div_health = 'Unknown'
             div_health_detail = 'Dividend is paid but payout ratio data not available'
 

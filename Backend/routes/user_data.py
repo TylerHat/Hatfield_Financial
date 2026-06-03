@@ -13,6 +13,21 @@ logger = logging.getLogger(__name__)
 
 user_data_bp = Blueprint('user_data', __name__, url_prefix='/api/user')
 
+# Models cap ticker columns at 20 chars (covers crypto pairs like MATIC-USD).
+# Postgres truncates silently and SQLite stores verbatim, so callers must
+# enforce the bound up-front.
+_MAX_TICKER_LEN = 20
+
+
+def _clean_ticker(raw):
+    """Normalise and validate a ticker. Returns (ticker, error_response_or_None)."""
+    ticker = (raw or '').strip().upper()
+    if not ticker:
+        return None, (jsonify({'error': 'Ticker is required'}), 400)
+    if len(ticker) > _MAX_TICKER_LEN:
+        return None, (jsonify({'error': f'Ticker must be {_MAX_TICKER_LEN} characters or fewer'}), 400)
+    return ticker, None
+
 
 # ── Watchlists ──────────────────────────────────────────────────────────────
 
@@ -227,9 +242,9 @@ def add_holding():
     if not data:
         return jsonify({'error': 'Request body is required'}), 400
 
-    ticker = (data.get('ticker') or '').strip().upper()
-    if not ticker:
-        return jsonify({'error': 'Ticker is required'}), 400
+    ticker, err = _clean_ticker(data.get('ticker'))
+    if err:
+        return err
 
     shares = data.get('shares')
     cost_basis = data.get('cost_basis')
@@ -310,9 +325,10 @@ def update_holding(holding_id):
         holding.notes = data['notes']
 
     if 'ticker' in data:
-        ticker = (data['ticker'] or '').strip().upper()
-        if ticker:
-            holding.ticker = ticker
+        ticker, err = _clean_ticker(data.get('ticker'))
+        if err:
+            return err
+        holding.ticker = ticker
 
     db.session.commit()
     return jsonify({'holding': holding.to_dict()})
