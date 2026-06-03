@@ -34,6 +34,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "frontend" {
     id     = "cleanup-old-versions"
     status = "Enabled"
 
+    # Empty filter = "apply to every object in the bucket". The AWS
+    # provider used to infer this from omission and emits a deprecation
+    # warning otherwise; v5+ will make the warning a hard error.
+    filter {}
+
     noncurrent_version_expiration {
       noncurrent_days = 30
     }
