@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { useAuth } from './AuthContext';
 import { apiFetch } from './api';
@@ -115,11 +115,18 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
   const [refreshCount, setRefreshCount] = useState(0);
+  // Monotonic counter so we can discard responses from older Refresh clicks
+  // when the user spams the button. Only the latest click's result wins.
+  const refreshTokenRef = useRef(0);
 
   useEffect(() => {
+    // Cancellation guard so a logout (or unmount) mid-fetch doesn't call
+    // setState on the wrong user's component.
+    let cancelled = false;
     apiFetch('/api/user/watchlists')
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         const lists = data.watchlists || [];
         if (lists.length > 0) {
           setDefaultWatchlist(lists[0]);
@@ -127,6 +134,7 @@ function App() {
         }
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const handleAddToWatchlist = (ticker) => {
@@ -153,6 +161,10 @@ function App() {
 
   const handleRefreshData = () => {
     if (!submittedTicker) return;
+    // Bump the token so any older in-flight refresh's callback bails out
+    // before touching state. Spam-clicking Refresh now interleaves cleanly:
+    // intermediate responses are discarded, only the latest one wins.
+    const token = ++refreshTokenRef.current;
     setRefreshing(true);
     setStockInfoLoading(true);
     setRefreshError(null);
@@ -166,6 +178,7 @@ function App() {
     })
       .then((r) => r.json())
       .then((data) => {
+        if (token !== refreshTokenRef.current) return;
         if (data.error) {
           setRefreshError(data.error);
         } else {
@@ -177,6 +190,7 @@ function App() {
         setStockInfoLoading(false);
       })
       .catch(() => {
+        if (token !== refreshTokenRef.current) return;
         setRefreshError('Could not refresh stock data.');
         setRefreshing(false);
         setStockInfoLoading(false);
@@ -185,6 +199,10 @@ function App() {
 
   useEffect(() => {
     if (!submittedTicker) return;
+    // Cancellation guard prevents stale responses from clobbering newer
+    // state when the user switches tickers faster than the network.
+    let cancelled = false;
+
     setStockInfoLoading(true);
     setStockInfoError(null);
     setStockInfo(null);
@@ -192,11 +210,13 @@ function App() {
     apiFetch(`/api/stock-info/${submittedTicker}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) setStockInfoError(data.error);
         else setStockInfo(data);
         setStockInfoLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setStockInfoError('Could not load stock info.');
         setStockInfoLoading(false);
       });
@@ -207,10 +227,16 @@ function App() {
     apiFetch(`/api/analyst-data/${submittedTicker}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (!data.error) setAnalystData(data);
         setAnalystLoading(false);
       })
-      .catch(() => setAnalystLoading(false));
+      .catch(() => {
+        if (cancelled) return;
+        setAnalystLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [submittedTicker]);
 
   const handleSubmit = (e) => {
