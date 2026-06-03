@@ -31,9 +31,13 @@ def volatility_squeeze(ticker):
         hist['Lower'] = hist['MA20'] - 2 * hist['STD20']
         hist['BB_Width'] = hist['Upper'] - hist['Lower']
 
-        # 60-day 20th percentile of BB_Width (squeeze threshold) and median (expansion threshold)
-        hist['BB_Width_p20'] = hist['BB_Width'].rolling(60).quantile(0.20)
-        hist['BB_Width_median'] = hist['BB_Width'].rolling(60).quantile(0.50)
+        # 60-day 20th percentile of BB_Width (squeeze threshold) and median
+        # (expansion threshold). shift(1) so today's BB_Width isn't part of
+        # the historical distribution today's BB_Width is then compared
+        # against — otherwise a real expansion can mask itself by pushing
+        # the median up alongside it.
+        hist['BB_Width_p20'] = hist['BB_Width'].shift(1).rolling(60).quantile(0.20)
+        hist['BB_Width_median'] = hist['BB_Width'].shift(1).rolling(60).quantile(0.50)
 
         # In squeeze: BB_Width < 60-day 20th percentile
         hist['In_Squeeze'] = hist['BB_Width'] < hist['BB_Width_p20']

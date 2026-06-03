@@ -25,8 +25,11 @@ def bollinger_bands(ticker):
         hist['STD20'] = hist['Close'].rolling(20).std()
         hist['Upper'] = hist['MA20'] + 2 * hist['STD20']
         hist['Lower'] = hist['MA20'] - 2 * hist['STD20']
-        # Volume confirmation: require volume > 1.3× 20-day average to filter weak signals
-        hist['VolMA20'] = hist['Volume'].rolling(20).mean()
+        # Volume confirmation: require volume > 1.3× 20-day average to filter weak signals.
+        # shift(1) so today's volume isn't included in the average today's volume
+        # is then compared against — otherwise the threshold quietly trends up
+        # with the volume spike that triggered the signal, weakening the filter.
+        hist['VolMA20'] = hist['Volume'].shift(1).rolling(20).mean()
 
         # Trim to the user-requested window after bands are computed
         cutoff = pd.Timestamp(user_start).tz_localize('UTC')

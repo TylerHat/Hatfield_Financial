@@ -29,8 +29,11 @@ def breakout_52week(ticker):
         hist['High52'] = hist['Close'].shift(1).rolling(252).max()
         hist['Low52'] = hist['Close'].shift(1).rolling(252).min()
 
-        # 20-day average volume for confirmation
-        hist['VolMA20'] = hist['Volume'].rolling(20).mean()
+        # 20-day average volume for confirmation. shift(1) so today's volume
+        # isn't part of the average today's volume is then compared against
+        # — the price rollings above already shift(1), this one was missing
+        # the same treatment.
+        hist['VolMA20'] = hist['Volume'].shift(1).rolling(20).mean()
 
         # Trim to user-requested window after indicators are computed
         cutoff = pd.Timestamp(user_start).tz_localize('UTC')
