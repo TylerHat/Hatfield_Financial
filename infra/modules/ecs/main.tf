@@ -103,7 +103,7 @@ resource "aws_ecs_service" "backend" {
   task_definition        = aws_ecs_task_definition.backend.arn
   desired_count          = 1
   launch_type            = "FARGATE"
-  enable_execute_command = true  # `aws ecs execute-command` shell access for one-off scripts
+  enable_execute_command = true # `aws ecs execute-command` shell access for one-off scripts
 
   network_configuration {
     subnets          = var.public_subnet_ids
