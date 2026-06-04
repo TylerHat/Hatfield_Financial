@@ -176,43 +176,34 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     onRangePerformance({ pct: +pct.toFixed(2), up: pct >= 0 });
   }, [stockData, startDate, endDate, onRangePerformance]);
 
-  if (loading) {
-    return <div className="chart-status">Loading {ticker}…</div>;
-  }
-  if (error) {
-    return <div className="chart-status error">{error}</div>;
-  }
-  if (!stockData) return null;
-
-  const {
-    dates: _dates,
-    close: _close,
-    volume: _volume,
-    ma20: _ma20,
-    ma50: _ma50,
-    macd: _macd,
-    macd_signal: _macd_signal,
-    macd_hist: _macd_hist,
-    rsi: _rsi,
-    bb_upper: _bb_upper,
-    bb_lower: _bb_lower,
-    vol_ma20: _vol_ma20,
-    atr: _atr,
-    stoch_k: _stoch_k,
-    stoch_d: _stoch_d,
-    obv: _obv,
-    obv_signal: _obv_signal,
-    fifty_two_week_high,
-    fifty_two_week_low,
-    earnings_dates: _earnings_dates,
-  } = stockData;
-
   // Slice the fetched 1-year series down to the visible filter range (in
   // memory). Memoized on [stockData, startDate, endDate] so the 17 array
   // slices + 17 sliced arrays aren't rebuilt every time a state change
   // (strategy switch, info popover, expanded chart, etc.) triggers a
-  // re-render.
+  // re-render. Hoisted above the loading/error/no-data early returns so
+  // hook order stays stable across renders (react-hooks/rules-of-hooks).
   const sliced = useMemo(() => {
+    if (!stockData) return {};
+    const {
+      dates: _dates,
+      close: _close,
+      volume: _volume,
+      ma20: _ma20,
+      ma50: _ma50,
+      macd: _macd,
+      macd_signal: _macd_signal,
+      macd_hist: _macd_hist,
+      rsi: _rsi,
+      bb_upper: _bb_upper,
+      bb_lower: _bb_lower,
+      vol_ma20: _vol_ma20,
+      atr: _atr,
+      stoch_k: _stoch_k,
+      stoch_d: _stoch_d,
+      obv: _obv,
+      obv_signal: _obv_signal,
+      earnings_dates: _earnings_dates,
+    } = stockData;
     let _startIdx = _dates.findIndex((d) => d >= startDate);
     if (_startIdx === -1) _startIdx = _dates.length;
     let _endIdx = _dates.findIndex((d) => d > endDate);
@@ -240,7 +231,6 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
         ? _earnings_dates.filter((d) => d >= startDate && d <= endDate)
         : _earnings_dates,
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockData, startDate, endDate]);
   const {
     dates, close, volume, ma20, ma50, macd, macd_signal, macd_hist, rsi,
@@ -254,17 +244,27 @@ export default function StockChart({ ticker, strategy, fetchStart, fetchEnd, sta
     [signals, startDate, endDate],
   );
 
-  // Strategies where RSI context panel adds value
-  const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
-
   const buyData = useMemo(
-    () => buildSignalArray(dates, visibleSignals, 'BUY'),
+    () => buildSignalArray(dates || [], visibleSignals, 'BUY'),
     [dates, visibleSignals],
   );
   const sellData = useMemo(
-    () => buildSignalArray(dates, visibleSignals, 'SELL'),
+    () => buildSignalArray(dates || [], visibleSignals, 'SELL'),
     [dates, visibleSignals],
   );
+
+  if (loading) {
+    return <div className="chart-status">Loading {ticker}…</div>;
+  }
+  if (error) {
+    return <div className="chart-status error">{error}</div>;
+  }
+  if (!stockData) return null;
+
+  const { fifty_two_week_high, fifty_two_week_low } = stockData;
+
+  // Strategies where RSI context panel adds value
+  const showRsiPanel = RSI_PANEL_STRATEGIES.has(strategy);
 
   // ── Price chart ──────────────────────────────────────────────────────────────
   const priceData = {
