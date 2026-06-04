@@ -331,6 +331,12 @@ function App() {
           Recommendations
         </button>
         <button
+          className={`tab-btn ${activeTab === 'custom-etf' ? 'active' : ''}`}
+          onClick={() => setActiveTab('custom-etf')}
+        >
+          Custom ETF
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
           onClick={() => setActiveTab('watchlist')}
         >
@@ -362,12 +368,6 @@ function App() {
             Administration
           </button>
         )}
-        <button
-          className={`tab-btn ${activeTab === 'custom-etf' ? 'active' : ''}`}
-          onClick={() => setActiveTab('custom-etf')}
-        >
-          Custom ETF
-        </button>
         {user?.is_admin && (
           <button
             className={`tab-btn tab-btn--admin ${activeTab === 'api-monitor' ? 'active' : ''}`}
