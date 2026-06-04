@@ -23,6 +23,19 @@ import data_fetcher
 logger = logging.getLogger(__name__)
 
 
+def _utc_iso(dt):
+    # SQLite strips tzinfo from DateTime columns, so values come back naive
+    # even though every write site stores datetime.now(timezone.utc). Without
+    # an offset suffix, browsers parse the ISO string as local time and
+    # rebalance times render in the wrong timezone (e.g. 13:30 instead of
+    # 9:30 AM ET). Relabel naive datetimes as UTC before serializing.
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def _fetch_exit_price(ticker: str) -> float | None:
     """Best-effort current price for a ticker that's dropped out of the
     recommendations universe. Tries .info first (currentPrice / regularMarket-
@@ -92,7 +105,7 @@ def _closed_trade_stats(portfolio_id: int) -> dict:
                     'ticker': t.ticker,
                     'pnl': round(pnl, 2),
                     'pnlPct': round(pnl_pct, 2),
-                    'executedAt': t.executed_at.isoformat(),
+                    'executedAt': _utc_iso(t.executed_at),
                 }
                 if best is None or pnl > best['pnl']:
                     best = trade_summary
@@ -332,7 +345,7 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
 
     return {
         'strategyId': cfg.id,
-        'rebalancedAt': now.isoformat(),
+        'rebalancedAt': _utc_iso(now),
         'totalValue': round(total_value, 2),
         'cash': round(portfolio.cash, 2),
         'positionsValue': round(positions_value, 2),
@@ -382,8 +395,7 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
         'spyReturnPct': round(spy_return_pct, 2) if spy_return_pct is not None else None,
         'vsSpyPct': round(vs_spy_pct, 2) if vs_spy_pct is not None else None,
         'holdingsCount': len(portfolio.positions),
-        'lastRebalanceAt': portfolio.last_rebalance_at.isoformat()
-            if portfolio.last_rebalance_at else None,
+        'lastRebalanceAt': _utc_iso(portfolio.last_rebalance_at),
         'wins': stats['wins'],
         'losses': stats['losses'],
         'closedTrades': stats['closedTrades'],
@@ -429,7 +441,7 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
                                  if pos.avg_cost else None,
             'entryScore': pos.entry_score,
             'currentScore': current_score,
-            'entryAt': pos.entry_at.isoformat() if pos.entry_at else None,
+            'entryAt': _utc_iso(pos.entry_at),
         })
 
     total_value = portfolio.cash + positions_value
@@ -446,7 +458,7 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
         if spy_baseline and s.spy_price:
             spy_value = round(portfolio.starting_capital * (s.spy_price / spy_baseline), 2)
         equity_series.append({
-            'recordedAt': s.recorded_at.isoformat(),
+            'recordedAt': _utc_iso(s.recorded_at),
             'totalValue': s.total_value,
             'cash': s.cash,
             'positionsValue': s.positions_value,
@@ -489,7 +501,7 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
                     'ticker': t.ticker,
                     'pnl': round(realized_pnl, 2),
                     'pnlPct': round(realized_pnl_pct, 2),
-                    'executedAt': t.executed_at.isoformat(),
+                    'executedAt': _utc_iso(t.executed_at),
                 }
                 if best_trade is None or realized_pnl_pct > best_trade['pnlPct']:
                     best_trade = trade_summary
@@ -507,7 +519,7 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
             'score': t.score,
             'reason': t.reason,
             'cashAfter': t.cash_after,
-            'executedAt': t.executed_at.isoformat(),
+            'executedAt': _utc_iso(t.executed_at),
             'realizedPnl': round(realized_pnl, 2) if realized_pnl is not None else None,
             'realizedPnlPct': round(realized_pnl_pct, 2) if realized_pnl_pct is not None else None,
         })
@@ -534,9 +546,8 @@ def serialize_state(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> d
             'totalValue': round(total_value, 2),
             'startingCapital': portfolio.starting_capital,
             'totalReturnPct': round(total_return_pct, 2),
-            'lastRebalanceAt': portfolio.last_rebalance_at.isoformat()
-                if portfolio.last_rebalance_at else None,
-            'createdAt': portfolio.created_at.isoformat() if portfolio.created_at else None,
+            'lastRebalanceAt': _utc_iso(portfolio.last_rebalance_at),
+            'createdAt': _utc_iso(portfolio.created_at),
         },
         'holdings': holdings,
         'equitySeries': equity_series,
