@@ -1,0 +1,100 @@
+{
+  "name": "Hourly Ollama Stock Reports",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "b1a1f000-0000-4000-8000-000000000001",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [380, 300]
+    },
+    {
+      "parameters": {
+        "command": "\"C:\\Users\\hatfi\\OneDrive\\Desktop\\Hatfield_Financial\\Hatfield_Financial\\.venv\\Scripts\\python.exe\" \"C:\\Users\\hatfi\\OneDrive\\Desktop\\Hatfield_Financial\\Hatfield_Financial\\sandbox_ollama.py\""
+      },
+      "id": "b1a1f000-0000-4000-8000-000000000002",
+      "name": "Generate Reports (sandbox_ollama.py)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c0000000-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "b1a1f000-0000-4000-8000-000000000003",
+      "name": "Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "content": "## Hourly Ollama Stock Reports\n\nFires every hour and runs `sandbox_ollama.py` with the project venv.\nThe script loops the TICKERS array and writes `reports/{TICKER}_{DATE}.md`.\n\n**Edit the ticker list** in `sandbox_ollama.py` (TICKERS), not here.\n\nThe IF branch only lights up when the script exits non-zero — wire a\nnotification node (email/Slack/Telegram) onto its TRUE output if you want alerts.\n\nRequires: Ollama running on 127.0.0.1:11434 with the `qwen3:4b` model pulled (fits the 6 GB GPU; ~61 tok/s vs ~8 tok/s for the 8b on CPU).",
+        "height": 260,
+        "width": 380
+      },
+      "id": "b1a1f000-0000-4000-8000-000000000004",
+      "name": "Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [340, 520]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Generate Reports (sandbox_ollama.py)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Reports (sandbox_ollama.py)": {
+      "main": [
+        [
+          {
+            "node": "Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

@@ -41,7 +41,23 @@
       "Bash(curl -s http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:8b\",\"prompt\":\"Say hello in one sentence.\",\"stream\":false,\"options\":{\"num_predict\":300,\"temperature\":0.3}}')",
       "Bash(.venv/Scripts/python.exe -c \"import sys,json; d=json.load\\(sys.stdin\\); r=d.get\\('response',''\\); print\\('LEN',len\\(r\\)\\); print\\('RAW:', repr\\(r[:500]\\)\\)\")",
       "Bash(.venv/Scripts/python.exe \"C:/Users/hatfi/AppData/Local/Temp/claude/c--Users-hatfi-OneDrive-Desktop-Hatfield-Financial-Hatfield-Financial/47559401-2d11-43f1-837e-4e5945cefdf0/scratchpad/test_pipeline.py\")",
-      "Bash(python -m py_compile sandbox_ollama.py)"
+      "Bash(python -m py_compile sandbox_ollama.py)",
+      "Bash(node -e \"const p=require\\('/c/Users/hatfi/OneDrive/Desktop/n8n/package.json'\\); console.log\\('pkg name:',p.name,p.version\\); console.log\\('engines:',JSON.stringify\\(p.engines\\)\\); console.log\\('packageManager:',p.packageManager\\); console.log\\('scripts:'\\); for\\(const k of ['start','dev','build','build:backend','dev:be','dev:fe']\\) console.log\\(' ',k,'=>',p.scripts&&p.scripts[k]\\);\")",
+      "PowerShell(Write-Output \"=== node ===\"; \\(Get-Command node -ErrorAction SilentlyContinue\\).Source; node --version; Write-Output \"=== nvm ===\"; \\(Get-Command nvm -ErrorAction SilentlyContinue\\).Source; Write-Output \"=== fnm ===\"; \\(Get-Command fnm -ErrorAction SilentlyContinue\\).Source; Write-Output \"=== winget ===\"; \\(Get-Command winget -ErrorAction SilentlyContinue\\).Source; Write-Output \"=== choco ===\"; \\(Get-Command choco -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell(Write-Output \"=== fnm versions installed ===\"; fnm list; Write-Output \"=== default node \\(this shell\\) ===\"; node --version; Write-Output \"=== pnpm ===\"; $p = Get-Command pnpm -ErrorAction SilentlyContinue; if \\($p\\) { pnpm --version } else { \"pnpm NOT on PATH\" }; Write-Output \"=== corepack ===\"; $c = Get-Command corepack -ErrorAction SilentlyContinue; if \\($c\\) { $c.Source } else { \"corepack NOT found\" })",
+      "Bash(ollama ps *)",
+      "Bash(nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv)",
+      "Bash(curl -s http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:8b\",\"prompt\":\"Write two sentences about semiconductors.\",\"stream\":false,\"options\":{\"num_ctx\":8192}}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); ec=d.get\\('eval_count',0\\); ed=d.get\\('eval_duration',1\\); pc=d.get\\('prompt_eval_count',0\\); pd=d.get\\('prompt_eval_duration',1\\); print\\(f'GEN: {ec} tokens in {ed/1e9:.1f}s = {ec/\\(ed/1e9\\):.1f} tok/s'\\); print\\(f'PROMPT: {pc} tokens in {pd/1e9:.1f}s = {pc/\\(pd/1e9\\):.1f} tok/s'\\); print\\(f'TOTAL wall: {d.get\\(\\\\\"total_duration\\\\\",0\\)/1e9:.1f}s'\\)\")",
+      "Bash(curl -s http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:4b\",\"prompt\":\"Write two sentences about semiconductors.\",\"stream\":false,\"think\":false,\"options\":{\"num_ctx\":8192}}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); ec=d.get\\('eval_count',0\\); ed=d.get\\('eval_duration',1\\); print\\(f'GEN: {ec} tokens in {ed/1e9:.1f}s = {ec/\\(ed/1e9\\):.1f} tok/s'\\); print\\(f'TOTAL wall: {d.get\\(\\\\\"total_duration\\\\\",0\\)/1e9:.1f}s'\\)\")",
+      "Bash(curl -s --max-time 300 http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:4b\",\"prompt\":\"Write two sentences about semiconductors.\",\"stream\":false,\"think\":false,\"options\":{\"num_ctx\":8192}}')",
+      "Bash(curl -s -w \"\\\\nHTTP_CODE=%{http_code} TIME=%{time_total}s\\\\n\" --max-time 300 http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:4b\",\"prompt\":\"Say hello.\",\"stream\":false,\"think\":false}')",
+      "Bash(curl -s --max-time 10 http://127.0.0.1:11434/api/version)",
+      "Bash(curl -s --max-time 10 http://127.0.0.1:11434/api/ps)",
+      "Bash(curl -s --max-time 300 -w \"HTTP=%{http_code} TIME=%{time_total}\\\\n\" -o /tmp/ollama_4b.json http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:4b\",\"prompt\":\"Write two sentences about semiconductors.\",\"stream\":false,\"think\":false,\"options\":{\"num_ctx\":8192}}')",
+      "Bash(python -c \"import json; d=json.load\\(open\\('/tmp/ollama_4b.json'\\)\\); ec=d.get\\('eval_count',0\\); ed=d.get\\('eval_duration',1\\); print\\(f'GEN: {ec} tokens in {ed/1e9:.1f}s = {ec/\\(ed/1e9\\):.1f} tok/s'\\); print\\('vram_bytes_in_resp_keys:', [k for k in d.keys\\(\\)]\\)\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

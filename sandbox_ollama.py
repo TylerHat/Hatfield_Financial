@@ -50,7 +50,10 @@ from services.markov import analyze_markov  # noqa: E402
 TICKERS = ["MU", "AAPL", "TSLA", "MSFT", "AMZN", "GOOGL", "NVDA", "META", "NFLX", "INTC"]
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
-MODEL = "qwen3:8b"
+# qwen3:4b fits fully in the RTX 4050's 6 GB VRAM at num_ctx 8192, so it runs on
+# the GPU (~5-7x faster than the 8b, which spilled to 100% CPU). Verify placement
+# with `ollama ps` — it should read GPU, not CPU.
+MODEL = "qwen3:4b"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
 LOG_PATH = os.path.join(OUTPUT_DIR, "sandbox_ollama.log")
 
@@ -403,6 +406,9 @@ def generate_report(prompt, model=MODEL):
         "system": SYSTEM_INSTRUCTION,
         "prompt": prompt,
         "stream": False,
+        # qwen3 is a reasoning model; the report is grounded in the supplied data
+        # block, so the <think> pass adds latency and tokens we strip out anyway.
+        "think": False,
         "options": {
             "temperature": 0.3,   # factual, low creativity
             "num_ctx": 8192,      # room for the data block + report
@@ -410,10 +416,22 @@ def generate_report(prompt, model=MODEL):
     }
     resp = requests.post(OLLAMA_URL, json=payload, timeout=GEN_TIMEOUT)
     resp.raise_for_status()
-    text = resp.json().get("response", "")
+    data = resp.json()
+    text = data.get("response", "")
     if not text.strip():
         log.warning("Ollama returned an empty 'response' field")
-    # qwen3 may emit a chain-of-thought block — strip it from the saved report.
+
+    # Log throughput (tokens/sec) — the key metric for tuning model/GPU and for
+    # estimating a full S&P-500 batch. Ollama reports durations in nanoseconds.
+    eval_count = data.get("eval_count") or 0
+    eval_ns = data.get("eval_duration") or 0
+    if eval_count and eval_ns:
+        log.info(
+            "generation: %d tokens in %.1fs = %.1f tok/s",
+            eval_count, eval_ns / 1e9, eval_count / (eval_ns / 1e9),
+        )
+
+    # qwen3 may still emit a chain-of-thought block — strip it from the saved report.
     body = _THINK_RE.sub("", text).strip()
     if not body:
         log.warning("Report body is empty after stripping <think> block")
