@@ -681,6 +681,7 @@ def get_analyst_data(ticker, priority=PRIORITY_MEDIUM):
 
 _INSIDER_TTL = 3600        # 1 hour — insider filings update infrequently
 _INSTITUTIONAL_TTL = 3600  # 1 hour — 13F filings are quarterly
+_NEWS_TTL = 3600           # 1 hour — headlines refresh slowly enough; keeps Yahoo calls low at S&P-500 scale
 
 
 def _safe_val(v):
@@ -796,6 +797,117 @@ def get_insider_transactions(ticker, limit=10, priority=PRIORITY_MEDIUM):
         logger.warning(f'get_insider_transactions({ticker}): DataFrame had {len(df)} rows but none parsed (cols={cols})')
     except Exception as exc:
         logger.warning(f'get_insider_transactions({ticker}): {exc}')
+    return None
+
+
+def _normalize_news_item(item):
+    """
+    Normalize one yfinance news entry into a stable shape, tolerating both the
+    legacy flat format and the newer nested ``content`` format.
+
+      legacy: {'title', 'publisher', 'link', 'providerPublishTime' (epoch), 'summary'}
+      newer:  {'id', 'content': {'title', 'summary', 'pubDate'/'displayTime',
+                                 'provider': {'displayName'},
+                                 'canonicalUrl'/'clickThroughUrl': {'url'}}}
+
+    Returns {'title', 'publisher', 'link', 'publishTime' (ISO str or None),
+    'summary'} or None if there's no usable title.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    content = item.get('content') if isinstance(item.get('content'), dict) else None
+    src = content if content is not None else item
+
+    title = src.get('title')
+    if not title:
+        return None
+
+    # Publisher
+    provider = src.get('provider')
+    if isinstance(provider, dict):
+        publisher = provider.get('displayName')
+    else:
+        publisher = src.get('publisher')
+
+    # Link
+    link = src.get('link')
+    if not link:
+        for key in ('canonicalUrl', 'clickThroughUrl'):
+            url_obj = src.get(key)
+            if isinstance(url_obj, dict) and url_obj.get('url'):
+                link = url_obj['url']
+                break
+
+    # Publish time → ISO string. Newer format gives an ISO string already;
+    # legacy gives an epoch int.
+    publish_time = None
+    raw_time = src.get('pubDate') or src.get('displayTime') or src.get('providerPublishTime')
+    if isinstance(raw_time, (int, float)):
+        try:
+            publish_time = datetime.utcfromtimestamp(raw_time).isoformat() + 'Z'
+        except (ValueError, OverflowError, OSError):
+            publish_time = None
+    elif isinstance(raw_time, str) and raw_time:
+        publish_time = raw_time
+
+    return {
+        'title': str(title),
+        'publisher': str(publisher) if publisher else None,
+        'link': str(link) if link else None,
+        'publishTime': publish_time,
+        'summary': str(src['summary']) if src.get('summary') else None,
+    }
+
+
+def get_news(ticker, limit=10, priority=PRIORITY_MEDIUM):
+    """
+    Fetch recent news headlines for a ticker via yfinance, with a 1-hour TTL.
+
+    Normalizes each item to {'title', 'publisher', 'link', 'publishTime' (ISO),
+    'summary'}, drops items without a title, sorts newest-first, and truncates
+    to `limit`.
+
+    Returns
+    -------
+    list[dict] or None
+    """
+    ticker = ticker.upper()
+    key = f'news:{ticker}'
+
+    cached = _cache_get(key, _NEWS_TTL)
+    if cached is not None:
+        _yf_queue.record_endpoint_call('get_news')
+        return cached
+
+    stock = _get_ticker(ticker)
+    try:
+        raw = _fetch_with_retry(
+            lambda: stock.news,
+            f'{ticker} news',
+            priority=priority,
+            endpoint_type='get_news',
+        )
+        if not raw:
+            logger.debug(f'get_news({ticker}): empty or None')
+            return None
+
+        items = []
+        for entry in raw:
+            normalized = _normalize_news_item(entry)
+            if normalized:
+                items.append(normalized)
+
+        # Newest-first; items with no timestamp sink to the bottom.
+        items.sort(key=lambda x: x['publishTime'] or '', reverse=True)
+        items = items[:limit]
+
+        if items:
+            _cache_set(key, items)
+            return items
+        logger.debug(f'get_news({ticker}): {len(raw)} raw items but none had a title')
+    except Exception as exc:
+        logger.warning(f'get_news({ticker}): {exc}')
     return None
 
 

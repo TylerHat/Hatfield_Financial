@@ -7,7 +7,7 @@ Documents yfinance behavior, known quirks, and defensive patterns already establ
 ## Data Source
 
 All market data comes from **Yahoo Finance via the `yfinance` Python library**. No API key required.
-Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info **10-min**, SPY 10-min, earnings 1-hr, analyst 30-min). All yfinance HTTP calls funnel through a single-worker priority queue (`YFinanceQueue`) with min inter-call interval `0.3 s` and starvation promotion after 30 s. User data is stored in SQLite (local + prod-on-EFS; the RDS Postgres module exists but is not wired up).
+Market data is cached in-memory via `data_fetcher.py` with tiered TTLs (OHLCV 5-min, info **10-min**, SPY 10-min, earnings 1-hr, analyst 30-min, insider/institutional/news 1-hr). All yfinance HTTP calls funnel through a single-worker priority queue (`YFinanceQueue`) with min inter-call interval `0.3 s` and starvation promotion after 30 s. User data is stored in SQLite (local + prod-on-EFS; the RDS Postgres module exists but is not wired up).
 
 ---
 
@@ -69,6 +69,14 @@ def safe_float(key, decimals=2):
 - Always wrap in `try/except` and check `if earnings is not None and not earnings.empty`
 - Timezone of `earnings.index` may differ from `hist.index` — align before comparison (see `post_earnings_drift.py`)
 - Accessed via `data_fetcher.get_earnings_dates(ticker, limit, priority)` with a 1-hour TTL. **Cache key currently ignores `limit`** — first caller wins; mixing `limit=4` and `limit=20` across callers will share a single cached DataFrame.
+
+### `stock.news` — Recent Headlines
+
+- Accessed via `data_fetcher.get_news(ticker, limit=10, priority)` with a **1-hour TTL** (`_NEWS_TTL`).
+- Normalizes each item to a stable shape `{title, publisher, link, publishTime (ISO str), summary}`, drops items without a title, sorts newest-first, and truncates to `limit`.
+- **Format varies across yfinance versions** — `_normalize_news_item()` tolerates both the legacy flat dict (`title`/`publisher`/`link`/`providerPublishTime` epoch/`summary`) and the newer nested `content` dict (`provider.displayName`, `canonicalUrl`/`clickThroughUrl`, `pubDate`/`displayTime` ISO). Returns `None` on failure (no news, or none had a title).
+- `summary` is frequently sparse or absent — treat it as optional.
+- Consumed by the Ollama report generator (`sandbox_ollama.py`); no Flask route exposes it yet.
 
 ### `stock.calendar` (not used)
 
