@@ -8,7 +8,8 @@
       "mcp__ide__executeCode",
       "Bash(python -c ' *)",
       "Bash(ls .venv/Scripts/python.exe)",
-      "Bash(./.venv/Scripts/python.exe -c ' *)"
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile sandbox_ollama.py)"
     ]
   },
   "enabledMcpjsonServers": [

@@ -2,7 +2,7 @@
 name: "feature-recommender"
 description: "Generates and prioritizes high-impact features for a financial dashboard, focused on stock analysis and Yahoo Finance data."
 tools: Read, Glob, Grep, WebSearch, WebFetch, mcp__ide__executeCode
-model: sonnet
+model: fable
 color: purple
 memory: project
 ---

@@ -2,7 +2,7 @@
 name: financial-analyst-advisor
 description: "Expert trader and financial analyst who reviews the Hatfield Investments repo, evaluates trading strategies, and recommends improvements to analytics, signals, and investor-facing features."
 tools: Glob, Grep, Read, WebFetch, WebSearch, Bash, EnterWorktree
-model: haiku
+model: fable
 color: blue
 memory: project
 ---

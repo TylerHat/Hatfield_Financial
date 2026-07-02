@@ -21,6 +21,7 @@ reusing the precomputed `_fetch_all_data()` batch instead of per-ticker fetches,
 is the next step beyond this POC, not part of it.
 """
 
+import glob
 import logging
 import os
 import re
@@ -468,6 +469,24 @@ def generate_report(prompt, model=MODEL):
     return body
 
 
+def _delete_old_reports(ticker, keep_path):
+    """Remove this ticker's reports from previous runs, keeping only keep_path.
+
+    Without this, every ticker accumulates one file per day forever (and now
+    runs every 30 minutes), so reports/ would grow unbounded. Only the latest
+    report per ticker is ever needed.
+    """
+    pattern = os.path.join(OUTPUT_DIR, f"{ticker}_*.md")
+    for old_path in glob.glob(pattern):
+        if os.path.abspath(old_path) == os.path.abspath(keep_path):
+            continue
+        try:
+            os.remove(old_path)
+            log.info("[%s] deleted old report %s", ticker, os.path.basename(old_path))
+        except OSError:
+            log.warning("[%s] failed to delete old report %s", ticker, old_path, exc_info=True)
+
+
 def write_report(ctx, body):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     info = ctx.get("info") or {}
@@ -483,6 +502,7 @@ def write_report(ctx, body):
     )
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(header + body + "\n")
+    _delete_old_reports(ctx["ticker"], path)
     return path
 
 

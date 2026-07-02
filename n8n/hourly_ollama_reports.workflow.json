@@ -6,14 +6,14 @@
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hoursInterval": 1
+              "field": "minutes",
+              "minutesInterval": 30
             }
           ]
         }
       },
       "id": "b1a1f000-0000-4000-8000-000000000001",
-      "name": "Every Hour",
+      "name": "Every 30 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [380, 300]
@@ -58,19 +58,40 @@
     },
     {
       "parameters": {
-        "content": "## Hourly Ollama Stock Reports\n\nFires every hour and runs `sandbox_ollama.py` with the project venv.\nThe script loops the TICKERS array and writes `reports/{TICKER}_{DATE}.md`.\n\n**Edit the ticker list** in `sandbox_ollama.py` (TICKERS), not here.\n\nThe IF branch only lights up when the script exits non-zero — wire a\nnotification node (email/Slack/Telegram) onto its TRUE output if you want alerts.\n\nRequires: Ollama running on 127.0.0.1:11434 with the `qwen3:4b` model pulled (fits the 6 GB GPU; ~61 tok/s vs ~8 tok/s for the 8b on CPU).",
-        "height": 260,
-        "width": 380
+        "fromEmail": "hatfield.tyler@gmail.com",
+        "toEmail": "hatfield.tyler@gmail.com",
+        "subject": "={{ $json.exitCode === 0 ? '✅ Ollama Stock Reports — run complete' : '⚠️ Ollama Stock Reports — run finished with errors' }}",
+        "emailFormat": "text",
+        "text": "={{ 'Exit code: ' + $json.exitCode + '\\n\\n' + ($json.stdout ? $json.stdout.slice(-1500) : '(no stdout captured)') + ($json.stderr ? '\\n\\n--- stderr (tail) ---\\n' + $json.stderr.slice(-1000) : '') }}",
+        "options": {}
+      },
+      "id": "b1a1f000-0000-4000-8000-000000000005",
+      "name": "Send Completion Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1160, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "Gmail SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Hourly→30-min Ollama Stock Reports\n\nFires every 30 minutes and runs `sandbox_ollama.py` with the project venv.\nThe script loops the TICKERS array and writes `reports/{TICKER}_{DATE}.md`.\n\n**Edit the ticker list** in `sandbox_ollama.py` (TICKERS), not here.\n\nExactly ONE email is sent per full run (not per report) — both branches of\n`Failed?` feed the same \"Send Completion Email\" node, so you get a success\nnotice or a failure notice, never both, never per-ticker.\n\n**Before activating:** open \"Send Completion Email\" and create/select an\nSMTP credential (Settings → Credentials → New → SMTP) using a Gmail App\nPassword — https://myaccount.google.com/apppasswords (requires 2FA enabled\non the Google account). Do NOT put the password directly in this JSON file.\n\nRequires: Ollama running on 127.0.0.1:11434 with the `qwen3:4b` model pulled\n(fits the 6 GB GPU; ~61 tok/s vs ~8 tok/s for the 8b on CPU).",
+        "height": 340,
+        "width": 420
       },
       "id": "b1a1f000-0000-4000-8000-000000000004",
       "name": "Notes",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [340, 520]
+      "position": [340, 560]
     }
   ],
   "connections": {
-    "Every Hour": {
+    "Every 30 Minutes": {
       "main": [
         [
           {
@@ -86,6 +107,24 @@
         [
           {
             "node": "Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failed?": {
+      "main": [
+        [
+          {
+            "node": "Send Completion Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Completion Email",
             "type": "main",
             "index": 0
           }
