@@ -46,6 +46,8 @@ from data_fetcher import (  # noqa: E402
 from routes.recommendations import _build_stock_data  # noqa: E402
 from services.markov import analyze_markov  # noqa: E402
 
+from news_scraper import get_free_news  # noqa: E402 — free RSS/HTML news sources
+
 # ── Config ────────────────────────────────────────────────────────────────────
 TICKERS = ["MU", "AAPL", "TSLA", "MSFT", "AMZN", "GOOGL", "NVDA", "META", "NFLX", "INTC"]
 
@@ -253,12 +255,20 @@ def gather_context(ticker):
         log.warning("[%s] get_analyst_data failed", ticker, exc_info=True)
         ctx["analyst"] = None
 
-    # News (the lead material for the report)
+    # News (the lead material for the report). Prefer free scraped sources
+    # (Yahoo/Google RSS); fall back to yfinance so the report is never newsless.
+    ctx["news"] = None
+    company_name = (info or {}).get("longName") or (info or {}).get("shortName")
     try:
-        ctx["news"] = get_news(ticker, limit=NEWS_LIMIT, priority=PRIORITY_HIGH)
+        ctx["news"] = get_free_news(ticker, company_name=company_name, limit=NEWS_LIMIT)
     except Exception:  # noqa: BLE001
-        log.warning("[%s] get_news failed", ticker, exc_info=True)
-        ctx["news"] = None
+        log.warning("[%s] get_free_news failed", ticker, exc_info=True)
+    if not ctx["news"]:
+        try:
+            log.info("[%s] free news empty — falling back to yfinance", ticker)
+            ctx["news"] = get_news(ticker, limit=NEWS_LIMIT, priority=PRIORITY_HIGH)
+        except Exception:  # noqa: BLE001
+            log.warning("[%s] get_news fallback failed", ticker, exc_info=True)
 
     # Surface degraded (but non-fatal) context so a thin report isn't a surprise.
     missing = [k for k in ("info", "row", "markov", "analyst", "news") if not ctx.get(k)]
@@ -291,7 +301,9 @@ def _signals_block(ctx):
         f"Price action: {row.get('priceAction', 'N/A')}",
         f"RSI: {_f(row.get('rsiValue'))}  |  MACD: {row.get('macdStatus', 'N/A')}",
         f"Trend alignment: {row.get('trendAlignment', 'N/A')}  |  Momentum vs SPY (1m): {_pct(row.get('momentum'))}",
-        f"Volatility: {row.get('volatilityStatus', 'N/A')} (ratio {_f(row.get('volRatio'))})",
+        # Qualitative status only — the system prompt forbids printing the raw
+        # ratio, so don't hand it over for the model to echo.
+        f"Volatility: {row.get('volatilityStatus', 'N/A')}",
         f"52-week range: {_f(row.get('fiftyTwoWeekLow'), prefix='$')} - {_f(row.get('fiftyTwoWeekHigh'), prefix='$')}"
         f"  |  Position in range: {_pct(row.get('fiftyTwoWeekPosition'))}",
     ]
@@ -398,6 +410,24 @@ the stock, then corroborate with the computed signals. Use only the data given.
 
 # ── Ollama call ───────────────────────────────────────────────────────────────
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_THINK_CLOSE_RE = re.compile(r"</think>", re.IGNORECASE)
+
+
+def _strip_reasoning(text):
+    """Remove qwen3's chain-of-thought from the model output.
+
+    qwen3 emits reasoning either wrapped in <think>...</think> OR — when the
+    opening tag is suppressed (our think:False) — as a leading prose block
+    terminated by a lone </think> with no opening tag. The original regex only
+    matched well-formed pairs, so the tag-less variant leaked the entire
+    "Okay, the user wants me to..." monologue into the saved report. Anything up
+    to and including the final </think> is reasoning and never belongs in the
+    report, so drop it first, then clean up any well-formed pairs that remain.
+    """
+    matches = list(_THINK_CLOSE_RE.finditer(text))
+    if matches:
+        text = text[matches[-1].end():]
+    return _THINK_RE.sub("", text).strip()
 
 
 def generate_report(prompt, model=MODEL):
@@ -432,9 +462,9 @@ def generate_report(prompt, model=MODEL):
         )
 
     # qwen3 may still emit a chain-of-thought block — strip it from the saved report.
-    body = _THINK_RE.sub("", text).strip()
+    body = _strip_reasoning(text)
     if not body:
-        log.warning("Report body is empty after stripping <think> block")
+        log.warning("Report body is empty after stripping reasoning block")
     return body
 
 

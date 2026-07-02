@@ -57,7 +57,8 @@
       "Bash(curl -s --max-time 10 http://127.0.0.1:11434/api/ps)",
       "Bash(curl -s --max-time 300 -w \"HTTP=%{http_code} TIME=%{time_total}\\\\n\" -o /tmp/ollama_4b.json http://127.0.0.1:11434/api/generate -d '{\"model\":\"qwen3:4b\",\"prompt\":\"Write two sentences about semiconductors.\",\"stream\":false,\"think\":false,\"options\":{\"num_ctx\":8192}}')",
       "Bash(python -c \"import json; d=json.load\\(open\\('/tmp/ollama_4b.json'\\)\\); ec=d.get\\('eval_count',0\\); ed=d.get\\('eval_duration',1\\); print\\(f'GEN: {ec} tokens in {ed/1e9:.1f}s = {ec/\\(ed/1e9\\):.1f} tok/s'\\); print\\('vram_bytes_in_resp_keys:', [k for k in d.keys\\(\\)]\\)\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python \"C:/Users/hatfi/AppData/Local/Temp/claude/c--Users-hatfi-OneDrive-Desktop-Hatfield-Financial-Hatfield-Financial/bff5c503-e40c-4a1a-87fd-c865e9c70de6/scratchpad/clean_reports.py\")"
     ]
   }
 }

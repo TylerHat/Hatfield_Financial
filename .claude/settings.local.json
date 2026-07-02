@@ -5,7 +5,10 @@
       "Bash(curl:*)",
       "Bash(cd:*)",
       "Bash(aws:*)",
-      "mcp__ide__executeCode"
+      "mcp__ide__executeCode",
+      "Bash(python -c ' *)",
+      "Bash(ls .venv/Scripts/python.exe)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)"
     ]
   },
   "enabledMcpjsonServers": [
