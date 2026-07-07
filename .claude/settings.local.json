@@ -9,7 +9,13 @@
       "Bash(python -c ' *)",
       "Bash(ls .venv/Scripts/python.exe)",
       "Bash(./.venv/Scripts/python.exe -c ' *)",
-      "Bash(./.venv/Scripts/python.exe -m py_compile sandbox_ollama.py)"
+      "Bash(./.venv/Scripts/python.exe -m py_compile sandbox_ollama.py)",
+      "PowerShell(Select-String -Path Backend\\\\routes\\\\backtest.py -Pattern 'rolling\\\\\\(|shift\\\\\\(1\\\\\\)' | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
+      "PowerShell(Select-String -Path Backend\\\\routes\\\\strategies\\\\relative_strength.py -Pattern 'rolling|shift' | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
+      "PowerShell(..\\\\.venv\\\\Scripts\\\\python.exe -m py_compile Backend\\\\routes\\\\backtest.py; if \\($?\\) { \"OK\" })",
+      "Bash(curl -s --max-time 5 http://127.0.0.1:11434/api/tags)",
+      "Bash(curl -s --max-time 5 http://127.0.0.1:11434/api/version)",
+      "Bash(echo \"exit: $?\")"
     ]
   },
   "enabledMcpjsonServers": [

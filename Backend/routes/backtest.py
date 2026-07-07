@@ -14,7 +14,9 @@ def _get_signals_bollinger(hist, user_start):
     hist['STD20'] = hist['Close'].rolling(20).std()
     hist['Upper'] = hist['MA20'] + 2 * hist['STD20']
     hist['Lower'] = hist['MA20'] - 2 * hist['STD20']
-    hist['VolMA20'] = hist['Volume'].rolling(20).mean()
+    # shift(1) so today's volume isn't part of its own average —
+    # matches strategies/bollinger_bands.py so backtest and live signals agree
+    hist['VolMA20'] = hist['Volume'].shift(1).rolling(20).mean()
 
     cutoff = pd.Timestamp(user_start).tz_localize('UTC')
     if hist.index.tz is None:
@@ -91,7 +93,9 @@ def _get_signals_macd(hist, user_start):
 def _get_signals_mean_reversion(hist, user_start):
     hist = hist.copy()
     hist['MA200'] = hist['Close'].rolling(200).mean()
-    hist['High20'] = hist['Close'].rolling(20).max()
+    # shift(1) so today's close isn't part of its own trailing high —
+    # matches strategies/mean_reversion.py so backtest and live signals agree
+    hist['High20'] = hist['Close'].shift(1).rolling(20).max()
     hist['Drawdown'] = (hist['Close'] - hist['High20']) / hist['High20']
 
     cutoff = pd.Timestamp(user_start).tz_localize('UTC')
