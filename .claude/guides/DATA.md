@@ -165,6 +165,8 @@ The `fmt_large()` helper in `stock_info.py` formats market cap and free cash flo
 
 ## Known Limitations
 
+- **AVG antivirus breaks yfinance on local dev (discovered HFA-069)**: AVG "Web/Mail Shield" intercepts HTTPS with its own root cert. Windows trusts it (so browsers and Python's stdlib TLS work), but yfinance ≥ 1.x uses `curl_cffi`, which trusts only its bundled certifi CA list → **every Yahoo call fails with `curl: (60) SSL certificate problem`** while AVG web scanning is on. Fixes: (a) disable AVG's "HTTPS scanning" for local dev, or (b) export the AVG root cert (`Get-ChildItem Cert:\CurrentUser\Root | ? Subject -like '*AVG*'`), append it to a copy of `certifi.where()`, and set `CURL_CA_BUNDLE=<combined.pem>` before `python app.py`. Prod (ECS/Lambda) is unaffected — no AVG there.
+- **`get_many_ohlcv` is uncached**: each caller (prewarm chunk, backtest run) re-downloads. Two back-to-back backtests re-fetch ~500 × 5y. Cost-relevant for the walk-forward engine.
 - **No real-time data**: yfinance returns delayed/end-of-day prices for most tickers
 - **Crypto tickers**: yfinance accepts `BTC-USD`-style symbols and the watchlist / portfolio columns now accommodate 20-char tickers (per the prod migration), but earnings/analyst data is unavailable for crypto. `sp500.py` only contains the S&P 500 list plus a fallback list — there is no `CRYPTO_TICKERS` constant.
 - **International tickers**: may work with exchange suffixes (e.g. `ASML.AS`) but timezone handling becomes more complex

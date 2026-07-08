@@ -169,6 +169,12 @@ def compute_buy_score(row: dict) -> int:
 
 
 class BuyScoreStrategy(EtfStrategy):
+    # Valuation / quality / growth / analyst inputs (forwardPE, fcfYield,
+    # returnOnEquity, epsGrowth, recommendationKey, targetUpsidePct, …) are
+    # today-snapshot .info fields — yfinance serves no point-in-time history
+    # for them, so the walk-forward engine must refuse this strategy.
+    historical_backtest_safe = False
+
     config = StrategyConfig(
         id='buy-score-top10',
         name='Buy Score — Top 10 Green',

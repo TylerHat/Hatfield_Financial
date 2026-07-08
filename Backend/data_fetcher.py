@@ -1059,6 +1059,30 @@ def get_spy_1m_return(priority=PRIORITY_MEDIUM):
     return (float(close.iloc[-1]) / float(close.iloc[-22]) - 1) * 100
 
 
+def get_spy_6m1m_return(priority=PRIORITY_MEDIUM):
+    """Cached SPY 6-1 month % return: the ~6-month window ending ~1 month ago.
+
+    Companion to ``get_spy_1m_return`` for the momentum6m rec-row field —
+    the classic momentum construction skips the most recent month because
+    1-month returns mean-revert. Windows come from services/row_features.py
+    so the stock-side and SPY-side math can't drift apart.
+
+    Parameters
+    ----------
+    priority : int   – queue priority (PRIORITY_HIGH, PRIORITY_MEDIUM, PRIORITY_LOW)
+    """
+    from services.row_features import MOMENTUM_6M_SKIP, MOMENTUM_6M_WINDOW
+    hist = get_spy_period('10mo', priority=priority)
+    if hist is None:
+        return None
+    close = hist['Close'].dropna()
+    end_idx = MOMENTUM_6M_SKIP + 1                      # bar ~1 month ago
+    start_idx = MOMENTUM_6M_SKIP + MOMENTUM_6M_WINDOW + 1   # bar ~7 months ago
+    if len(close) < start_idx:
+        return None
+    return (float(close.iloc[-end_idx]) / float(close.iloc[-start_idx]) - 1) * 100
+
+
 def clear_cache(prefix=None):
     """Clear all cache entries, or only those matching a key prefix."""
     with _lock:

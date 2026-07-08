@@ -236,9 +236,12 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 | `stocks[].priceAction` | string | Price action status |
 | `stocks[].macdStatus` | string | MACD status string |
 | `stocks[].volatilityStatus` | string | Volatility status string |
-| `stocks[].volRatio` | number\|null | ATR ratio (recent ATR / mean ATR); used by Buy Score risk-adjustment bucket |
+| `stocks[].volRatio` | number\|null | ATR ratio (recent ATR / mean ATR — self-relative); used by Buy Score risk-adjustment bucket |
+| `stocks[].realizedVol` | number\|null | Annualized σ of daily log returns, 126-day window (percent). Cross-sectional input for the Low Vol ETF strategy |
 | `stocks[].trendAlignment` | string | Trend alignment label |
-| `stocks[].momentum` | number\|null | 1-month return relative to SPY (percent) |
+| `stocks[].momentum` | number\|null | 1-month return relative to SPY (percent) — display + Buy Score input |
+| `stocks[].momentum6m` | number\|null | 6-1 month return relative to SPY (percent, Jegadeesh–Titman window). Momentum ETF input |
+| `stocks[].momentum6mAbs` | number\|null | Raw 6-1 month return (percent, no SPY subtraction). For absolute-momentum gates |
 | `stocks[].overallRisk` | number\|null | yfinance ISS overall risk (1–10, lower=better) |
 | `stocks[].rsiValue` | number\|null | Wilder 14-day RSI |
 | `stocks[].numberOfAnalysts` | number\|null | Count of analyst opinions |
