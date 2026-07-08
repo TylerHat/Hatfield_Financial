@@ -166,12 +166,31 @@ The `/api/backtest/<ticker>` endpoint supports a subset of strategies with inter
 
 Distinct from the 9 chart-analysis strategies above. Custom ETF strategies are **universe-wide
 portfolio simulators**: each maps a recommendation row → 0-100 score, and the engine buys the
-top-`max_positions` names equal-weight, rebalancing on the Recommendations refresh (24h cooldown).
-Registered in `Backend/services/custom_etf/strategies/__init__.py`.
+top-`max_positions` names (equal-weight unless the strategy overrides `weight()`), rebalancing on
+the Recommendations refresh (24h cooldown). Registered in
+`Backend/services/custom_etf/strategies/__init__.py`.
 
-Price-derived row fields (`momentum`, `momentum6m`, `realizedVol`, `trendAlignment`, `macdStatus`,
-`fiftyTwoWeekPosition`) are computed by `services/row_features.py` — the single source of truth
-shared with the prewarm so scoring inputs can't drift across consumers.
+**Shared machinery (HFA-069):** the sell/mark/buy decision pass lives in
+`services/custom_etf/rebalance_core.py` and is executed verbatim by BOTH the live simulator and
+the walk-forward backtest engine (`services/custom_etf/walk_forward.py`) — a backtest is the live
+strategy replayed over history. Price-derived row fields (`momentum`, `momentum6m`, `realizedVol`,
+`trendAlignment`, `macdStatus`, `fiftyTwoWeekPosition`, markov fields) are computed by
+`services/row_features.py`, shared between the prewarm and the engine so the two can't drift.
+Strategies with `historical_backtest_safe = False` (inputs are today-snapshot .info/analyst
+fields) are refused by the engine.
+
+### Backtest support (Custom ETF)
+
+| Strategy | ID | Backtestable | Why not |
+|----------|----|--------------|---------|
+| Buy Score | `buy-score-top10` | No | Valuation/quality/growth/analyst inputs are today-snapshot |
+| Momentum | `momentum-top10` | **Yes** | Price-derived only |
+| Low Volatility | `low-vol-defensive` | No | Quality inputs (ROE/debt/margins/risk) are today-snapshot |
+| Analyst Conviction | `analyst-conviction-top10` | No | Analyst consensus is today-snapshot |
+| Undervalued Strong Buy | `undervalued-strong-buy-top10` | No | Analyst + valuation inputs are today-snapshot |
+| Markov Regime | `markov-regime` | **Yes** | Price-derived only |
+| 52-Week-High | `52-week-high-top10` | **Yes** | Price-derived only |
+| Sector Rotation | `sector-rotation-top3` | **Yes** | Price-derived only (fixed SPDR universe) |
 
 ### Buy Score — Top 10 Green
 **ID**: `buy-score-top10` · **Buy ≥** 70 · **Sell ≤** 65 · **Max** 10
@@ -181,7 +200,7 @@ Trend composite 25%, Analyst 12%, Quality 10%, Growth 10%, 52-week position 8%, 
 RSI (regime-conditioned) 5%, Governance 3%, Coverage 2%. See `buy_score.py` for curves.
 
 ### Momentum — Top 10 Trending
-**ID**: `momentum-top10` · **Buy ≥** 70 · **Sell ≤** 60 · **Max** 10
+**ID**: `momentum-top10` · **Buy ≥** 70 · **Sell ≤** 60 · **Max** 10 · **Backtestable**
 
 Cross-sectional momentum factor — uncorrelated to Buy Score. **Corrected in HFA-069**: the
 original ranked on 1-MONTH relative return (the short-term-reversal horizon) with an absolute
@@ -201,7 +220,7 @@ compression signal, not low volatility). Now ranks `realizedVol` (annualized σ 
 126d, from the prewarm) **cross-sectionally** via `prepare()`: lowest-vol names in the universe
 score highest. Weights: low realized vol 35%, ROE 20%, low debt 15%, inverted overall-risk 15%,
 gross margin 15%. Lower thresholds keep the portfolio invested when high-quality low-vol names
-are scarce. See `low_vol_defensive.py`.
+are scarce. Not backtestable (quality inputs are today-snapshot). See `low_vol_defensive.py`.
 
 ### Analyst Conviction — Top 10
 **ID**: `analyst-conviction-top10` · **Buy ≥** 60 · **Sell ≤** 50 · **Max** 10
@@ -244,6 +263,34 @@ Eligibility gates: `currentPrice` present, Markov fields present, current regime
 allocation of a marginal 55% pick. The only registered strategy that uses non-equal
 weighting today. See `markov_regime.py` and `services/markov/analyze.py` for the
 regime classification math.
+
+**Backtest note (HFA-069):** the Markov backtest now runs on the generic walk-forward engine and
+replays these exact live rules (composite score, hold-until-sell hysteresis, eligibility gates,
+conviction weights). The retired engine ranked by raw `bull_5d` and force-sold anything outside
+the day's top 10 — a different, higher-turnover strategy — so pre-HFA-069 backtest numbers are not
+comparable to current ones.
+
+### 52-Week-High Momentum — Top 10
+**ID**: `52-week-high-top10` · **Buy ≥** 85 · **Sell ≤** 70 · **Max** 10 · **Backtestable** · Added HFA-069
+
+George & Hwang (2004) anchoring effect: names pressing their 52-week highs keep drifting because
+investors are slow to bid through a salient reference price. Distinct from (and complementary to)
+6-1M return momentum. Weights: **52-week position 70%**, trend alignment 20%, MACD status 10%.
+Buy ≥ 85 admits only names within ~10-15% of their high AND in an uptrend; sell ≤ 70 exits once a
+holding slides roughly a third down its 52-week range or the trend breaks. Wide hysteresis keeps
+turnover low. See `fifty_two_week_high.py`.
+
+### Sector Rotation — Top 3 Momentum
+**ID**: `sector-rotation-top3` · **Buy ≥** 60 · **Sell ≤** 45 · **Max** 3 · **Backtestable** · Added HFA-069
+
+Dual-momentum (Antonacci) rotation over a **fixed custom universe** — the 11 SPDR select-sector
+ETFs (XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLV, XLY). Rows are synthesized from price
+history by `services/custom_etf/custom_universe.py` (the SPDRs aren't in the Recommendations
+snapshot). Score: 6-1M excess return vs SPY clamped ±15% → 0-100 (0% excess = 50), so buy ≥ 60 ≈
++3% excess and sell ≤ 45 ≈ −1.5% excess. Eligibility requires `momentum6mAbs > 0` — the
+**absolute-momentum gate**: when a sector's own 6-1M return is negative it can't be bought no
+matter its relative rank, so the sleeve degrades to cash in broad downtrends. Equal weight.
+See `sector_rotation.py`.
 
 ---
 

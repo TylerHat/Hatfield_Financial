@@ -27,7 +27,7 @@ from services.custom_etf.simulator import (
 )
 from services.custom_etf.strategies import get_strategy, list_strategies
 from services.custom_etf import backtest_jobs
-from services.custom_etf.markov_portfolio_backtest import run_markov_portfolio_backtest
+from services.custom_etf.walk_forward import run_generic_backtest
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +77,25 @@ def _recs_by_ticker(stocks):
     return {s['ticker']: s for s in (stocks or []) if s.get('ticker')}
 
 
+def _rows_for_strategy(strategy, stocks):
+    """The rows a strategy scores: the S&P 500 recommendations snapshot by
+    default, or price-feature rows synthesized for the strategy's fixed
+    `custom_universe` (e.g. Sector Rotation's 11 SPDR ETFs)."""
+    universe = strategy.config.custom_universe
+    if universe:
+        from services.custom_etf.custom_universe import build_rows_for_universe
+        return build_rows_for_universe(universe)
+    return stocks or []
+
+
 @custom_etf_bp.route('/strategies', methods=['GET'])
 @login_required
 def list_etf_strategies():
     return jsonify({
-        'strategies': [s.config.to_dict() for s in list_strategies()],
+        'strategies': [
+            {**s.config.to_dict(), 'historicalBacktestSafe': s.historical_backtest_safe}
+            for s in list_strategies()
+        ],
     })
 
 
@@ -91,9 +105,11 @@ def summary_all():
     """Headline stats for every registered strategy — drives the multi-ETF
     comparison sidebar so adding a new strategy automatically shows up."""
     stocks, _ = _load_recommendations()
-    by_ticker = _recs_by_ticker(stocks)
     return jsonify({
-        'strategies': [summarize(s, by_ticker) for s in list_strategies()],
+        'strategies': [
+            summarize(s, _recs_by_ticker(_rows_for_strategy(s, stocks)))
+            for s in list_strategies()
+        ],
     })
 
 
@@ -105,7 +121,8 @@ def get_state(strategy_id):
         return jsonify({'error': f'Unknown strategy: {strategy_id}'}), 404
 
     stocks, _ = _load_recommendations()
-    state = serialize_state(strategy, _recs_by_ticker(stocks))
+    rows = _rows_for_strategy(strategy, stocks)
+    state = serialize_state(strategy, _recs_by_ticker(rows))
     state['cooldownHours'] = REBALANCE_COOLDOWN.total_seconds() / 3600
     return jsonify(state)
 
@@ -123,7 +140,8 @@ def get_rankings(strategy_id):
         return jsonify({'error': f'Unknown strategy: {strategy_id}'}), 404
 
     stocks, _ = _load_recommendations()
-    if not stocks:
+    rows = _rows_for_strategy(strategy, stocks)
+    if not rows:
         return jsonify({
             'strategyId': strategy.config.id,
             'strategyName': strategy.config.name,
@@ -131,14 +149,14 @@ def get_rankings(strategy_id):
         })
 
     try:
-        strategy.prepare(stocks)
+        strategy.prepare(rows)
     except Exception as e:
         logger.debug('strategy.prepare() failed for %s: %s', strategy_id, e)
 
     held_tickers = {p.ticker for p in get_or_create_portfolio(strategy).positions}
 
     scored = []
-    for row in stocks:
+    for row in rows:
         ticker = row.get('ticker')
         if not ticker:
             continue
@@ -198,17 +216,23 @@ def trigger_rebalance(strategy_id):
             }), 200
 
     stocks, spy_price = _load_recommendations()
-    if not stocks:
+    rows = _rows_for_strategy(strategy, stocks)
+    if not rows:
+        if strategy.config.custom_universe:
+            return jsonify({
+                'status': 'no_data',
+                'message': 'Could not build price rows for the strategy universe — yfinance may be rate-limited.',
+            }), 503
         return jsonify({
             'status': 'no_data',
             'message': 'Recommendations cache is empty — load /api/recommendations first.',
         }), 503
 
     try:
-        result = rebalance(strategy, stocks, spy_price=spy_price)
+        result = rebalance(strategy, rows, spy_price=spy_price)
         result['status'] = 'ok'
         # Return updated full state so the UI can re-render in one round trip
-        result['state'] = serialize_state(strategy, _recs_by_ticker(stocks))
+        result['state'] = serialize_state(strategy, _recs_by_ticker(rows))
         return jsonify(result)
     except Exception as e:
         logger.error('rebalance failed for %s: %s', strategy_id, e, exc_info=True)
@@ -235,7 +259,12 @@ def auto_rebalance_all():
     results = []
     for strategy in list_strategies():
         try:
-            r = rebalance(strategy, stocks, spy_price=spy_price)
+            rows = _rows_for_strategy(strategy, stocks)
+            if not rows:
+                results.append({'strategyId': strategy.config.id,
+                                'error': 'no rows for strategy universe'})
+                continue
+            r = rebalance(strategy, rows, spy_price=spy_price)
             results.append({
                 'strategyId': strategy.config.id,
                 'totalValue': r['totalValue'],
@@ -266,17 +295,34 @@ def reset_etf(strategy_id):
     stocks, _ = _load_recommendations()
     return jsonify({
         'status': 'reset',
-        'state': serialize_state(strategy, _recs_by_ticker(stocks)),
+        'state': serialize_state(strategy, _recs_by_ticker(_rows_for_strategy(strategy, stocks))),
     })
 
 
-# ── Backtest (Markov Regime only, for now) ──────────────────────────────
+# ── Backtest (any historical-backtest-safe strategy) ────────────────────
+# The walk-forward engine replays the LIVE rebalance semantics against
+# point-in-time price features (services/custom_etf/walk_forward.py).
+# Strategies whose inputs are today-snapshot .info / analyst fields are
+# refused — a backtest of those would leak hindsight.
 # Backtests are long-running (10s–5min depending on cache state). Run as a
 # background job; the UI polls /backtest/<job_id> for progress + results.
 
-@custom_etf_bp.route('/markov-regime/backtest', methods=['POST'])
+@custom_etf_bp.route('/<strategy_id>/backtest', methods=['POST'])
 @admin_required
-def start_markov_backtest():
+def start_backtest(strategy_id):
+    strategy = get_strategy(strategy_id)
+    if strategy is None:
+        return jsonify({'error': f'Unknown strategy: {strategy_id}'}), 404
+    if not strategy.historical_backtest_safe:
+        return jsonify({
+            'error': (
+                f'{strategy.config.name} cannot be backtested: it scores '
+                'fundamentals / analyst-consensus fields that yfinance only '
+                'serves as a today-snapshot, so a historical run would apply '
+                "today's data to past dates (hindsight bias)."
+            ),
+        }), 400
+
     body = request.get_json(silent=True) or {}
     years = body.get('years', 1)
     cadence = body.get('cadence', 'weekly')
@@ -286,9 +332,9 @@ def start_markov_backtest():
     if cadence not in ('weekly', 'daily'):
         return jsonify({'error': 'cadence must be "weekly" or "daily"'}), 400
 
-    spec = {'strategy': 'markov-regime', 'years': years, 'cadence': cadence}
+    spec = {'strategy': strategy_id, 'years': years, 'cadence': cadence}
     job_id = backtest_jobs.create_job(spec)
-    backtest_jobs.run_job_async(job_id, run_markov_portfolio_backtest, years, cadence)
+    backtest_jobs.run_job_async(job_id, run_generic_backtest, strategy_id, years, cadence)
 
     return jsonify({'jobId': job_id, 'spec': spec}), 202
 

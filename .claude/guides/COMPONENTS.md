@@ -498,13 +498,15 @@ Markov regime analysis UI for the active ticker. Renders the current regime, the
 
 ---
 
-## MarkovBacktestPanel
+## EtfBacktestPanel
 
-**File**: `components/MarkovBacktestPanel.js`
+**File**: `components/EtfBacktestPanel.js` (generalized from the former `MarkovBacktestPanel.js` in HFA-069; reuses the `markov-bt__*` CSS classes)
 
-Admin-launched long-running backtest of the Markov-regime ETF strategy across the full S&P 500. Submits a job via `/api/custom-etf/markov-regime/backtest`, polls `/api/custom-etf/backtest/<job_id>` every 2 s. Displays portfolio metrics + win/loss + drawdown when complete.
+Admin-launched long-running walk-forward backtest for the active Custom ETF strategy. Submits a job via `POST /api/custom-etf/<strategy_id>/backtest`, polls `/api/custom-etf/backtest/<job_id>` every 2 s. Displays portfolio metrics + win/loss + daily-marked drawdown + structured caveats when complete. For strategies with `historicalBacktestSafe: false` it renders an explanation card instead of controls.
 
-No required props.
+| Prop | Type | Description |
+|------|------|-------------|
+| `strategy` | object | The active strategy's summary row (`id`, `name`, `historicalBacktestSafe`, `customUniverse`, …) from `/api/custom-etf/summary` |
 
 ---
 

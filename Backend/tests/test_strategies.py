@@ -7,6 +7,8 @@ from services.custom_etf.strategies import STRATEGIES
 from services.custom_etf.strategies.base import cross_sectional_percentile
 from services.custom_etf.strategies.momentum_top10 import MomentumTop10Strategy
 from services.custom_etf.strategies.low_vol_defensive import LowVolDefensiveStrategy
+from services.custom_etf.strategies.fifty_two_week_high import FiftyTwoWeekHighStrategy
+from services.custom_etf.strategies.sector_rotation import SectorRotationStrategy
 
 
 def _universe(n=50, field='momentum6m', lo=-20.0, hi=30.0):
@@ -91,12 +93,50 @@ def test_low_vol_requires_realized_vol():
     assert strat.score({'ticker': 'X', 'currentPrice': 1.0}) is None
 
 
+# ── 52-Week-High Momentum ────────────────────────────────────────────────
+
+def test_fifty_two_week_high_scoring():
+    strat = FiftyTwoWeekHighStrategy()
+    at_high = {'ticker': 'A', 'currentPrice': 10.0, 'fiftyTwoWeekPosition': 95.0,
+               'trendAlignment': 'Strong Uptrend', 'macdStatus': 'BULLISH'}
+    assert strat.score(at_high) >= strat.config.buy_threshold  # 66.5+20+7 = 93.5
+    slid = {**at_high, 'fiftyTwoWeekPosition': 68.0,
+            'trendAlignment': 'Bullish (Mixed)', 'macdStatus': 'BEARISH'}
+    assert strat.score(slid) <= strat.config.sell_threshold    # 47.6+15+3 = 65.6
+    assert strat.score({'ticker': 'A', 'currentPrice': 10.0}) is None
+
+
+# ── Sector Rotation (dual momentum) ─────────────────────────────────────
+
+def test_sector_rotation_score_mapping():
+    strat = SectorRotationStrategy()
+    assert strat.score({'momentum6m': 0.0}) == 50
+    assert strat.score({'momentum6m': 15.0}) == 100
+    assert strat.score({'momentum6m': -20.0}) == 0   # clamped at −15
+    assert strat.score({'momentum6m': None}) is None
+
+
+def test_sector_rotation_absolute_momentum_gate():
+    strat = SectorRotationStrategy()
+    row = {'ticker': 'XLK', 'currentPrice': 200.0, 'momentum6m': 8.0}
+    assert not strat.is_eligible({**row, 'momentum6mAbs': -2.0})  # falling sector
+    assert not strat.is_eligible({**row, 'momentum6mAbs': None})
+    assert strat.is_eligible({**row, 'momentum6mAbs': 5.0})
+
+
+def test_sector_rotation_config():
+    cfg = SectorRotationStrategy.config
+    assert cfg.max_positions == 3
+    assert len(cfg.custom_universe) == 11
+
+
 # ── Registry contract ────────────────────────────────────────────────────
 
-def test_registry_has_six_strategies():
-    assert len(STRATEGIES) == 6
+def test_registry_has_eight_strategies():
+    assert len(STRATEGIES) == 8
 
 
 def test_backtest_safety_flags():
     safe = {sid for sid, s in STRATEGIES.items() if s.historical_backtest_safe}
-    assert safe == {'momentum-top10', 'markov-regime'}
+    assert safe == {'momentum-top10', '52-week-high-top10',
+                    'sector-rotation-top3', 'markov-regime'}

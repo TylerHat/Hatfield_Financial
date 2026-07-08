@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { apiFetch } from '../api';
 
+// Generalized from MarkovBacktestPanel (HFA-069): the walk-forward engine
+// now replays ANY historical-backtest-safe strategy with the exact live
+// rebalance semantics, so this panel takes the active strategy as a prop.
+// CSS class names are unchanged (markov-bt__*) to reuse the existing styles.
+
 const POLL_MS = 2000;
 
 function fmtMoney(n) {
@@ -19,13 +24,17 @@ function fmtPct(n, sign = false) {
   return `${s}${Number(n).toFixed(2)}%`;
 }
 
-export default function MarkovBacktestPanel() {
+export default function EtfBacktestPanel({ strategy }) {
   const [years, setYears] = useState(1);
   const [cadence, setCadence] = useState('weekly');
   const [jobId, setJobId] = useState(null);
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
   const pollRef = useRef(null);
+
+  const strategyId = strategy?.id;
+  const backtestSafe = !!strategy?.historicalBacktestSafe;
+  const isCustomUniverse = !!(strategy?.customUniverse && strategy.customUniverse.length);
 
   // Poll the job endpoint until status is done or error.
   useEffect(() => {
@@ -65,7 +74,7 @@ export default function MarkovBacktestPanel() {
     setError(null);
     setJob(null);
     try {
-      const res = await apiFetch('/api/custom-etf/markov-regime/backtest', {
+      const res = await apiFetch(`/api/custom-etf/${strategyId}/backtest`, {
         method: 'POST',
         body: JSON.stringify({ years, cadence }),
       });
@@ -93,7 +102,7 @@ export default function MarkovBacktestPanel() {
     const hasSpy = result.equityCurve.some((p) => p.spyValue != null);
     const datasets = [
       {
-        label: 'Markov Portfolio',
+        label: 'Strategy Portfolio',
         data: result.equityCurve.map((p) => p.value),
         borderColor: '#3FDE7E',
         backgroundColor: 'rgba(63,222,126,0.10)',
@@ -145,17 +154,42 @@ export default function MarkovBacktestPanel() {
     },
   };
 
+  if (!strategy) return null;
+
+  // Strategies scoring today-snapshot fundamentals / analyst data can't be
+  // replayed historically — yfinance has no point-in-time history for those
+  // fields, so a backtest would grade today's opinions on yesterday's prices.
+  if (!backtestSafe) {
+    return (
+      <div className="markov-bt">
+        <div className="markov-bt__intro">
+          <h3 className="markov-bt__title">{strategy.name} — Portfolio Backtest</h3>
+        </div>
+        <div className="markov-bt__caveat">
+          <strong>Backtest unavailable for this strategy.</strong> It scores
+          fundamentals or analyst-consensus fields (valuation, ROE, price
+          targets, ratings) that Yahoo Finance only serves as a live snapshot.
+          Replaying today's values over past dates would leak hindsight and
+          overstate returns, so the engine refuses rather than mislead.
+          Price-based strategies (Momentum, 52-Week High, Sector Rotation,
+          Markov Regime) support backtesting.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="markov-bt">
       <div className="markov-bt__intro">
-        <h3 className="markov-bt__title">Markov Regime — Portfolio Backtest</h3>
+        <h3 className="markov-bt__title">{strategy.name} — Portfolio Backtest</h3>
         <p className="markov-bt__desc">
-          Walks forward across the S&amp;P 500, rebalancing a $100,000 portfolio on
-          the selected cadence. At each rebalance date, picks the top 10 stocks
-          ranked by 5-day bull-probability (computed from each ticker's Markov
-          transition matrix using only data through that date — no look-ahead).
-          Position size scales with conviction; cash is held when fewer than 10
-          tickers qualify.
+          Walks forward across {isCustomUniverse
+            ? `its fixed ${strategy.customUniverse.length}-ticker universe`
+            : 'the S&P 500'}, replaying the exact live strategy rules — same
+          scoring, eligibility gates, sell thresholds, and position sizing —
+          using only data available through each rebalance date (no
+          look-ahead). Equity is marked daily; cash is held when too few
+          names qualify.
         </p>
       </div>
 
@@ -201,11 +235,13 @@ export default function MarkovBacktestPanel() {
         </button>
       </div>
 
-      <div className="markov-bt__caveat">
-        <strong>Survivorship-bias note:</strong> uses today's S&amp;P 500 constituents.
-        Delisted names won't appear in older windows — measured returns may
-        be modestly inflated vs. an unbiased universe.
-      </div>
+      {!isCustomUniverse && (
+        <div className="markov-bt__caveat">
+          <strong>Survivorship-bias note:</strong> uses today's S&amp;P 500 constituents.
+          Delisted names won't appear in older windows — measured returns may
+          be modestly inflated vs. an unbiased universe.
+        </div>
+      )}
 
       {error && <div className="markov-bt__error">{error}</div>}
 
@@ -250,7 +286,8 @@ export default function MarkovBacktestPanel() {
                     accent={s.winLossRatio == null ? '' : s.winLossRatio >= 1 ? 'pos' : 'neg'}
                     sub={`Avg win ${fmtPct(s.avgWinPct, true)} / loss ${fmtPct(s.avgLossPct, true)}`} />
               <Stat label="Max Drawdown" value={fmtPct(s.maxDrawdown)}
-                    accent={s.maxDrawdown < -20 ? 'neg' : ''} />
+                    accent={s.maxDrawdown < -20 ? 'neg' : ''}
+                    sub="Peak-to-trough, marked daily" />
               <Stat label="Best / Worst Trade" value={`${fmtPct(s.bestTrade, true)} / ${fmtPct(s.worstTrade, true)}`} />
               <Stat label="Profit Factor" value={s.profitFactor == null ? '—' : `${s.profitFactor.toFixed(2)}×`}
                     sub="Σ wins / |Σ losses|" />
@@ -265,6 +302,12 @@ export default function MarkovBacktestPanel() {
               {chartData ? <Line data={chartData} options={chartOptions} /> : <div className="markov-bt__empty">No equity data.</div>}
             </div>
           </section>
+
+          {result.caveats?.length > 0 && result.caveats.map((c) => (
+            <div className="markov-bt__caveat" key={c.id}>
+              <strong>{c.title}:</strong> {c.message}
+            </div>
+          ))}
 
           {result.openPositions?.length > 0 && (
             <section className="markov-bt__section">
@@ -297,7 +340,7 @@ export default function MarkovBacktestPanel() {
                         <td className={`num ${p.unrealizedPnlPct >= 0 ? 'pos' : 'neg'}`}>
                           {fmtPct(p.unrealizedPnlPct, true)}
                         </td>
-                        <td>{p.entryDate}</td>
+                        <td>{p.entryDate || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
