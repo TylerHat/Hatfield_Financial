@@ -241,7 +241,7 @@ Batch S&P 500 stock recommendations with technical + fundamental signals. Data i
 | `stocks[].trendAlignment` | string | Trend alignment label |
 | `stocks[].momentum` | number\|null | 1-month return relative to SPY (percent) — display + Buy Score input |
 | `stocks[].momentum6m` | number\|null | 6-1 month return relative to SPY (percent, Jegadeesh–Titman window). Momentum ETF input |
-| `stocks[].momentum6mAbs` | number\|null | Raw 6-1 month return (percent, no SPY subtraction). For absolute-momentum gates |
+| `stocks[].momentum6mAbs` | number\|null | Raw 6-1 month return (percent, no SPY subtraction). Absolute-momentum gates (Sector Rotation) |
 | `stocks[].overallRisk` | number\|null | yfinance ISS overall risk (1–10, lower=better) |
 | `stocks[].rsiValue` | number\|null | Wilder 14-day RSI |
 | `stocks[].numberOfAnalysts` | number\|null | Count of analyst opinions |
@@ -640,16 +640,16 @@ Wipe recorded data. Returns `{ "status": "cleared" }`.
 Reads available to any logged-in user; writes are admin-only or use the internal-secret header. Auto-rebalance has a 24h cooldown unless `force=true` is set.
 
 ### GET `/api/custom-etf/strategies`
-List all registered strategies (id, name, description, buy/sell thresholds, max positions, starting capital).
+List all registered strategies (id, name, description, buy/sell thresholds, max positions, starting capital, `historicalBacktestSafe`, `customUniverse` — non-null for fixed-universe strategies like Sector Rotation).
 
 ### GET `/api/custom-etf/summary`
-Headline stats for every strategy — drives the multi-ETF comparison sidebar.
+Headline stats for every strategy — drives the multi-ETF comparison sidebar. Each entry also carries `historicalBacktestSafe` + `customUniverse` so the UI can decide which strategies get a Backtest sub-tab.
 
 ### GET `/api/custom-etf/<strategy_id>/state`
 Full portfolio state: positions, trades, equity series, summary metrics.
 
 ### GET `/api/custom-etf/<strategy_id>/rankings`
-Score every Recommendations row against the strategy, return ranked list.
+Score every row of the strategy's universe (Recommendations snapshot, or synthesized price rows for custom-universe strategies), return ranked list.
 
 ### POST `/api/custom-etf/<strategy_id>/rebalance` (admin)
 Run a single rebalance pass. Body `{ "force": true }` bypasses the 24h cooldown.
@@ -660,11 +660,11 @@ Wipe portfolio state and restart from `starting_capital`.
 ### POST `/api/custom-etf/auto-rebalance-all`
 Rebalance every registered strategy. Called by the ETF Rebalance Lambda. Requires `X-Internal-Secret` header matching `INTERNAL_API_SECRET` env, OR admin auth.
 
-### POST `/api/custom-etf/markov-regime/backtest` (admin)
-Submit a long-running Markov-regime portfolio backtest job. Returns `{ "job_id": "..." }`.
+### POST `/api/custom-etf/<strategy_id>/backtest` (admin)
+Submit a long-running walk-forward backtest job for any **historical-backtest-safe** strategy (generic engine, HFA-069 — replays the exact live rebalance semantics with point-in-time price features and daily equity marks). Body: `{ "years": 1|3, "cadence": "weekly"|"daily" }`. Returns `{ "jobId": "...", "spec": {...} }` (202). Returns **400** for strategies whose inputs are today-snapshot fundamentals/analyst data (`historicalBacktestSafe: false`) — a backtest of those would leak hindsight. `/api/custom-etf/markov-regime/backtest` is this same route and keeps working.
 
 ### GET `/api/custom-etf/backtest/<job_id>`
-Poll job status. Response: `{ "status": "running" | "complete" | "failed", "progress": 0-100, "result": {...} | null, "error": str | null }`.
+Poll job status. Response: `{ "status": "pending" | "running" | "done" | "error", "progress": 0-100, "result": {...} | null, "error": str | null }`. `result.caveats` is a structured list (survivorship bias, execution timing) the UI renders alongside the numbers.
 
 ---
 

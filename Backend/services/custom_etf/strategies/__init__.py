@@ -40,6 +40,8 @@ from .low_vol_defensive import LowVolDefensiveStrategy
 from .analyst_conviction import AnalystConvictionStrategy
 from .undervalued_strong_buy import UndervaluedStrongBuyStrategy
 from .markov_regime import MarkovRegimeStrategy
+from .fifty_two_week_high import FiftyTwoWeekHighStrategy
+from .sector_rotation import SectorRotationStrategy
 
 # Register every strategy here.
 _REGISTERED = (
@@ -49,6 +51,8 @@ _REGISTERED = (
     AnalystConvictionStrategy(),
     UndervaluedStrongBuyStrategy(),
     MarkovRegimeStrategy(),
+    FiftyTwoWeekHighStrategy(),
+    SectorRotationStrategy(),
 )
 
 STRATEGIES = {s.config.id: s for s in _REGISTERED}

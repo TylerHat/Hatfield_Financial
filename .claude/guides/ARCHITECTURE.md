@@ -52,11 +52,15 @@ Hatfield_Financial/
 │   │       ├── breakout_52week.py
 │   │       └── ma_confluence.py
 │   ├── services/
+│   │   ├── row_features.py             Price-derived rec-row features (momentum, momentum6m, realizedVol, trend, MACD, 52w) — single source shared by prewarm + backtest engine
 │   │   ├── custom_etf/
-│   │   │   ├── simulator.py            Rebalance + serialize + summarize logic, cost-basis tracking
+│   │   │   ├── simulator.py            DB wrapper: persist trades/positions/snapshots, serialize + summarize, cost-basis tracking
+│   │   │   ├── rebalance_core.py       Pure sell/mark/buy decision pass — executed verbatim by simulator AND backtest engine
+│   │   │   ├── walk_forward.py         Generic walk-forward backtest engine (refuses lookahead-unsafe strategies, daily equity marks)
+│   │   │   ├── custom_universe.py      Synthesizes price-feature rows for fixed-universe strategies (Sector Rotation's SPDRs)
 │   │   │   ├── backtest_jobs.py        Background job queue for long-running backtests
-│   │   │   ├── markov_portfolio_backtest.py   Markov-regime-driven portfolio backtest
-│   │   │   └── strategies/             Five+ registered ETF strategies (see FIN_STRATEGIES.md)
+│   │   │   ├── markov_portfolio_backtest.py   Compatibility shim → walk_forward with the markov-regime strategy
+│   │   │   └── strategies/             Eight registered ETF strategies (see FIN_STRATEGIES.md)
 │   │   └── markov/
 │   │       └── analyze.py              Regime classification, transition matrix, stationary distribution, forecast
 │   └── scripts/                        One-off CLI tools: backfill_spy_prices, audit_etf, fix_etf_snapshots, etc.
@@ -76,7 +80,7 @@ Hatfield_Financial/
             ├── InsiderTransactions.js   Insider buy/sell table + 90-day net summary
             ├── InstitutionalHoldings.js Institutional holders table + ownership summary
             ├── MarkovMethod.js          Markov regime analysis UI for the active ticker
-            ├── MarkovBacktestPanel.js   Markov-regime portfolio backtest UI (admin-launched job)
+            ├── EtfBacktestPanel.js      Walk-forward backtest UI for any backtest-safe ETF strategy (admin-launched job)
             ├── MarkovExplainPanel.js    Static explanation card for the Markov method
             ├── Recommendations.js       S&P 500 batch screener tab (filter bar, DataTable, Buy Score, on-demand strategy signals)
             ├── Watchlist.js             User watchlist tab (add/remove, navigate-to-stock)

@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from models import db, EtfPortfolio, EtfPosition, EtfTrade, EtfEquitySnapshot
 from .strategies.base import EtfStrategy
+from .rebalance_core import run_rebalance_pass
 import data_fetcher
 
 logger = logging.getLogger(__name__)
@@ -150,186 +151,68 @@ def reset_portfolio(strategy: EtfStrategy) -> EtfPortfolio:
     return get_or_create_portfolio(strategy)
 
 
-def _score_universe(strategy: EtfStrategy, recs: list[dict]) -> dict[str, dict]:
-    """Compute scores for every recommendation row. Returns {ticker: {...row, score}}."""
-    strategy.prepare(recs)
-    out = {}
-    for row in recs:
-        ticker = row.get('ticker')
-        if not ticker or not strategy.is_eligible(row):
-            continue
-        try:
-            s = strategy.score(row)
-        except Exception as e:
-            logger.debug('score() failed for %s: %s', ticker, e)
-            continue
-        if s is None:
-            continue
-        out[ticker] = {**row, 'score': s}
-    return out
-
-
 def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None = None) -> dict:
     """Run one rebalance pass against the supplied recommendation snapshot.
 
-    Returns a dict summarizing the actions taken. Persists trades, positions,
-    portfolio cash, last_rebalance_at, and an equity snapshot.
+    The decision math (sell / mark / buy / weight-normalised sizing) lives
+    in rebalance_core.run_rebalance_pass, shared verbatim with the
+    walk-forward backtest engine so backtests replay exactly this logic.
+    This wrapper adapts ORM state in and persists trades, positions,
+    portfolio cash, last_rebalance_at, and an equity snapshot out.
     """
     cfg = strategy.config
     portfolio = get_or_create_portfolio(strategy)
-    universe = _score_universe(strategy, recs)
-    slippage = cfg.slippage_bps / 10_000.0  # bps → fraction
     now = datetime.now(timezone.utc)
 
-    actions = {'sells': [], 'buys': [], 'kept': []}
+    orm_positions = {p.ticker: p for p in portfolio.positions}
+    book = {t: {'shares': p.shares, 'avg_cost': p.avg_cost}
+            for t, p in orm_positions.items()}
 
-    # ── Phase 1: SELL ─────────────────────────────────────────────────
-    # Sell positions whose score has dropped to <= sell_threshold OR that
-    # have dropped out of the recommendation universe entirely.
-    held = {p.ticker: p for p in portfolio.positions}
+    result = run_rebalance_pass(
+        strategy, recs, book, portfolio.cash,
+        resolve_missing_price=_fetch_exit_price,
+    )
 
-    for ticker, pos in list(held.items()):
-        row = universe.get(ticker)
-        if row is None:
-            # Out-of-universe: the recommendations snapshot has no current
-            # quote for this ticker. Fetch a fresh quote (.info → OHLCV) so
-            # the realized P&L reflects the actual market move since entry.
-            # Apply slippage symmetrically with SCORE_DROP sells. Fall back
-            # to cost basis only when no price can be retrieved (delisted).
-            fresh = _fetch_exit_price(ticker)
-            if fresh is not None:
-                sell_price = fresh * (1 - slippage)
-            else:
-                logger.warning(
-                    'EXIT_UNIVERSE %s: no fresh quote — recording sale at avg_cost (P&L will read $0)',
-                    ticker,
-                )
-                sell_price = pos.avg_cost
-            reason = 'EXIT_UNIVERSE'
-            score = None
-        elif row['score'] <= cfg.sell_threshold:
-            sell_price = row['currentPrice'] * (1 - slippage)
-            reason = 'SCORE_DROP'
-            score = row['score']
-        else:
-            actions['kept'].append({'ticker': ticker, 'score': row['score'], 'shares': pos.shares})
-            continue
+    actions = {'sells': [], 'buys': [], 'kept': result['kept']}
 
-        proceeds = pos.shares * sell_price
-        portfolio.cash += proceeds
+    for s in result['sells']:
         db.session.add(EtfTrade(
-            portfolio_id=portfolio.id, ticker=ticker, action='SELL',
-            shares=pos.shares, price=round(sell_price, 4), score=score,
-            reason=reason, cash_after=portfolio.cash, executed_at=now,
+            portfolio_id=portfolio.id, ticker=s['ticker'], action='SELL',
+            shares=s['shares'], price=round(s['price'], 4), score=s['score'],
+            reason=s['reason'], cash_after=s['cash_after'], executed_at=now,
         ))
+        pos = orm_positions.get(s['ticker'])
+        if pos is not None:
+            db.session.delete(pos)
         actions['sells'].append({
-            'ticker': ticker, 'shares': pos.shares, 'price': round(sell_price, 4),
-            'proceeds': round(proceeds, 2), 'reason': reason, 'score': score,
+            'ticker': s['ticker'], 'shares': s['shares'], 'price': round(s['price'], 4),
+            'proceeds': round(s['proceeds'], 2), 'reason': s['reason'], 'score': s['score'],
         })
-        db.session.delete(pos)
-        del held[ticker]
 
-    # Mark held positions to current quote so new buys can be sized against
-    # *total equity*, not just cash. Falls back to avg_cost when the held
-    # ticker has no fresh quote in this snapshot.
-    held_value = 0.0
-    for ticker, pos in held.items():
-        row = universe.get(ticker)
-        mark = row['currentPrice'] if row and row.get('currentPrice') else pos.avg_cost
-        held_value += pos.shares * mark
-    total_equity = portfolio.cash + held_value
+    for b in result['buys']:
+        db.session.add(EtfPosition(
+            portfolio_id=portfolio.id, ticker=b['ticker'],
+            shares=b['shares'], avg_cost=round(b['price'], 4),
+            entry_score=b['score'], entry_at=now,
+        ))
+        db.session.add(EtfTrade(
+            portfolio_id=portfolio.id, ticker=b['ticker'], action='BUY',
+            shares=b['shares'], price=round(b['price'], 4), score=b['score'],
+            reason='NEW_GREEN', cash_after=b['cash_after'], executed_at=now,
+        ))
+        actions['buys'].append({
+            'ticker': b['ticker'], 'shares': round(b['shares'], 4),
+            'price': round(b['price'], 4), 'cost': round(b['cost'], 2),
+            'score': b['score'],
+        })
 
-    # ── Phase 2: BUY ──────────────────────────────────────────────────
-    # Candidates: rows in green (score >= buy_threshold), not currently held,
-    # ranked by score desc. Take top (max_positions - len(held)) of them.
-    green = [r for r in universe.values()
-             if r['score'] >= cfg.buy_threshold and r['ticker'] not in held]
-    green.sort(key=lambda r: r['score'], reverse=True)
-
-    buy_slots = max(0, cfg.max_positions - len(held))
-    candidates = green[:buy_slots]
-
-    if candidates and portfolio.cash > 0:
-        # Weight-normalised sizing. Each strategy can opt into conviction-
-        # weighted allocation by overriding weight(); the default is 1.0 →
-        # equal weight, identical to the legacy behavior.
-        #
-        # Allocatable dollars: target one slot-equivalent of total equity per
-        # candidate (so opening fewer than max_positions doesn't overload one
-        # name), capped by 99% of cash to leave a buffer for slippage.
-        #
-        # weight() ≤ 0 falls back to baseline 1.0 to avoid zeroing out a
-        # position the strategy already passed score() for. Log the
-        # fallback so a buggy weight() doesn't silently masquerade as
-        # equal-weight conviction.
-        raw_weights = []
-        for row in candidates:
-            raw_w = strategy.weight(row)
-            clamped = max(raw_w, 0.0)
-            if clamped <= 0:
-                logger.warning(
-                    'strategy %s returned non-positive weight (%.4f) for %s — '
-                    'clamping to baseline 1.0; check the weight() implementation '
-                    'if this is unexpected',
-                    cfg.id, raw_w, row.get('ticker'),
-                )
-                clamped = 1.0
-            raw_weights.append(clamped)
-        total_weight = sum(raw_weights) or float(len(candidates))
-        target_total = min(
-            (total_equity / cfg.max_positions) * len(candidates),
-            portfolio.cash * 0.99,
-        )
-        for row, w in zip(candidates, raw_weights):
-            quote = row['currentPrice']
-            if quote is None or quote <= 0:
-                continue
-            buy_price = quote * (1 + slippage)
-            per_position = target_total * (w / total_weight)
-            shares = per_position / buy_price
-            if shares <= 0:
-                continue
-            cost = shares * buy_price
-            if cost > portfolio.cash:
-                # Guard against floating-point drift on the cap above.
-                shares = (portfolio.cash * 0.999) / buy_price
-                cost = shares * buy_price
-                if shares <= 0:
-                    continue
-            portfolio.cash -= cost
-            db.session.add(EtfPosition(
-                portfolio_id=portfolio.id, ticker=row['ticker'],
-                shares=shares, avg_cost=round(buy_price, 4),
-                entry_score=row['score'], entry_at=now,
-            ))
-            db.session.add(EtfTrade(
-                portfolio_id=portfolio.id, ticker=row['ticker'], action='BUY',
-                shares=shares, price=round(buy_price, 4), score=row['score'],
-                reason='NEW_GREEN', cash_after=portfolio.cash, executed_at=now,
-            ))
-            actions['buys'].append({
-                'ticker': row['ticker'], 'shares': round(shares, 4),
-                'price': round(buy_price, 4), 'cost': round(cost, 2),
-                'score': row['score'],
-            })
-
-    # ── Phase 3: snapshot equity ──────────────────────────────────────
-    # Mark held positions to current quote when available, else last cost.
-    # Refresh the ORM identity map so newly-added positions are visible.
-    db.session.flush()
-    db.session.expire(portfolio, ['positions'])
-    positions_value = 0.0
-    for pos in portfolio.positions:
-        row = universe.get(pos.ticker)
-        mark = row['currentPrice'] if row and row.get('currentPrice') else pos.avg_cost
-        positions_value += pos.shares * mark
-    total_value = portfolio.cash + positions_value
+    portfolio.cash = result['cash']
 
     db.session.add(EtfEquitySnapshot(
         portfolio_id=portfolio.id,
-        total_value=round(total_value, 2),
-        cash=round(portfolio.cash, 2),
-        positions_value=round(positions_value, 2),
+        total_value=round(result['total_value'], 2),
+        cash=round(result['cash'], 2),
+        positions_value=round(result['positions_value'], 2),
         spy_price=spy_price,
         recorded_at=now,
     ))
@@ -340,15 +223,16 @@ def rebalance(strategy: EtfStrategy, recs: list[dict], spy_price: float | None =
     logger.info(
         'Rebalance %s: %d sells, %d buys, %d held → total $%.2f (cash $%.2f)',
         cfg.id, len(actions['sells']), len(actions['buys']),
-        len(actions['kept']), total_value, portfolio.cash,
+        len(actions['kept']), result['total_value'], portfolio.cash,
     )
 
+    universe = result['universe']
     return {
         'strategyId': cfg.id,
         'rebalancedAt': _utc_iso(now),
-        'totalValue': round(total_value, 2),
-        'cash': round(portfolio.cash, 2),
-        'positionsValue': round(positions_value, 2),
+        'totalValue': round(result['total_value'], 2),
+        'cash': round(result['cash'], 2),
+        'positionsValue': round(result['positions_value'], 2),
         'actions': actions,
         'universeSize': len(universe),
         'greenCount': sum(1 for r in universe.values() if r['score'] >= cfg.buy_threshold),
@@ -387,6 +271,8 @@ def summarize(strategy: EtfStrategy, recs_by_ticker: dict[str, dict]) -> dict:
         'name': cfg.name,
         'description': cfg.description,
         'maxPositions': cfg.max_positions,
+        'historicalBacktestSafe': strategy.historical_backtest_safe,
+        'customUniverse': list(cfg.custom_universe) if cfg.custom_universe else None,
         'startingCapital': portfolio.starting_capital,
         'totalValue': round(total_value, 2),
         'cash': round(portfolio.cash, 2),

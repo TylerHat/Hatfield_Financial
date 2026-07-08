@@ -285,3 +285,50 @@ I updated the .claude files in place. Bug fixes for code are NOT included — on
 8. **EFS for SQLite is the wrong tool** (~$10-15/mo waste, hard-locks `desired_count = 1`, prevents horizontal scale). Decide RDS or container-local + S3 snapshot.
 9. **Frontend re-render burden** (Recommendations / StockChart memoization) — UX win on the most-used screens.
 10. **Lambda log groups have no retention** — silently accumulating CloudWatch storage forever.
+
+---
+
+# HFA-069 — Custom ETF Quant Review (2026-07-08)
+
+Branch: HFA-069-1-financial-algo-corrections. Full accuracy/usability review of the 6 Custom ETF
+strategies, live simulator, and Markov backtest. **Fixed in the branch:** backtest≠live semantics
+(new shared `rebalance_core` + generic `walk_forward` engine), Momentum sleeve re-based from
+1-month relative return to 6-1M cross-sectional momentum, Low Vol sleeve re-based from self-relative
+ATR ratio to cross-sectional realized σ, daily equity marking, stale-price and NaN guards, Buy Score
+flagged backtest-unsafe. **The items below were confirmed but deliberately NOT fixed (report-only) —
+they are the follow-up backlog.**
+
+## Financial accuracy follow-ups
+
+- **HIGH — services/custom_etf/simulator.py** — Live simulator never credits dividend cash to
+  portfolios, while the walk-forward backtest uses yfinance auto-adjusted (dividend-inclusive)
+  closes. Live sleeves understate total return ~1-2%/yr (worst for Low Vol's dividend payers) and
+  live-vs-backtest numbers aren't apples-to-apples. Fix: credit `ticker.dividends` for held
+  positions at each rebalance via a cached `data_fetcher` helper.
+- **HIGH — services/custom_etf/rebalance_core.py (sell phase)** — Held names that turn *ineligible*
+  (e.g. Markov Bear flip) are sold via the EXIT_UNIVERSE path: reason mislabeled, score=None, and
+  the price is re-fetched from `.info` even though the snapshot row has `currentPrice`. Fix: pass
+  the full (pre-eligibility) row map into the pass; price from snapshot; label `INELIGIBLE`.
+- **HIGH — services/markov/** — Transition matrices are built from OVERLAPPING 20-day returns, so
+  day-to-day regime persistence is inflated by construction and P^5 mostly predicts "stay put".
+  The prewarm matrix uses ~10 months of bars while `/api/markov/<ticker>` uses 730 days — the same
+  ticker shows different regime numbers in two places. `low_confidence` is computed but never
+  propagated to rec rows or the ETF eligibility gate. Fix candidates: debounced/non-overlapping
+  transition sampling, Laplace smoothing, unify windows, surface `transitionsObserved` on rows.
+- **MED — walk_forward.py** — Same-bar execution (decide and fill on the rebalance close). Now
+  disclosed in `result['caveats']`; next-open fills would be more conservative.
+- **MED — simulator.py `_closed_trade_stats` / `serialize_state`** — $0-P&L exits count as losses
+  in win rate; best/worst trade ranked by dollars in the sidebar but by percent on the state page.
+- **MED — routes/recommendations.py 52-week fallback** — `close.tail(252)` over a ~210-bar (10mo)
+  series makes the fallback a 10-month high/low, and mixes adjusted closes with raw `.info` prices.
+- **LOW — buy_score.py** — `_vol_ratio_score` caps at 80 so the 7% volatility component can never
+  reach 100; Buy-Score upside clamp is [−10,+30] vs [−10,+50] in the analyst sleeves. Document as
+  intentional or align.
+
+## Usability follow-ups
+
+- **MED — CustomEtfPanel.js** — Live page has no "vs SPY" headline card even though `vsSpyPct` is
+  in the summary payload; Entry/Current Score columns and score-badge colors have no
+  tooltip/legend; slippage & threshold chips are unexplained.
+- **NOTE — local dev environment** — AVG Web Shield TLS interception breaks all yfinance calls
+  (curl 60) with yfinance ≥ 1.x. See DATA.md "Known Limitations" for the CURL_CA_BUNDLE workaround.
