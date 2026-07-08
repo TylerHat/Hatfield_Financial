@@ -10,7 +10,29 @@ register it in strategies/__init__.py.
 """
 
 from abc import ABC, abstractmethod
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+
+# Below this many observations a cross-sectional percentile is noise —
+# prepare()-based strategies abstain rather than rank within a tiny sample.
+MIN_UNIVERSE_FOR_PERCENTILE = 20
+
+
+def cross_sectional_percentile(sorted_values, value):
+    """Percentile rank (0-100) of ``value`` within ``sorted_values``
+    (ascending list). Mid-rank convention for ties; min → 0, max → 100.
+    Returns None when the sample is smaller than
+    MIN_UNIVERSE_FOR_PERCENTILE. Used by strategies that rank a raw factor
+    (momentum, realized vol) against the day's universe instead of an
+    absolute curve — self-calibrating across market regimes.
+    """
+    n = len(sorted_values)
+    if n < MIN_UNIVERSE_FOR_PERCENTILE:
+        return None
+    lo = bisect_left(sorted_values, value)
+    hi = bisect_right(sorted_values, value)
+    rank = (lo + hi - 1) / 2
+    return max(0.0, min(100.0, rank / (n - 1) * 100))
 
 
 @dataclass(frozen=True)
@@ -23,6 +45,12 @@ class StrategyConfig:
     max_positions: int = 10
     starting_capital: float = 100_000.0
     slippage_bps: float = 5.0  # 0.05 % per fill
+    # When set, the strategy trades this fixed ticker list instead of the
+    # S&P 500 recommendations universe. Rows for these tickers are built
+    # from price history via services/row_features (see
+    # services.custom_etf.custom_universe). Tuple, not list — the dataclass
+    # is frozen and configs are module-level singletons.
+    custom_universe: tuple = None
 
     def to_dict(self):
         return {
@@ -34,6 +62,7 @@ class StrategyConfig:
             'maxPositions': self.max_positions,
             'startingCapital': self.starting_capital,
             'slippageBps': self.slippage_bps,
+            'customUniverse': list(self.custom_universe) if self.custom_universe else None,
         }
 
 

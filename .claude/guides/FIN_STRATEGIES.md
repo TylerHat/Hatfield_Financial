@@ -169,6 +169,10 @@ portfolio simulators**: each maps a recommendation row → 0-100 score, and the 
 top-`max_positions` names equal-weight, rebalancing on the Recommendations refresh (24h cooldown).
 Registered in `Backend/services/custom_etf/strategies/__init__.py`.
 
+Price-derived row fields (`momentum`, `momentum6m`, `realizedVol`, `trendAlignment`, `macdStatus`,
+`fiftyTwoWeekPosition`) are computed by `services/row_features.py` — the single source of truth
+shared with the prewarm so scoring inputs can't drift across consumers.
+
 ### Buy Score — Top 10 Green
 **ID**: `buy-score-top10` · **Buy ≥** 70 · **Sell ≤** 65 · **Max** 10
 
@@ -179,16 +183,25 @@ RSI (regime-conditioned) 5%, Governance 3%, Coverage 2%. See `buy_score.py` for 
 ### Momentum — Top 10 Trending
 **ID**: `momentum-top10` · **Buy ≥** 70 · **Sell ≤** 60 · **Max** 10
 
-Pure trend factor — uncorrelated to Buy Score. Weights: price momentum 50% (clamped −20% → +40%),
-trend alignment 25%, MACD status 15%, 52-week position 10%. Wider buy/sell band reflects faster
-decay of momentum vs fundamentals. See `momentum_top10.py`.
+Cross-sectional momentum factor — uncorrelated to Buy Score. **Corrected in HFA-069**: the
+original ranked on 1-MONTH relative return (the short-term-reversal horizon) with an absolute
+scale that needed a ~+10% one-month excess move to buy, leaving the sleeve mostly in cash.
+Now ranks on `momentum6m` (6-1 month excess return vs SPY — the Jegadeesh–Titman window,
+skipping the mean-reverting most recent month) mapped to a **cross-sectional percentile** of the
+day's universe via the `prepare()` hook. Weights: momentum percentile 50%, trend alignment 25%,
+MACD status 15%, 52-week position 10%. Bearish trend/MACD confirmations act as a soft
+absolute-momentum gate (pushes toward cash in broad downtrends). See `momentum_top10.py`.
 
 ### Low Volatility — Defensive Top 10
 **ID**: `low-vol-defensive` · **Buy ≥** 65 · **Sell ≤** 55 · **Max** 10
 
-Defensive ballast — captures the low-volatility anomaly. Weights: low vol-ratio 35%, ROE 20%,
-low debt 15%, inverted overall-risk 15%, gross margin 15%. Lower thresholds keep the portfolio
-invested when high-quality low-vol names are scarce. See `low_vol_defensive.py`.
+Defensive ballast — captures the low-volatility anomaly (Frazzini–Pedersen). **Corrected in
+HFA-069**: the original scored `volRatio` (ATR vs the stock's OWN average — a self-relative
+compression signal, not low volatility). Now ranks `realizedVol` (annualized σ of daily returns,
+126d, from the prewarm) **cross-sectionally** via `prepare()`: lowest-vol names in the universe
+score highest. Weights: low realized vol 35%, ROE 20%, low debt 15%, inverted overall-risk 15%,
+gross margin 15%. Lower thresholds keep the portfolio invested when high-quality low-vol names
+are scarce. See `low_vol_defensive.py`.
 
 ### Analyst Conviction — Top 10
 **ID**: `analyst-conviction-top10` · **Buy ≥** 60 · **Sell ≤** 50 · **Max** 10

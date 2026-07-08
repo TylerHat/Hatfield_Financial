@@ -22,12 +22,14 @@ from data_fetcher import (
     get_ticker_info as cached_get_ticker_info,
     get_many_ohlcv,
     get_spy_1m_return,
+    get_spy_6m1m_return,
     PRIORITY_LOW,
     PRIORITY_MEDIUM,
 )
 from sp500 import get_sp500_tickers
 from services.markov import analyze_markov
 from services.indicators import compute_rsi as _compute_rsi
+from services import row_features as rf
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +109,15 @@ def _compute_price_action(rsi_val, consol_range):
     return 'Trending'
 
 
-def _build_stock_data(ticker, info, hist_df, spy_1m_return):
+def _build_stock_data(ticker, info, hist_df, spy_1m_return, spy_6m1m_return=None):
     """Build a single stock record from info dict and history DataFrame.
 
     ``info`` may be None — price data is extracted from ``hist_df`` in that
     case, and analyst recommendation / company name default to N/A / ticker.
+
+    Price-derived fields delegate to services/row_features.py (evaluated at
+    the last bar) so the walk-forward backtest engine reconstructs the exact
+    same numbers for historical dates.
     """
     try:
         close = hist_df['Close']
@@ -191,34 +197,17 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             day_change = None
 
         # ── MACD ──────────────────────────────────────────────────────────
-        ema12 = close.ewm(span=12, adjust=False).mean()
-        ema26 = close.ewm(span=26, adjust=False).mean()
-        macd = ema12 - ema26
-        macd_sig = macd.ewm(span=9, adjust=False).mean()
+        macd_status = rf.latest(rf.macd_status_series(close), decimals=None)
 
-        macd_val = float(macd.iloc[-1])
-        signal_val = float(macd_sig.iloc[-1])
-        prev_macd = float(macd.iloc[-2])
-        prev_sig = float(macd_sig.iloc[-2])
-
-        if prev_macd <= prev_sig and macd_val > signal_val:
-            macd_status = 'BULLISH CROSSOVER'
-        elif prev_macd >= prev_sig and macd_val < signal_val:
-            macd_status = 'BEARISH CROSSOVER'
-        elif macd_val > signal_val:
-            macd_status = 'BULLISH'
-        else:
-            macd_status = 'BEARISH'
-
-        # ── Volatility (ATR) ──────────────────────────────────────────────
-        high_low = hist_df['High'] - hist_df['Low']
-        high_pc = (hist_df['High'] - close.shift(1)).abs()
-        low_pc = (hist_df['Low'] - close.shift(1)).abs()
-        tr = pd.concat([high_low, high_pc, low_pc], axis=1).max(axis=1)
-        atr = tr.rolling(14).mean()
-        atr_val = float(atr.iloc[-1])
-        atr_avg = float(atr.mean())
-        vol_ratio = round(atr_val / atr_avg, 2) if atr_avg > 0 else 1.0
+        # ── Volatility ────────────────────────────────────────────────────
+        # volRatio: ATR vs the stock's own average — display/regime field.
+        # realizedVol: annualized σ — the cross-sectional input the Low Vol
+        # ETF strategy ranks on (volRatio is self-relative, not comparable
+        # across tickers).
+        vol_ratio = rf.latest(rf.vol_ratio_series(hist_df))
+        if vol_ratio is None:
+            vol_ratio = 1.0
+        realized_vol = rf.latest(rf.realized_vol_series(close))
 
         if vol_ratio > 1.5:
             volatility_status = 'HIGH Volatility'
@@ -228,38 +217,24 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             volatility_status = 'Normal Volatility'
 
         # ── Trend Alignment ───────────────────────────────────────────────
-        ma20 = close.rolling(20).mean()
-        ma50 = close.rolling(50).mean()
-        ma200 = close.rolling(200).mean()
+        trend_alignment = rf.latest(rf.trend_alignment_series(close), decimals=None) or 'N/A'
 
-        current_close = float(close.iloc[-1])
-        trend_alignment = 'N/A'
-
-        if len(close) >= 200 and not pd.isna(ma200.iloc[-1]):
-            m20, m50, m200 = float(ma20.iloc[-1]), float(ma50.iloc[-1]), float(ma200.iloc[-1])
-            if current_close > m20 > m50 > m200:
-                trend_alignment = 'Strong Uptrend'
-            elif current_close < m20 < m50 < m200:
-                trend_alignment = 'Strong Downtrend'
-            elif current_close > m200:
-                trend_alignment = 'Bullish (Mixed)'
-            else:
-                trend_alignment = 'Bearish (Mixed)'
-        elif len(close) >= 50 and not pd.isna(ma50.iloc[-1]):
-            m20, m50 = float(ma20.iloc[-1]), float(ma50.iloc[-1])
-            if current_close > m20 > m50:
-                trend_alignment = 'Bullish (Short-term)'
-            else:
-                trend_alignment = 'Bearish (Short-term)'
-
-        # ── Momentum (1M return vs SPY) ───────────────────────────────────
+        # ── Momentum (1M return vs SPY — display + Buy Score input) ──────
         momentum = None
-        if len(close) >= 22:
-            stock_1m = (float(close.iloc[-1]) / float(close.iloc[-22]) - 1) * 100
-            if spy_1m_return is not None:
-                momentum = round(stock_1m - spy_1m_return, 2)
-            else:
-                momentum = round(stock_1m, 2)
+        stock_1m = rf.latest(rf.momentum_1m_series(close), decimals=None)
+        if stock_1m is not None:
+            momentum = round(stock_1m - spy_1m_return, 2) if spy_1m_return is not None else round(stock_1m, 2)
+
+        # ── Momentum 6-1M (portfolio-strategy input) ──────────────────────
+        # The 126-bar return ending 21 bars ago — the Jegadeesh–Titman
+        # construction. `momentum6m` is excess vs SPY; `momentum6mAbs` is the
+        # raw stock return (absolute-momentum gates, e.g. sector rotation).
+        momentum_6m = None
+        momentum_6m_abs = None
+        stock_6m1m = rf.latest(rf.momentum_6m1m_series(close), decimals=None)
+        if stock_6m1m is not None:
+            momentum_6m_abs = round(stock_6m1m, 2)
+            momentum_6m = round(stock_6m1m - spy_6m1m_return, 2) if spy_6m1m_return is not None else momentum_6m_abs
 
         # ── Price Action ──────────────────────────────────────────────────
         rsi_series = _compute_rsi(close)
@@ -327,8 +302,11 @@ def _build_stock_data(ticker, info, hist_df, spy_1m_return):
             'macdStatus': macd_status,
             'volatilityStatus': volatility_status,
             'volRatio': vol_ratio,
+            'realizedVol': realized_vol,
             'trendAlignment': trend_alignment,
             'momentum': momentum,
+            'momentum6m': momentum_6m,
+            'momentum6mAbs': momentum_6m_abs,
             'overallRisk': overall_risk,
             'rsiValue': rsi_val,
             'numberOfAnalysts': n_analysts,
@@ -364,7 +342,7 @@ def _fetch_all_data():
     logger.info('Starting S&P 500 fetch for %d tickers', len(tickers))
     t0 = time.time()
 
-    # ── Step 1: SPY 1M return (shared, cached) ────────────────────────
+    # ── Step 1: SPY 1M + 6-1M returns (shared, cached) ────────────────
     try:
         spy_1m_return = get_spy_1m_return(priority=PRIORITY_LOW)
         if spy_1m_return is not None:
@@ -372,6 +350,13 @@ def _fetch_all_data():
     except Exception as e:
         logger.warning('Could not fetch/compute SPY return: %s', e)
         spy_1m_return = None
+    try:
+        spy_6m1m_return = get_spy_6m1m_return(priority=PRIORITY_LOW)
+        if spy_6m1m_return is not None:
+            logger.info('SPY 6-1M return: %.2f%%', spy_6m1m_return)
+    except Exception as e:
+        logger.warning('Could not fetch/compute SPY 6-1M return: %s', e)
+        spy_6m1m_return = None
 
     # ── Step 2: Process tickers in batched download + build cycles ─────
     global _progress_current, _progress_total
@@ -422,7 +407,7 @@ def _fetch_all_data():
                 failed += 1
                 continue
 
-            record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return)
+            record = _build_stock_data(t, info_map.get(t), hist_df, spy_1m_return, spy_6m1m_return)
             if record:
                 stocks.append(record)
             else:
